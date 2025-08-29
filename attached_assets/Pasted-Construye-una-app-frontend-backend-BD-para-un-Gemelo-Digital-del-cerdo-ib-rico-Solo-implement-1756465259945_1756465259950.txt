@@ -1,0 +1,385 @@
+Construye una app (frontend + backend + BD) para un Gemelo Digital del cerdo ibérico. Solo implementa las secciones descritas. UI en español.
+Stack sugerido (puedes usar equivalentes):
+Frontend React + TypeScript + Tailwind (sidebar colapsable).
+
+
+Backend Node/Express.
+
+
+BD SQL (SQLite en Replit dev; listo para Postgres).
+
+
+Gráficas ligeras. Backend genera/lee QR.
+
+
+Tiempo: guardar UTC, mostrar Europe/Madrid.
+
+
+Ámbito y sesión: Tras login, todas las consultas/escrituras quedan acotadas a la organización del usuario (lotes, zonas, sensores, estancias, snapshots y QR). El acceso por QR ve solo la página pública. Sin roles adicionales: usuario autenticado = acceso total a la parte privada.
+Modelo mental (sin nombres de tablas):
+Lote (puede tener Sublotes, creados solo al mover Matadero→Secadero).
+
+
+Zona (pertenece a una etapa: Cría/Engorde/Matadero/Secadero/Distribución).
+
+
+Estancia = (lote o sublote) + zona + [entrada, salida].
+
+
+Sensor (pertenece a una zona) con Lecturas (hora servidor, flag simulado/real).
+
+
+QR público que referencia un snapshot congelado (solo campos públicos).
+
+
+
+Disposición y navegación
+Login (email/contraseña).
+
+
+Portada (inicio) tras login.
+
+
+Sidebar izquierda colapsable (en este orden): Lotes, Cría, Engorde, Matadero, Secadero, Distribución, Seguimiento de Lotes, Trazabilidad Pública.
+ Arriba a la izquierda, icono de casa → portada. Barra superior derecha: Cerrar sesión.
+
+
+Fechas: persistir UTC, renderizar Europe/Madrid. Filtros “hoy/7/30 días” con límites de día en Europe/Madrid.
+
+
+
+Portada (Landing / Resumen)
+UI:
+Si existen zonas y lotes se visualizará frase por etapa con cuántos lotes y en qué zonas (estancias abiertas).
+
+
+Si no hay zonas/lotes aparece el texto :“Añade lotes y zonas para visualizar información” y cta con texto añadir lotes que lleve a la pestaña lotes y cta añadir zonas deje seleccionar entre las 5 pestañas de cria, engorde, matadero, secadero, distribución
+
+
+Si hay zonas y lotes Bloque “Zonas con actividad”: por zona, última lectura de hoy por tipo de sensor (máx. 3 chips). Si no hay lecturas recientes, “sin datos desde hh:mm”.
+
+
+Todo clicable (zona → detalle; lote → ficha o tablero).
+
+
+Backend: contar lotes con estancia abierta por etapa/zona; obtener última lectura del día por zona/métrica y su “edad”.
+
+Lotes (creación/edición)
+UI:
+El botón + está siempre visible arriba.
+
+
+Formulario:
+
+
+Obligatorios: Identificación (texto, única en la organización), Nº de animales iniciales (entero >0).
+
+
+Opcionales: Régimen de comida (texto), Nº de animales finales (entero).
+
+
+Guardar crea o edita.
+
+
+Listado con editar (lápiz) y borrar (papelera + confirmación).
+
+
+Editor de plantilla (⚙️) para añadir/quitar campos; se aplica solo a nuevos lotes (persistir esta configuración por organización).
+
+
+Backend: crear (validar unicidad y nº positivo), editar, borrar (eliminar información asociada con confirmación). La plantilla se guarda por organización y se aplica al abrir el alta.
+
+Etapas (Cría, Engorde, Matadero, Secadero, Distribución)
+UI lista de zonas:
+Botón + crea zona pidiendo solo nombre. Cada tarjeta con papelera (confirmar antes de borrar).
+
+
+UI detalle de zona:
+Título con nombre de la zona.
+
+
+Botón + con Añadir sensor y Añadir info fija.
+
+
+Añadir sensor: formulario con nombre, tipo (ubicación/temperatura/humedad) u otro personalizado (definir unidad y validación básica).
+ Al guardar, el backend genera: device_id, topic MQTT fijo e inmutable y credenciales (usuario/clave). La tarjeta del sensor muestra ℹ︎ info con: topic (fijo), payload de ejemplo según tipo, última lectura, y credenciales. La clave se muestra siempre (revelar/ocultar) y permite rotar (invalida la anterior) y revocar. Cambiar nombre o mover de zona no cambia topic ni device_id (el vínculo a zona lo resuelve el backend).
+
+
+Añadir info fija: crear/editar campos constantes (aforo, orientación, notas) en edición inline.
+
+
+Gráfico temporal: selector de sensores de la zona, filtros (hoy/7/30/personalizado), eje X ajustado, y conmutador “en vivo”.
+
+
+Backend:
+Zonas: alta/baja/edición; impedir borrar si hay estancias abiertas o sensores activos vinculados.
+
+
+Sensores: generar identificador/topic/credenciales; ACL por dispositivo (publica solo en su topic); recomendar TLS (8883). Exponer última lectura y series (agregar si el rango es grande).
+
+
+Tipos personalizados: guardar unidad/validación y aplicarlas.
+
+
+Importante: No crear sublotes aquí. Los sublotes se gestionan solo en Seguimiento cuando el movimiento sea Matadero → Secadero.
+
+Seguimiento de Lotes (tablero)
+Tablero con seis columnas fijas: Cría, Engorde, Matadero, Secadero, Distribución, Finalizado. Dentro, zonas como contenedores.
+
+
+Buscador a la izquierda de lotes activos.
+
+
+Movimiento:
+
+
+Drag & drop del lote a la zona destino → diálogo con fecha/hora de entrada (por defecto “ahora”, editable) y aviso de cierre automático de la estancia anterior.
+
+
+Alternativa accesible: botón “Mover a…” (selector etapa→zona).
+
+
+Selección y contexto:
+
+
+Al seleccionar un lote, resáltalo y ilumina su zona actual con icono “pin” y tooltip “Aquí ahora”.
+
+
+En escritorio, al pasar por zonas compatibles aparece botón contextual “Mover aquí”.
+
+
+Edición manual:
+
+
+Menú ⋯ del lote → “Editar estancia” abre modal para:
+
+
+Cambiar zona actual (equivale a un movimiento).
+
+
+Ajustar hora de entrada de la estancia actual y hora de salida de la anterior, con previsualización de timeline y validación anti-solapes.
+
+
+Toast tras guardar con “Deshacer” (y “Rehacer” si procede).
+
+
+Sublotes (aquí): si el movimiento es Matadero → Secadero, preguntar si hay sublotes por pieza; si sí, permitir crear sublotes (nombre pieza + nº piezas) y abrir sus estancias en Secadero.
+
+
+QR (aquí): si el movimiento es Secadero → Distribución, el diálogo incluye “Generar Trazabilidad Pública (QR)”. Si se activa y confirma, generar QR (token público + snapshot), mostrar toast con Ver/Descargar y dejarlo disponible en la ficha del lote en Distribución.
+
+
+Timeline por lote (toggle) para ver entradas/salidas.
+
+
+Finalizado: al soltar ahí, el lote queda cerrado (oculto en activos; reabrible).
+
+
+Backend
+Cargar tablero: zonas por etapa + lotes con estancia abierta.
+
+
+Mover (transaccional + concurrencia):
+
+
+Cerrar estancia abierta (poner salida) y abrir nueva (poner entrada), sin solapes; si no había previa, crear solo la nueva.
+
+
+Si destino = Finalizado, marcar estado; registrar quién/cuándo (auditoría).
+
+
+Edición manual:
+
+
+Endpoint para actualizar estancias (misma validación que movimiento) y ajustar entrada/salida de intervalos adyacentes sin solapes; guardar auditoría antes/después.
+
+
+Deshacer/Rehacer inmediato guardando una instantánea mínima de los intervalos afectados.
+
+
+Sublotes: crear al pasar Matadero → Secadero, validar conteos con el lote origen, abrir estancias de cada sublote en Secadero.
+
+
+QR en Secadero → Distribución:
+
+
+Tras persistir el movimiento, crear enlace público no adivinable y construir snapshot (fechas por fase desde estancias + agregados por intervalo).
+
+
+Excluir lecturas simuladas por defecto (incluir solo si el operador marca opción avanzada).
+
+
+Hook de anclaje (stub MVP): al mover o generar QR, encolar hash del payload; job horario (stub) marcará como procesado (futuro: Merkle + publicación). Mostrar badge “Anclaje: Pendiente/Anclado”.
+
+
+Reglas clave
+Una sola estancia abierta por lote/sublote; todos los cambios en transacción.
+
+
+Sin solapes temporales; si se retrocede fecha, ajustar cierre anterior.
+
+
+Todo hora UTC en BD; UI en Europe/Madrid.
+
+
+
+
+Trazabilidad Pública (QR)
+Cuándo se genera: en Seguimiento, durante Secadero → Distribución.
+Objetivo (lo que verá el consumidor):
+Tiempo en cada fase (Cría/Engorde/Matadero/Secadero/Distribución): duración calculada desde entradas/salidas por zona.
+
+
+Por fase, condiciones ambientales vividas: media/mín/máx de temperatura y humedad (y otras métricas marcadas como públicas), y % de tiempo en objetivo si hay objetivos configurados para la zona.
+
+
+Datos públicos del lote: nombre/ID, % ibérico, régimen (si aplica), fechas de inicio/fin por fase (no mostrar nº de animales).
+
+
+Nada técnico (sin topics/credenciales). Página cacheable y no-index.
+
+
+Cálculo del snapshot (backend al generar QR):
+Recuperar estancias del lote/sublote: todas las entradas/salidas por zona, ordenadas por tiempo; si una estancia está abierta, usar ahora como fin.
+
+
+Agrupar por fase (la etapa de cada zona). El tiempo en fase es la suma de duraciones de sus estancias (una fase puede abarcar varias zonas).
+
+
+Mediciones por estancia: para cada [zona, inicio, fin], leer métricas públicas (al menos Tª/HR) dentro del rango.
+
+
+Agregados por métrica: media, mín, máx en el intervalo.
+
+
+% en objetivo: si hay objetivos por zona (rango para Tª/HR), calcular el % de lecturas dentro del rango en ese intervalo.
+
+
+Agregación por fase con múltiples zonas: combinar los resultados de sus estancias ponderando por nº de lecturas de cada estancia (o por duración si no hay lecturas).
+
+
+Construir snapshot congelado (solo campos públicos, sin referencias técnicas):
+
+
+lote: id/nombre, % ibérico, régimen (si aplica).
+
+
+fases[]: etapa, zona(s) (nombre visible), inicio, fin, duración, y métricas { avg, min, max, pct_in_target? }. Redondear métricas a 1 decimal.
+
+
+metadatos: fecha de generación, nota legal (opcional), versión del formato.
+
+
+Exclusión por defecto: no incluir lecturas simuladas en el snapshot (incluirlas solo si el operador marca una opción avanzada en el diálogo).
+
+
+La página pública no consulta tablas operativas: lee y renderiza el snapshot.
+
+
+
+Pestaña “Trazabilidad Pública” (operador):
+Listado de QR ya creados (solo lotes/sublotes con QR).
+
+
+Buscador y filtros (lote/sublote, fecha de generación, estado activo/revocado, pieza si aplica).
+
+
+Acciones: Vista previa, Descargar QR (PNG/SVG), Copiar enlace, Rotar (nuevo enlace), Revocar, contador de escaneos.
+
+
+Descarga masiva (zip) de los QR filtrados/seleccionados.
+
+
+La misma tarjeta aparece en Distribución (ficha del lote de envasado) y Finalizado (reimprimir/consultar).
+
+
+UI pública (mobile-first y visual):
+
+
+Cabecera/hero con nombre del lote, % ibérico, régimen (badges) y resumen del tiempo total.
+
+
+Línea temporal de fases (chips con duración).
+
+
+Tarjetas por fase (grid 1–2 col): título con icono + fase + zona, duración grande, mini-métricas avg/min/max de Tª/HR (y las públicas), % en objetivo (barra/donut), y nota “Desde… Hasta…”.
+
+
+Accesible (contraste alto, texto alternativo). Acciones: compartir (copiar enlace) y descargar PDF (opcional). Estados vacíos: “Sin lecturas registradas en este periodo”.
+
+
+Backend (serving):
+Al generar: crear enlace público no adivinable; construir y guardar snapshot; devolver enlace + miniatura.
+
+
+Servir pública leyendo solo el snapshot.
+
+
+Rotar/Revocar: nuevo enlace o invalidar el existente; contabilizar accesos.
+
+
+Cache adecuada y no-index.
+
+
+Hook de anclaje: encolar hash del snapshot para futuro anclaje.
+
+
+
+Sensores, ingesta y simulador HTTP (cuando no hay MQTT en Replit)
+Expectativa: en producción, los sensores publican en su topic MQTT. En Replit (o sin broker), habilitar simulador HTTP dentro de las vistas existentes.
+UX (sin nuevas pestañas):
+En detalle de zona, botón “Simular lecturas” → modal:
+
+
+Selector de sensor de la zona (o crear sensor virtual temporal).
+
+
+Campos según tipo (temperatura, humedad, ubicación) y posibilidad de personalizado.
+
+
+Modo: única lectura o ráfaga (cada N s durante T min).
+
+
+Opción “Marcar como datos simulados”.
+
+
+Enviar muestra mini-log (“insertadas X lecturas…”).
+
+
+En ℹ︎ info del sensor, botón “Enviar lectura de prueba” (abre el mismo modal con el sensor precargado).
+
+
+En gráficas, toggle “Incluir datos simulados” (on/off) y estilo diferenciado para simulados.
+
+
+Backend:
+Endpoint privado para simular lecturas (requiere login). Reusar la misma validación/normalización que la ingesta real; hora del servidor; marcar simulado; rate-limit en ráfaga.
+
+
+Ingesta MQTT preparada (suscripción por topic, validación, guardado).
+
+
+Seguridad MQTT: topic inmutable, ACL por dispositivo, TLS 8883 recomendado; rotar invalida la clave anterior.
+
+
+
+Reglas clave y coherencia
+Una sola estancia abierta por lote/sublote. Mover = cerrar la anterior y abrir la nueva sin solapes (transacción + control de carrera).
+
+
+Sublotes: se crean solo en Seguimiento al pasar Matadero → Secadero; conteos coherentes con el lote origen.
+
+
+Zonas sin sensor: permitido; tramos “sin datos” o con posibilidad de registro manual.
+
+
+Borrados:
+
+
+Zona: no borrar si hay estancias abiertas o sensores activos.
+
+
+Sensor: al borrar, revocar credenciales y mantener históricos (marcar inactivo).
+
+
+Lote/Sublote con QR activo: bloquear borrado o exigir revocar antes.
