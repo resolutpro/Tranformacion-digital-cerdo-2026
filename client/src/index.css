@@ -1,0 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 98%);
+  --foreground: hsl(220, 8%, 15%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(220, 8%, 15%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(220, 8%, 15%);
+  --primary: hsl(217, 91%, 60%);
+  --primary-foreground: hsl(0, 0%, 98%);
+  --secondary: hsl(45, 93%, 47%);
+  --secondary-foreground: hsl(26, 83%, 14%);
+  --muted: hsl(220, 14%, 96%);
+  --muted-foreground: hsl(220, 8%, 46%);
+  --accent: hsl(215, 16%, 47%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --border: hsl(220, 13%, 91%);
+  --input: hsl(220, 13%, 91%);
+  --ring: hsl(217, 91%, 60%);
+  --chart-1: hsl(217, 91%, 60%);
+  --chart-2: hsl(45, 93%, 47%);
+  --chart-3: hsl(142, 76%, 36%);
+  --chart-4: hsl(0, 84%, 60%);
+  --chart-5: hsl(258, 90%, 66%);
+  --sidebar: hsl(0, 0%, 100%);
+  --sidebar-foreground: hsl(220, 8%, 15%);
+  --sidebar-primary: hsl(217, 91%, 60%);
+  --sidebar-primary-foreground: hsl(0, 0%, 98%);
+  --sidebar-accent: hsl(220, 14%, 96%);
+  --sidebar-accent-foreground: hsl(217, 91%, 60%);
+  --sidebar-border: hsl(220, 13%, 91%);
+  --sidebar-ring: hsl(217, 91%, 60%);
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 8px;
+  --shadow-2xs: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00), 0px 1px 2px -1px hsl(217, 91%, 60%, 0.00);
+  --shadow: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00), 0px 1px 2px -1px hsl(217, 91%, 60%, 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00), 0px 2px 4px -1px hsl(217, 91%, 60%, 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00), 0px 4px 6px -1px hsl(217, 91%, 60%, 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00), 0px 8px 10px -1px hsl(217, 91%, 60%, 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(217, 91%, 60%, 0.00);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: hsl(0, 0%, 0%);
+  --foreground: hsl(200, 6.6667%, 91.1765%);
+  --card: hsl(228, 9.8039%, 10%);
+  --card-foreground: hsl(0, 0%, 85.0980%);
+  --popover: hsl(0, 0%, 0%);
+  --popover-foreground: hsl(200, 6.6667%, 91.1765%);
+  --primary: hsl(217, 91%, 60%);
+  --primary-foreground: hsl(0, 0%, 98%);
+  --secondary: hsl(45, 93%, 47%);
+  --secondary-foreground: hsl(26, 83%, 14%);
+  --muted: hsl(0, 0%, 9.4118%);
+  --muted-foreground: hsl(210, 3.3898%, 46.2745%);
+  --accent: hsl(215, 16%, 47%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --border: hsl(210, 5.2632%, 14.9020%);
+  --input: hsl(207, 27%, 18%);
+  --ring: hsl(217, 91%, 60%);
+  --chart-1: hsl(217, 91%, 60%);
+  --chart-2: hsl(45, 93%, 47%);
+  --chart-3: hsl(142, 76%, 36%);
+  --chart-4: hsl(0, 84%, 60%);
+  --chart-5: hsl(258, 90%, 66%);
+  --sidebar: hsl(228, 9.8039%, 10%);
+  --sidebar-foreground: hsl(0, 0%, 85.0980%);
+  --sidebar-primary: hsl(217, 91%, 60%);
+  --sidebar-primary-foreground: hsl(0, 0%, 98%);
+  --sidebar-accent: hsl(205, 70%, 7.8431%);
+  --sidebar-accent-foreground: hsl(217, 91%, 60%);
+  --sidebar-border: hsl(205, 15.7895%, 26.0784%);
+  --sidebar-ring: hsl(217, 91%, 60%);
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 8px;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* Custom styles for the pig digital twin app */
+.sidebar-collapsed {
+  transform: translateX(-100%);
+}
+
+@media (min-width: 768px) {
+  .sidebar-collapsed {
+    transform: translateX(-240px);
+  }
+}
+
+.drag-over {
+  background-color: hsl(217, 91%, 95%);
+  border: 2px dashed hsl(217, 91%, 60%);
+}
+
+.batch-card {
+  transition: all 0.2s ease;
+}
+
+.batch-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -8px hsla(217, 91%, 60%, 0.3);
+}
+
+.sensor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.phase-timeline {
+  position: relative;
+}
+
+.phase-timeline::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: hsl(220, 13%, 91%);
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 48px;
+}
+
+.timeline-icon {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+}
+
+.kanban-column {
+  min-height: 600px;
+}
+
+.kanban-zone {
+  min-height: 120px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.kanban-zone:hover {
+  border-color: var(--primary);
+  background-color: var(--primary)/5;
+}
+
+.kanban-zone.drag-over {
+  border-color: var(--primary);
+  background-color: var(--primary)/10;
+}
+
+.batch-card-dragging {
+  opacity: 0.5;
+  transform: rotate(5deg);
+}

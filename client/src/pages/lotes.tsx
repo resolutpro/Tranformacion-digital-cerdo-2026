@@ -1,0 +1,195 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { MainLayout } from "@/components/layout/main-layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { LoteModal } from "@/components/modals/lote-modal";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { Plus, Search, Edit, Trash2, Settings } from "lucide-react";
+import type { Lote } from "@shared/schema";
+
+export default function Lotes() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedLote, setSelectedLote] = useState<Lote | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { toast } = useToast();
+
+  const { data: lotes = [], isLoading } = useQuery<Lote[]>({
+    queryKey: ["/api/lotes"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/lotes/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
+      toast({
+        title: "Lote eliminado",
+        description: "El lote ha sido eliminado correctamente",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el lote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const filteredLotes = lotes.filter(lote => 
+    lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lote.foodRegime?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleEdit = (lote: Lote) => {
+    setSelectedLote(lote);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (lote: Lote) => {
+    if (confirm(`¿Estás seguro de que quieres eliminar el lote ${lote.identification}?`)) {
+      deleteMutation.mutate(lote.id);
+    }
+  };
+
+  const handleNewLote = () => {
+    setSelectedLote(null);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedLote(null);
+  };
+
+  return (
+    <MainLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground mb-2">Gestión de Lotes</h1>
+            <p className="text-muted-foreground">Administra los lotes de animales</p>
+          </div>
+          <Button onClick={handleNewLote} data-testid="button-new-lote">
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Lote
+          </Button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Buscar lotes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-search-lotes"
+                />
+              </div>
+              <Button variant="outline" size="sm" data-testid="button-template-settings">
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="p-4 border border-border rounded-lg animate-pulse">
+                    <div className="h-4 bg-muted rounded w-1/4 mb-2"></div>
+                    <div className="h-3 bg-muted rounded w-1/2 mb-3"></div>
+                    <div className="flex gap-2">
+                      <div className="h-6 bg-muted rounded w-16"></div>
+                      <div className="h-6 bg-muted rounded w-20"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredLotes.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4">
+                  {searchTerm ? "No se encontraron lotes" : "No hay lotes creados"}
+                </p>
+                {!searchTerm && (
+                  <Button onClick={handleNewLote} data-testid="button-new-lote-empty">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear primer lote
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredLotes.map((lote) => (
+                  <div 
+                    key={lote.id} 
+                    className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                    data-testid={`lote-${lote.id}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-medium text-foreground" data-testid={`lote-name-${lote.id}`}>
+                          {lote.identification}
+                        </h3>
+                        <p className="text-sm text-muted-foreground" data-testid={`lote-details-${lote.id}`}>
+                          {lote.initialAnimals} animales iniciales
+                          {lote.finalAnimals && ` → ${lote.finalAnimals} finales`}
+                          {lote.foodRegime && ` • ${lote.foodRegime}`}
+                        </p>
+                        <div className="flex gap-2 mt-2">
+                          <Badge 
+                            variant={lote.status === 'active' ? 'default' : 'secondary'}
+                            data-testid={`lote-status-${lote.id}`}
+                          >
+                            {lote.status === 'active' ? 'Activo' : 'Finalizado'}
+                          </Badge>
+                          {lote.parentLoteId && (
+                            <Badge variant="outline" data-testid={`lote-sublote-${lote.id}`}>
+                              Sublote - {lote.pieceType}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(lote)}
+                          data-testid={`button-edit-lote-${lote.id}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(lote)}
+                          disabled={deleteMutation.isPending}
+                          data-testid={`button-delete-lote-${lote.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <LoteModal 
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          lote={selectedLote}
+        />
+      </div>
+    </MainLayout>
+  );
+}
