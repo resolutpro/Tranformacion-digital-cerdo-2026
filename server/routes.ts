@@ -511,16 +511,20 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Sensor no encontrado" });
       }
       
-      const { value, mode, interval, duration, count, minValue, maxValue, addNoise, markAsSimulated, useRealtime } = req.body;
+      const { value, mode, interval, duration, count, minValue, maxValue, addNoise, markAsSimulated, useRealtime, customTimestamp } = req.body;
       
       if (mode === 'single') {
+        const timestamp = customTimestamp 
+          ? new Date(customTimestamp) 
+          : (useRealtime ? new Date() : new Date());
+        
         const reading = await storage.createSensorReading({
           sensorId: req.params.id,
           value: value.toString(),
-          timestamp: useRealtime ? new Date() : new Date(),
+          timestamp,
           isSimulated: markAsSimulated !== false
         });
-        res.json({ message: "Lectura HTTP simulada creada", reading });
+        res.json({ message: "Lectura simulada creada", reading });
       } else if (mode === 'range') {
         // Random value within range
         const min = parseFloat(minValue);
@@ -530,22 +534,29 @@ export function registerRoutes(app: Express): Server {
           ? randomValue * (1 + (Math.random() - 0.5) * 0.1) // ±5% noise
           : randomValue;
         
+        const timestamp = customTimestamp 
+          ? new Date(customTimestamp) 
+          : (useRealtime ? new Date() : new Date());
+        
         const reading = await storage.createSensorReading({
           sensorId: req.params.id,
           value: finalValue.toString(),
-          timestamp: useRealtime ? new Date() : new Date(),
+          timestamp,
           isSimulated: markAsSimulated !== false
         });
-        res.json({ message: "Lectura HTTP aleatoria creada", reading });
+        res.json({ message: "Lectura aleatoria creada", reading });
       } else if (mode === 'burst') {
         // Burst mode - create multiple readings
         const burstCount = count || Math.floor(((duration || 5) * 60 * 1000) / ((interval || 30) * 1000));
         const intervalMs = (interval || 30) * 1000;
         
         const readings = [];
+        const baseTime = customTimestamp 
+          ? new Date(customTimestamp).getTime() 
+          : (useRealtime ? Date.now() : Date.now() - (burstCount - 1) * intervalMs);
+        
         for (let i = 0; i < burstCount; i++) {
-          const baseTimestamp = useRealtime ? Date.now() : Date.now() - (burstCount - i) * intervalMs;
-          const timestamp = new Date(baseTimestamp + i * intervalMs);
+          const timestamp = new Date(baseTime + i * intervalMs);
           
           let simulatedValue = value;
           if (addNoise) {
@@ -562,7 +573,7 @@ export function registerRoutes(app: Express): Server {
           readings.push(reading);
         }
         
-        res.json({ message: `${readings.length} lecturas HTTP en ráfaga creadas`, count: readings.length });
+        res.json({ message: `${readings.length} lecturas en ráfaga creadas`, count: readings.length });
       } else {
         res.status(400).json({ message: "Modo de simulación no válido" });
       }
@@ -904,7 +915,7 @@ export function registerRoutes(app: Express): Server {
       
       res.json({ 
         qrSnapshot,
-        publicUrl: `${req.protocol}://${req.get('host')}/trazabilidad/${publicToken}`
+        publicUrl: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get('host')}`}/trazabilidad/${publicToken}`
       });
     } catch (error: any) {
       res.status(400).json({ message: error.message || "Error al generar QR" });
@@ -1044,6 +1055,7 @@ export function registerRoutes(app: Express): Server {
       
       // Count lotes by stage and collect unassigned (excluding finished)
       const loteCounts = { cria: 0, engorde: 0, matadero: 0, secadero: 0, distribucion: 0, unassigned: 0 };
+      const animalCounts = { cria: 0, engorde: 0, matadero: 0, secadero: 0, distribucion: 0, unassigned: 0 };
       const activeZones = new Set();
       const unassignedLotes = [];
       let totalAnimals = 0;
@@ -1068,11 +1080,13 @@ export function registerRoutes(app: Express): Server {
             const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
             if (zone && zone.stage in loteCounts) {
               loteCounts[zone.stage as keyof typeof loteCounts]++;
+              animalCounts[zone.stage as keyof typeof animalCounts] += lote.initialAnimals;
               activeZones.add(zone.id);
             }
           } else {
             // Lote without active stay = unassigned
             loteCounts.unassigned++;
+            animalCounts.unassigned += lote.initialAnimals;
             unassignedLotes.push({
               id: lote.id,
               identification: lote.identification,
@@ -1103,6 +1117,7 @@ export function registerRoutes(app: Express): Server {
       
       res.json({
         loteCounts,
+        animalCounts,
         totalAnimals,
         subloteCount,
         qrCount: qrSnapshots.filter(s => s.isActive).length,

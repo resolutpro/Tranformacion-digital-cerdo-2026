@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { 
-  Sprout, 
+  Heart, 
   TrendingUp, 
   Wind, 
   QrCode,
@@ -33,6 +33,14 @@ interface DashboardData {
     distribucion: number;
     unassigned: number;
     finished: number;
+  };
+  animalCounts?: {
+    cria: number;
+    engorde: number;
+    matadero: number;
+    secadero: number;
+    distribucion: number;
+    unassigned: number;
   };
   totalAnimals: number;
   qrCount: number;
@@ -65,7 +73,7 @@ interface DashboardData {
 }
 
 const stageIcons = {
-  cria: Sprout,
+  cria: Heart,
   engorde: TrendingUp,
   matadero: Factory,
   secadero: Wind,
@@ -174,7 +182,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium text-green-700">Animales</p>
                     <p className="text-2xl font-bold text-green-900">{dashboardData.totalAnimals}</p>
                   </div>
-                  <Sprout className="h-8 w-8 text-green-600" />
+                  <Heart className="h-8 w-8 text-green-600" />
                 </div>
               </CardContent>
             </Card>
@@ -271,6 +279,7 @@ export default function Dashboard() {
                 .map(([stage, count]) => {
                 const Icon = stageIcons[stage as keyof typeof stageIcons];
                 const colorClass = stageColors[stage as keyof typeof stageColors];
+                const animalCount = dashboardData.animalCounts?.[stage as keyof typeof dashboardData.animalCounts] || 0;
                 
                 return (
                   <Link key={stage} href={`/${stage}`}>
@@ -280,9 +289,14 @@ export default function Dashboard() {
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass}`}>
                             <Icon className="h-5 w-5" />
                           </div>
-                          <span className="text-xl font-bold text-foreground" data-testid={`count-${stage}`}>
-                            {count}
-                          </span>
+                          <div className="text-right">
+                            <span className="text-xl font-bold text-foreground block" data-testid={`count-${stage}`}>
+                              {count}
+                            </span>
+                            <span className="text-sm text-muted-foreground" data-testid={`animal-count-${stage}`}>
+                              {animalCount} animales
+                            </span>
+                          </div>
                         </div>
                         <h3 className="font-medium text-foreground text-sm capitalize">
                           {stage === 'cria' ? 'Cría' : stage}

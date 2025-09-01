@@ -27,9 +27,9 @@ export function SensorChart({ sensors }: SensorChartProps) {
       case "today":
         return { start: startOfDay(now), end: endOfDay(now) };
       case "7days":
-        return { start: subDays(now, 7), end: now };
+        return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) }; // Include today + 6 days = 7 days total
       case "30days":
-        return { start: subDays(now, 30), end: now };
+        return { start: startOfDay(subDays(now, 29)), end: endOfDay(now) }; // Include today + 29 days = 30 days total
       default:
         return { start: startOfDay(now), end: endOfDay(now) };
     }

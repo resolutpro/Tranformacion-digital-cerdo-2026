@@ -69,7 +69,7 @@ export default function Trazabilidad() {
   });
 
   const getPublicUrl = (token: string) => {
-    return `${window.location.origin}/trace/${token}`;
+    return `${window.location.origin}/trazabilidad/${token}`;
   };
 
   const copyToClipboard = (text: string) => {
@@ -386,7 +386,7 @@ export default function Trazabilidad() {
                   </div>
                   
                   <div className="flex gap-2">
-                    <Link href={`/trace/${snapshot.publicToken}`} target="_blank">
+                    <Link href={`/trazabilidad/${snapshot.publicToken}`} target="_blank">
                       <Button 
                         size="sm" 
                         className="flex-1"

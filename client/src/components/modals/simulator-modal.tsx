@@ -25,6 +25,8 @@ export function SimulatorModal({ isOpen, onClose, sensor, zoneSensors }: Simulat
     mode: "single",
     interval: "30",
     duration: "5",
+    customDateTime: "",
+    useCustomDateTime: false,
     markAsSimulated: true,
   });
   const { toast } = useToast();
@@ -36,6 +38,7 @@ export function SimulatorModal({ isOpen, onClose, sensor, zoneSensors }: Simulat
         mode: data.mode,
         interval: data.mode === 'burst' ? parseInt(data.interval) : undefined,
         duration: data.mode === 'burst' ? parseInt(data.duration) : undefined,
+        customTimestamp: data.useCustomDateTime && data.customDateTime ? new Date(data.customDateTime).toISOString() : undefined,
       });
       return res.json();
     },
@@ -64,6 +67,8 @@ export function SimulatorModal({ isOpen, onClose, sensor, zoneSensors }: Simulat
       mode: "single",
       interval: "30",
       duration: "5",
+      customDateTime: "",
+      useCustomDateTime: false,
       markAsSimulated: true,
     });
   };
@@ -189,16 +194,43 @@ export function SimulatorModal({ isOpen, onClose, sensor, zoneSensors }: Simulat
             </div>
           )}
           
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="mark-simulated"
-              checked={formData.markAsSimulated}
-              onCheckedChange={(checked) => setFormData({ ...formData, markAsSimulated: !!checked })}
-              data-testid="checkbox-mark-simulated"
-            />
-            <Label htmlFor="mark-simulated" className="text-sm">
-              Marcar como datos simulados
-            </Label>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="use-custom-datetime"
+                checked={formData.useCustomDateTime}
+                onCheckedChange={(checked) => setFormData({ ...formData, useCustomDateTime: !!checked })}
+                data-testid="checkbox-use-custom-datetime"
+              />
+              <Label htmlFor="use-custom-datetime" className="text-sm">
+                Usar fecha y hora específica
+              </Label>
+            </div>
+            
+            {formData.useCustomDateTime && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-datetime">Fecha y hora</Label>
+                <Input
+                  id="custom-datetime"
+                  type="datetime-local"
+                  value={formData.customDateTime}
+                  onChange={(e) => setFormData({ ...formData, customDateTime: e.target.value })}
+                  data-testid="input-custom-datetime"
+                />
+              </div>
+            )}
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="mark-simulated"
+                checked={formData.markAsSimulated}
+                onCheckedChange={(checked) => setFormData({ ...formData, markAsSimulated: !!checked })}
+                data-testid="checkbox-mark-simulated"
+              />
+              <Label htmlFor="mark-simulated" className="text-sm">
+                Marcar como datos simulados
+              </Label>
+            </div>
           </div>
           
           <div className="flex gap-3 pt-4">
