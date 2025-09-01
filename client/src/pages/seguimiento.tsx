@@ -198,21 +198,22 @@ export default function Seguimiento() {
 
   const { draggedItem, dragHandlers } = useDragAndDrop({
     onDrop: (draggedLoteId: string, targetZoneId: string) => {
-      if (targetZoneId === 'finalizado') {
-        // Handle finishing lote
-        moveMutation.mutate({
-          loteId: draggedLoteId,
-          zoneId: targetZoneId,
-          entryTime: new Date().toISOString(),
-        });
-      } else {
-        // Regular zone movement
-        moveMutation.mutate({
-          loteId: draggedLoteId,
-          zoneId: targetZoneId,
-          entryTime: new Date().toISOString(),
-        });
+      // Find the lote to get current stage info
+      const draggedLote = board ? Object.values(board).flat()
+        .find(stage => stage.lotes.find(l => l.id === draggedLoteId))
+        ?.lotes.find(l => l.id === draggedLoteId) : null;
+      
+      if (!draggedLote) return;
+
+      // Determine current stage
+      let currentStage = "sinUbicacion";
+      if (draggedLote.currentZone) {
+        currentStage = draggedLote.currentZone.stage;
       }
+      
+      // Open advanced move modal instead of direct mutation
+      setMoveModalLote(draggedLote);
+      setMoveModalStage(currentStage);
     }
   });
 

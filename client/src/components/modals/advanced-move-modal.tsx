@@ -53,7 +53,12 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
   // Load zones for the next allowed stage
   const nextStage = allowedStages[0];
   const { data: zones } = useQuery<Zone[]>({
-    queryKey: ["/api/zones", { stage: nextStage }],
+    queryKey: ["/api/zones", nextStage],
+    queryFn: async () => {
+      const res = await fetch(`/api/zones?stage=${nextStage}`);
+      if (!res.ok) throw new Error('Failed to fetch zones');
+      return res.json();
+    },
     enabled: isOpen && !!nextStage && nextStage !== "finalizado",
   });
 
@@ -108,7 +113,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
     if (currentStage !== "sinUbicacion" && new Date(exitTime) >= new Date(entryTime)) {
       toast({
         title: "Error de fechas",
-        description: "La fecha de salida debe ser anterior a la fecha de entrada",
+        description: "La fecha de entrada debe ser posterior a la fecha de salida",
         variant: "destructive",
       });
       return;
@@ -126,7 +131,16 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
 
     // Handle special transitions
     if (currentStage === "matadero" && nextStage === "secadero" && showSubLotes) {
-      moveData.subLotes = subLotes.filter(s => s.name && s.pieces > 0);
+      const validSubLotes = subLotes.filter(s => s.name.trim() && s.pieces > 0);
+      if (validSubLotes.length === 0) {
+        toast({
+          title: "Error en sublotes",
+          description: "Debe añadir al menos un sublote válido con nombre y cantidad",
+          variant: "destructive",
+        });
+        return;
+      }
+      moveData.subLotes = validSubLotes;
     }
 
     if (currentStage === "secadero" && nextStage === "distribucion" && generateQR) {
@@ -249,6 +263,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
                         placeholder="Nombre (ej. Jamón, Paleta)"
                         value={subLote.name}
                         onChange={(e) => updateSubLote(index, "name", e.target.value)}
+                        required
                         data-testid={`input-sublote-name-${index}`}
                       />
                       <Input
@@ -258,6 +273,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
                         value={subLote.pieces || ""}
                         onChange={(e) => updateSubLote(index, "pieces", parseInt(e.target.value) || 0)}
                         className="w-24"
+                        required
                         data-testid={`input-sublote-pieces-${index}`}
                       />
                       <Button

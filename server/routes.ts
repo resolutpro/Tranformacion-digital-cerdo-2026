@@ -672,9 +672,28 @@ export function registerRoutes(app: Express): Server {
         logger.error('Zone not found', { zoneId, organizationId: req.organizationId });
         return res.status(404).json({ message: "Zona no encontrada" });
       }
-      
-      // Close current stay if exists
+
+      // Sequential stage validation
+      const stageOrder = ["sinUbicacion", "cria", "engorde", "matadero", "secadero", "distribucion", "finalizado"];
       const currentStay = await storage.getActiveStayByLote(lote.id);
+      let currentStage = "sinUbicacion";
+      
+      if (currentStay) {
+        const currentZone = await storage.getZone(currentStay.zoneId, req.organizationId);
+        currentStage = currentZone?.stage || "sinUbicacion";
+      }
+      
+      const targetStage = targetZone?.stage || "finalizado";
+      const currentIndex = stageOrder.indexOf(currentStage);
+      const targetIndex = stageOrder.indexOf(targetStage);
+      
+      if (targetIndex <= currentIndex) {
+        return res.status(400).json({ 
+          message: "Movimiento no permitido: solo se pueden hacer movimientos hacia adelante en la secuencia de producción" 
+        });
+      }
+      
+      // Close current stay if exists  
       if (currentStay) {
         const closeTime = exitTime ? new Date(exitTime) : new Date(entryTime);
         await storage.closeStay(currentStay.id, closeTime);
