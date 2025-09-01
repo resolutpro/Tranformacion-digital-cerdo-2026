@@ -98,6 +98,7 @@ export function HttpSimulatorModal({ isOpen, onClose, sensor, allSensors }: Http
     });
   };
 
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     

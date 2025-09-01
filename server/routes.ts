@@ -13,6 +13,16 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
+// Simple logger for diagnostics
+const logger = {
+  info: (message: string, data?: any) => {
+    console.log(`[INFO] ${new Date().toISOString()} - ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  },
+  error: (message: string, error?: any) => {
+    console.error(`[ERROR] ${new Date().toISOString()} - ${message}`, error?.message || error || '');
+  }
+};
+
 // Middleware to ensure user is authenticated and get organization
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated()) {
@@ -132,9 +142,11 @@ export function registerRoutes(app: Express): Server {
   // Lotes API
   app.get("/api/lotes", requireAuth, async (req: any, res) => {
     try {
+      logger.info('GET /api/lotes', { organizationId: req.organizationId });
       const lotes = await storage.getLotesByOrganization(req.organizationId);
       res.json(lotes);
-    } catch (error) {
+    } catch (error: any) {
+      logger.error('Error getting lotes', { organizationId: req.organizationId, error });
       res.status(500).json({ message: "Error al obtener lotes" });
     }
   });
@@ -152,9 +164,18 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "La identificación del lote ya existe" });
       }
       
-      const lote = await storage.createLote(loteData);
+      // Ensure new lotes start as active
+      const loteWithStatus = {
+        ...loteData,
+        status: 'active'
+      };
+      
+      logger.info('POST /api/lotes', { organizationId: req.organizationId, payload: loteWithStatus });
+      const lote = await storage.createLote(loteWithStatus);
+      logger.info('Lote created', { loteId: lote.id, status: lote.status });
       res.status(201).json(lote);
     } catch (error: any) {
+      logger.error('Error creating lote', { organizationId: req.organizationId, error });
       res.status(400).json({ message: error.message || "Error al crear lote" });
     }
   });
@@ -232,11 +253,13 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/zones", requireAuth, async (req: any, res) => {
     try {
       const { stage } = req.query;
+      logger.info('GET /api/zones', { organizationId: req.organizationId, stage });
       const zones = stage 
         ? await storage.getZonesByStage(req.organizationId, stage as string)
         : await storage.getZonesByOrganization(req.organizationId);
       res.json(zones);
-    } catch (error) {
+    } catch (error: any) {
+      logger.error('Error getting zones', { organizationId: req.organizationId, error });
       res.status(500).json({ message: "Error al obtener zonas" });
     }
   });
@@ -248,9 +271,12 @@ export function registerRoutes(app: Express): Server {
         organizationId: req.organizationId
       });
       
+      logger.info('POST /api/zones', { organizationId: req.organizationId, payload: zoneData });
       const zone = await storage.createZone(zoneData);
+      logger.info('Zone created', { zoneId: zone.id });
       res.status(201).json(zone);
     } catch (error: any) {
+      logger.error('Error creating zone', { organizationId: req.organizationId, error });
       res.status(400).json({ message: error.message || "Error al crear zona" });
     }
   });
@@ -303,9 +329,11 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Zona no encontrada" });
       }
       
+      logger.info('GET /api/zones/:zoneId/sensors', { organizationId: req.organizationId, zoneId: req.params.zoneId });
       const sensors = await storage.getSensorsByZone(req.params.zoneId);
       res.json(sensors);
-    } catch (error) {
+    } catch (error: any) {
+      logger.error('Error getting sensors', { organizationId: req.organizationId, zoneId: req.params.zoneId, error });
       res.status(500).json({ message: "Error al obtener sensores" });
     }
   });
@@ -324,6 +352,7 @@ export function registerRoutes(app: Express): Server {
         organizationId: req.organizationId
       });
       
+      logger.info('POST /api/sensors', { organizationId: req.organizationId, payload: sensorData, mqttCredentials: mqtt });
       const sensor = await storage.createSensor({
         ...sensorData,
         deviceId: mqtt.deviceId,
@@ -331,9 +360,11 @@ export function registerRoutes(app: Express): Server {
         mqttUsername: mqtt.username,
         mqttPassword: mqtt.password
       });
+      logger.info('Sensor created', { sensorId: sensor.id });
       
       res.status(201).json(sensor);
     } catch (error: any) {
+      logger.error('Error creating sensor', { organizationId: req.organizationId, error });
       res.status(400).json({ message: error.message || "Error al crear sensor" });
     }
   });
@@ -519,7 +550,10 @@ export function registerRoutes(app: Express): Server {
       };
       
       // Get active stays for each lote
-      for (const lote of lotes.filter(l => l.status === 'active')) {
+      const activeLotes = lotes.filter(l => l.status === 'active');
+      const lotesWithoutLocation = [];
+      
+      for (const lote of activeLotes) {
         const activeStay = await storage.getActiveStayByLote(lote.id);
         if (activeStay) {
           const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
@@ -542,8 +576,19 @@ export function registerRoutes(app: Express): Server {
               board[zone.stage as keyof typeof board].lotes.push(loteWithStay);
             }
           }
+        } else {
+          // Lote activo sin estancia - "Sin ubicación"
+          lotesWithoutLocation.push({
+            ...lote,
+            currentZone: null,
+            currentStay: null,
+            totalDays: 0
+          });
         }
       }
+      
+      // Add lotes without location to cria stage as default
+      board.cria.lotes.push(...lotesWithoutLocation);
       
       // Add finished lotes
       board.finalizado.lotes = lotes.filter(l => l.status === 'finished');

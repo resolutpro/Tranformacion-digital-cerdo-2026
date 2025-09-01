@@ -1,0 +1,63 @@
+Corrige persistencia y estados. Sustituye el almacenamiento en memoria por SQL real y arregla la UI que depende de ello. UI en español, tiempos UTC en BD y Europe/Madrid en interfaz. No rompas lo existente.
+
+0) Diagnóstico mínimo (temporal)
+
+Añade logs INFO/ERROR en backend para POST/GET de zones, sensors, batches y simulador de lecturas (imprime org_id, payload, SQL/ID insertado y errores).
+
+1) Persistencia real — SqlStorage implements IStorage (SQLite)
+
+Implementa SqlStorage que cumple toda la interfaz IStorage usando SQLite (p. ej. better-sqlite3 o Knex/Drizzle).
+
+Crea tablas: organizations, users, lotes, lote_templates, zones (is_active DEFAULT 1), stays, sensors (is_active DEFAULT 1), sensor_readings, qr_snapshots, audit_logs.
+
+PRAGMA foreign_keys=ON; y journal_mode=WAL.
+
+Importante (SQLite): no uses .returning(). Usa lastID o insert → select.
+
+Inyección: reemplaza export const storage = new MemStorage(); por export const storage = new SqlStorage(db) (o por variable según process.env.STORAGE=sql). Mantén MemStorage solo para tests locales.
+
+2) Lotes — alta sin estado/zona (activo, sin estancia)
+
+Bug: nuevos lotes aparecen “finalizado”.
+
+Arreglo:
+
+En createLote no crear estancia. Guardar el lote con estado inicial ACTIVO (o isFinalized=false).
+
+La UI debe mostrar “Sin ubicación” cuando el lote esté ACTIVO y no tenga estancia abierta (no lo marques Finalizado por ese motivo).
+
+En “Lotes”, tras crear, muestra CTA “Asignar/Mover a zona” que reusa el mismo modal del tablero (selector etapa→zona + fecha/hora).
+
+3) Zonas — persistencia y refresco
+
+createZone debe insertar y devolver ID. Marcar is_active=1 al crear.
+
+Listados por etapa/organización deben mostrar las nuevas zonas.
+
+Al crear/borrar zona, revalida: páginas de etapa, Seguimiento de Lotes (contenedores) y Portada.
+
+4) Sensores — guardar, listar como tarjetas y ℹ️ MQTT
+
+createSensor debe persistir con: zone_id, org_id, name, type, device_id (UUID), mqttTopic (fijo/inmutable), mqttUsername, mqttPassword, is_active=1.
+
+En detalle de zona:
+
+Botón “Añadir sensor” siempre visible (modal).
+
+Debajo, tarjetas de sensores de la zona.
+
+En cada tarjeta, botón ℹ️ que siempre muestra: topic, payload JSON ejemplo según tipo, última lectura, usuario/clave; acciones Rotar (nueva clave) y Revocar (invalidar).
+
+Reutiliza la misma validación para ingesta real y simulada (simulador marca is_simulated=true).
+
+Tras crear/rotar/revocar, revalida la lista de sensores.
+
+5) Editor de plantilla de lotes — aplicar a nuevas altas
+
+Arregla el flujo: al guardar la plantilla, los campos nuevos deben aparecer al abrir el formulario de NUEVO lote (no retroactivo sobre existentes).
+
+El modal “+ Nuevo lote” lee la plantilla (por organización) al abrir.
+
+6) Panel de Control (Inicio) — refresco
+
+Al crear/borrar lote o zona, invalidate/revalidate los datos del inicio (resumen por etapa/zonas y “Zonas con actividad”).

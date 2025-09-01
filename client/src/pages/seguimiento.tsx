@@ -305,19 +305,71 @@ export default function Seguimiento() {
                       </div>
                     </div>
                   ) : (
-                    stageData.zones.map((zone) => {
-                      const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
-                      
-                      return (
-                        <div 
-                          key={zone.id}
-                          className="kanban-zone p-2"
-                          {...dragHandlers.getDropZoneProps(zone.id)}
-                          data-testid={`drop-zone-${zone.id}`}
-                        >
-                          <div className="text-xs text-muted-foreground mb-2" data-testid={`zone-label-${zone.id}`}>
-                            {zone.name}
+                    <>
+                      {/* Lotes sin ubicación solo en etapa Cría */}
+                      {stage === 'cria' && (
+                        <div className="kanban-zone p-2 border-dashed border-2 border-orange-300 bg-orange-50/50">
+                          <div className="text-xs text-orange-600 mb-2 font-medium">
+                            📍 Sin Ubicación
                           </div>
+                          <div className="space-y-2">
+                            {stageData.lotes.filter(l => !l.currentZone).map((lote) => (
+                              <div
+                                key={lote.id}
+                                className={`batch-card bg-background border border-orange-200 rounded-md p-3 cursor-move transition-all hover:shadow-md border-l-4 border-l-orange-400 ${
+                                  draggedItem === lote.id ? 'batch-card-dragging opacity-50' : ''
+                                } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                                {...dragHandlers.getDraggableProps(lote.id)}
+                                onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                                data-testid={`lote-card-${lote.id}`}
+                              >
+                                <div className="font-medium text-sm" data-testid={`lote-name-${lote.id}`}>
+                                  {lote.identification}
+                                </div>
+                                <div className="text-xs text-muted-foreground" data-testid={`lote-animals-${lote.id}`}>
+                                  {lote.initialAnimals} animales
+                                </div>
+                                <div className="flex items-center justify-between mt-2">
+                                  <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
+                                    Activo - Sin ubicar
+                                  </Badge>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="text-xs h-6 px-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // TODO: Implement zone assignment modal
+                                      toast({
+                                        title: "Asignar zona",
+                                        description: "Función pendiente de implementar",
+                                      });
+                                    }}
+                                    data-testid={`assign-zone-${lote.id}`}
+                                  >
+                                    Asignar zona
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Zonas normales */}
+                      {stageData.zones.map((zone) => {
+                        const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
+                        
+                        return (
+                          <div 
+                            key={zone.id}
+                            className="kanban-zone p-2"
+                            {...dragHandlers.getDropZoneProps(zone.id)}
+                            data-testid={`drop-zone-${zone.id}`}
+                          >
+                            <div className="text-xs text-muted-foreground mb-2" data-testid={`zone-label-${zone.id}`}>
+                              {zone.name}
+                            </div>
                           <div className="space-y-2">
                             {zoneLotes.map((lote) => {
                               // Determine card styling based on duration
@@ -380,7 +432,8 @@ export default function Seguimiento() {
                           </div>
                         </div>
                       );
-                    })
+                    })}
+                    </>
                   )}
                 </CardContent>
               </Card>
