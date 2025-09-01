@@ -10,7 +10,7 @@ import { TemplateEditorModal } from "@/components/modals/template-editor-modal";
 import { MoveToZoneModal } from "@/components/modals/move-to-zone-modal";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Edit, Trash2, Settings, MapPin } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Settings, MapPin, ChevronDown, ChevronRight } from "lucide-react";
 import type { Lote } from "@shared/schema";
 
 export default function Lotes() {
@@ -20,6 +20,8 @@ export default function Lotes() {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [newlyCreatedLoteId, setNewlyCreatedLoteId] = useState<string | null>(null);
+  const [expandedLotes, setExpandedLotes] = useState<Set<string>>(new Set());
+  const [sublotesData, setSublotesData] = useState<Record<string, Lote[]>>({});
   const { toast } = useToast();
 
   const { data: lotes = [], isLoading } = useQuery<Lote[]>({
@@ -47,8 +49,10 @@ export default function Lotes() {
   });
 
   const filteredLotes = lotes.filter(lote => 
-    lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lote.foodRegime?.toLowerCase().includes(searchTerm.toLowerCase())
+    !lote.parentLoteId && ( // Only show parent lotes, not sublotes
+      lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lote.foodRegime?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
   );
 
   const handleEdit = (lote: Lote) => {
@@ -70,6 +74,31 @@ export default function Lotes() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedLote(null);
+  };
+
+  const toggleLoteExpansion = async (loteId: string) => {
+    const newExpanded = new Set(expandedLotes);
+    
+    if (expandedLotes.has(loteId)) {
+      newExpanded.delete(loteId);
+    } else {
+      newExpanded.add(loteId);
+      
+      // Load sublotes if not already loaded
+      if (!sublotesData[loteId]) {
+        try {
+          const res = await fetch(`/api/lotes/${loteId}/sublotes`);
+          if (res.ok) {
+            const sublotes = await res.json();
+            setSublotesData(prev => ({ ...prev, [loteId]: sublotes }));
+          }
+        } catch (error) {
+          console.error('Error loading sublotes:', error);
+        }
+      }
+    }
+    
+    setExpandedLotes(newExpanded);
   };
 
   return (
@@ -138,17 +167,42 @@ export default function Lotes() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredLotes.map((lote) => (
-                  <div 
-                    key={lote.id} 
-                    className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                    data-testid={`lote-${lote.id}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-medium text-foreground" data-testid={`lote-name-${lote.id}`}>
-                          {lote.identification}
-                        </h3>
+                {filteredLotes.map((lote) => {
+                  const hasSubLotes = sublotesData[lote.id]?.length > 0;
+                  const isExpanded = expandedLotes.has(lote.id);
+                  
+                  return (
+                    <div key={lote.id}>
+                      <div 
+                        className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                        data-testid={`lote-${lote.id}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              {/* Expansion button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleLoteExpansion(lote.id)}
+                                className="p-1 h-auto"
+                                data-testid={`button-expand-lote-${lote.id}`}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <h3 className="font-medium text-foreground" data-testid={`lote-name-${lote.id}`}>
+                                {lote.identification}
+                              </h3>
+                              {hasSubLotes && (
+                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                                  {sublotesData[lote.id].length} sublotes
+                                </Badge>
+                              )}
+                            </div>
                         <p className="text-sm text-muted-foreground" data-testid={`lote-details-${lote.id}`}>
                           {lote.initialAnimals} animales iniciales
                           {lote.finalAnimals && ` → ${lote.finalAnimals} finales`}
@@ -194,8 +248,60 @@ export default function Lotes() {
                         </Button>
                       </div>
                     </div>
+
+                    {/* Sublotes section */}
+                    {isExpanded && hasSubLotes && (
+                      <div className="ml-8 mt-4 space-y-2">
+                        {sublotesData[lote.id].map((sublote) => (
+                          <div 
+                            key={sublote.id}
+                            className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                            data-testid={`sublote-${sublote.id}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700">
+                                    {sublote.pieceType || 'Sublote'}
+                                  </Badge>
+                                  <h4 className="text-sm font-medium text-foreground">
+                                    {sublote.identification}
+                                  </h4>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {sublote.initialAnimals} piezas
+                                  {sublote.foodRegime && ` • ${sublote.foodRegime}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEdit(sublote)}
+                                  className="h-8 w-8 p-0"
+                                  data-testid={`button-edit-sublote-${sublote.id}`}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(sublote)}
+                                  disabled={deleteMutation.isPending}
+                                  className="h-8 w-8 p-0"
+                                  data-testid={`button-delete-sublote-${sublote.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                )
+              })}
               </div>
             )}
           </CardContent>

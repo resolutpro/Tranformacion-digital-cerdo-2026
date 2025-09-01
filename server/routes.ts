@@ -151,6 +151,16 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Get sublotes for a specific lote
+  app.get("/api/lotes/:id/sublotes", requireAuth, async (req: any, res) => {
+    try {
+      const sublotes = await storage.getSubLotes(req.params.id, req.organizationId);
+      res.json(sublotes);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error al obtener sublotes" });
+    }
+  });
+
   app.post("/api/lotes", requireAuth, async (req: any, res) => {
     try {
       const loteData = insertLoteSchema.parse({
@@ -882,7 +892,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Lote no encontrado" });
       }
       
-      const snapshotData = await generateSnapshotData(lote.id);
+      const snapshotData = await generateSnapshotData(lote.id, req.organizationId);
       const publicToken = randomUUID();
       
       const qrSnapshot = await storage.createQrSnapshot({
@@ -894,7 +904,7 @@ export function registerRoutes(app: Express): Server {
       
       res.json({ 
         qrSnapshot,
-        publicUrl: `${req.protocol}://${req.get('host')}/trace/${publicToken}`
+        publicUrl: `${req.protocol}://${req.get('host')}/trazabilidad/${publicToken}`
       });
     } catch (error: any) {
       res.status(400).json({ message: error.message || "Error al generar QR" });

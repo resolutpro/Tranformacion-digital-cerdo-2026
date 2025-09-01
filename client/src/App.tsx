@@ -12,7 +12,7 @@ import Lotes from "@/pages/lotes";
 import ZoneDetail from "@/pages/zona-detail";
 import Seguimiento from "@/pages/seguimiento";
 import Trazabilidad from "@/pages/trazabilidad";
-import PublicTrace from "@/pages/public-trace";
+import PublicTraceability from "@/pages/public-traceability";
 import CriaPage from "@/pages/cria";
 import EngordePage from "@/pages/engorde";
 import MataderoPage from "@/pages/matadero";
@@ -23,7 +23,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
-      <Route path="/trace/:token" component={PublicTrace} />
+      <Route path="/trazabilidad/:token" component={PublicTraceability} />
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/lotes" component={Lotes} />
       <ProtectedRoute path="/cria" component={CriaPage} />

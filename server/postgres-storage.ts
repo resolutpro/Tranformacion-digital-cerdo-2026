@@ -88,6 +88,11 @@ export class PostgresStorage implements IStorage {
     return await this.db.select().from(lotes).where(eq(lotes.organizationId, organizationId));
   }
 
+  async getSubLotes(parentLoteId: string, organizationId: string): Promise<Lote[]> {
+    return await this.db.select().from(lotes)
+      .where(and(eq(lotes.parentLoteId, parentLoteId), eq(lotes.organizationId, organizationId)));
+  }
+
   async getLote(id: string, organizationId: string): Promise<Lote | undefined> {
     const result = await this.db.select().from(lotes)
       .where(and(eq(lotes.id, id), eq(lotes.organizationId, organizationId)))

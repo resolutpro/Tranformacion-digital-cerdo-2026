@@ -32,6 +32,7 @@ export interface IStorage {
   
   // Lotes
   getLotesByOrganization(organizationId: string): Promise<Lote[]>;
+  getSubLotes(parentLoteId: string, organizationId: string): Promise<Lote[]>;
   getLote(id: string, organizationId: string): Promise<Lote | undefined>;
   createLote(lote: InsertLote): Promise<Lote>;
   updateLote(id: string, lote: Partial<InsertLote>, organizationId: string): Promise<Lote | undefined>;
@@ -148,6 +149,12 @@ export class MemStorage implements IStorage {
   // Lotes
   async getLotesByOrganization(organizationId: string): Promise<Lote[]> {
     return Array.from(this.lotes.values()).filter(lote => lote.organizationId === organizationId);
+  }
+
+  async getSubLotes(parentLoteId: string, organizationId: string): Promise<Lote[]> {
+    return Array.from(this.lotes.values()).filter(lote => 
+      lote.parentLoteId === parentLoteId && lote.organizationId === organizationId
+    );
   }
 
   async getLote(id: string, organizationId: string): Promise<Lote | undefined> {
