@@ -936,7 +936,7 @@ export function registerRoutes(app: Express): Server {
 
       const newToken = randomUUID();
       const updatedSnapshot = await storage.updateQrSnapshot(snapshot.id, { 
-        token: newToken,
+        publicToken: newToken,
         scanCount: 0  // Reset scan count on rotation
       });
 
@@ -947,13 +947,13 @@ export function registerRoutes(app: Express): Server {
         entityType: 'qr_snapshot',
         entityId: snapshot.id,
         action: 'rotate',
-        oldData: { token: snapshot.token, scanCount: snapshot.scanCount },
-        newData: { token: newToken, scanCount: 0 }
+        oldData: { publicToken: snapshot.publicToken, scanCount: snapshot.scanCount },
+        newData: { publicToken: newToken, scanCount: 0 }
       });
 
       logger.info('QR token rotated', { 
         snapshotId: snapshot.id,
-        oldToken: snapshot.token,
+        oldToken: snapshot.publicToken,
         newToken 
       });
 
@@ -1002,7 +1002,7 @@ export function registerRoutes(app: Express): Server {
 
       logger.info('QR snapshot revoked', { 
         snapshotId: snapshot.id,
-        token: snapshot.token 
+        publicToken: snapshot.publicToken 
       });
 
       res.json({ 

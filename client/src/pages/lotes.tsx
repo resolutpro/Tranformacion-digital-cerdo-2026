@@ -246,62 +246,62 @@ export default function Lotes() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Sublotes section */}
-                    {isExpanded && hasSubLotes && (
-                      <div className="ml-8 mt-4 space-y-2">
-                        {sublotesData[lote.id].map((sublote) => (
-                          <div 
-                            key={sublote.id}
-                            className="p-3 bg-gray-50 rounded-lg border border-gray-200"
-                            data-testid={`sublote-${sublote.id}`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700">
-                                    {sublote.pieceType || 'Sublote'}
-                                  </Badge>
-                                  <h4 className="text-sm font-medium text-foreground">
-                                    {sublote.identification}
-                                  </h4>
+                      {/* Sublotes section */}
+                      {isExpanded && hasSubLotes && (
+                        <div className="ml-8 mt-4 space-y-2">
+                          {sublotesData[lote.id].map((sublote) => (
+                            <div 
+                              key={sublote.id}
+                              className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                              data-testid={`sublote-${sublote.id}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700">
+                                      {sublote.pieceType || 'Sublote'}
+                                    </Badge>
+                                    <h4 className="text-sm font-medium text-foreground">
+                                      {sublote.identification}
+                                    </h4>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {sublote.initialAnimals} piezas
+                                    {sublote.foodRegime && ` • ${sublote.foodRegime}`}
+                                  </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {sublote.initialAnimals} piezas
-                                  {sublote.foodRegime && ` • ${sublote.foodRegime}`}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleEdit(sublote)}
-                                  className="h-8 w-8 p-0"
-                                  data-testid={`button-edit-sublote-${sublote.id}`}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDelete(sublote)}
-                                  disabled={deleteMutation.isPending}
-                                  className="h-8 w-8 p-0"
-                                  data-testid={`button-delete-sublote-${sublote.id}`}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEdit(sublote)}
+                                    className="h-8 w-8 p-0"
+                                    data-testid={`button-edit-sublote-${sublote.id}`}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDelete(sublote)}
+                                    disabled={deleteMutation.isPending}
+                                    className="h-8 w-8 p-0"
+                                    data-testid={`button-delete-sublote-${sublote.id}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

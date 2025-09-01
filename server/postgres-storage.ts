@@ -137,7 +137,7 @@ export class PostgresStorage implements IStorage {
         .returning();
       return result[0];
     } else {
-      const result = await this.db.insert(loteTemplates).values(template).returning();
+      const result = await this.db.insert(loteTemplates).values([template]).returning();
       return result[0];
     }
   }
@@ -322,7 +322,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
-    const result = await this.db.insert(sensorReadings).values(reading).returning();
+    const result = await this.db.insert(sensorReadings).values([reading]).returning();
     return result[0];
   }
 
@@ -346,8 +346,8 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async createQrSnapshot(snapshot: InsertQrSnapshot): Promise<QrSnapshot> {
-    const result = await this.db.insert(qrSnapshots).values(snapshot).returning();
+  async createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot> {
+    const result = await this.db.insert(qrSnapshots).values([snapshot]).returning();
     return result[0];
   }
 
@@ -378,11 +378,16 @@ export class PostgresStorage implements IStorage {
   }
 
   // Missing method to implement IStorage interface
-  async revokeQrSnapshot(id: string): Promise<QrSnapshot | undefined> {
+  async revokeQrSnapshot(id: string, organizationId: string): Promise<boolean> {
     const result = await this.db.update(qrSnapshots)
       .set({ isActive: false })
-      .where(eq(qrSnapshots.id, id))
+      .from(lotes)
+      .where(and(
+        eq(qrSnapshots.id, id),
+        eq(qrSnapshots.loteId, lotes.id),
+        eq(lotes.organizationId, organizationId)
+      ))
       .returning();
-    return result[0];
+    return result.length > 0;
   }
 }

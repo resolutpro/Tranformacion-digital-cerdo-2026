@@ -77,7 +77,9 @@ export interface IStorage {
   // QR Snapshots
   getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]>;
   getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined>;
+  getQrSnapshot(id: string): Promise<QrSnapshot | undefined>;
   createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot>;
+  updateQrSnapshot(id: string, data: Partial<Pick<QrSnapshot, 'publicToken' | 'scanCount' | 'isActive'>>): Promise<QrSnapshot | undefined>;
   incrementScanCount(token: string): Promise<void>;
   revokeQrSnapshot(id: string, organizationId: string): Promise<boolean>;
   
@@ -98,7 +100,7 @@ export class MemStorage implements IStorage {
   private qrSnapshots: Map<string, QrSnapshot> = new Map();
   private auditLogs: Map<string, AuditLog> = new Map();
   
-  public readonly sessionStore: SessionStore;
+  public readonly sessionStore: Store;
 
   constructor() {
     this.sessionStore = new MemoryStore({
@@ -450,6 +452,19 @@ export class MemStorage implements IStorage {
     return Array.from(this.qrSnapshots.values()).find(snapshot => 
       snapshot.publicToken === token && snapshot.isActive
     );
+  }
+
+  async getQrSnapshot(id: string): Promise<QrSnapshot | undefined> {
+    return this.qrSnapshots.get(id);
+  }
+
+  async updateQrSnapshot(id: string, data: Partial<Pick<QrSnapshot, 'publicToken' | 'scanCount' | 'isActive'>>): Promise<QrSnapshot | undefined> {
+    const snapshot = this.qrSnapshots.get(id);
+    if (!snapshot) return undefined;
+    
+    const updated = { ...snapshot, ...data };
+    this.qrSnapshots.set(id, updated);
+    return updated;
   }
 
   async createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot> {
