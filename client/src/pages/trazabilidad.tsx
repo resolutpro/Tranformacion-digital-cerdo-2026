@@ -21,7 +21,8 @@ import {
   QrCode,
   Calendar,
   Plus,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -137,6 +138,58 @@ export default function Trazabilidad() {
   const handleGenerateQR = () => {
     if (!selectedLoteId) return;
     generateQRMutation.mutate(selectedLoteId);
+  };
+
+  const rotateTokenMutation = useMutation({
+    mutationFn: async (snapshotId: string) => {
+      const res = await apiRequest("PUT", `/api/qr-snapshots/${snapshotId}/rotate`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qr-snapshots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({
+        title: "Token rotado",
+        description: "El token ha sido renovado exitosamente",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo rotar el token",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const revokeQRMutation = useMutation({
+    mutationFn: async (snapshotId: string) => {
+      const res = await apiRequest("PUT", `/api/qr-snapshots/${snapshotId}/revoke`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qr-snapshots"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({
+        title: "QR revocado",
+        description: "El código QR ha sido revocado exitosamente",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo revocar el código QR",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRotateToken = (snapshotId: string) => {
+    rotateTokenMutation.mutate(snapshotId);
+  };
+
+  const handleRevokeQR = (snapshotId: string) => {
+    revokeQRMutation.mutate(snapshotId);
   };
 
   return (
@@ -363,10 +416,28 @@ export default function Trazabilidad() {
                     <Button 
                       size="sm" 
                       variant="outline"
-                      disabled={!snapshot.isActive}
+                      onClick={() => handleRotateToken(snapshot.id)}
+                      disabled={!snapshot.isActive || rotateTokenMutation.isPending}
                       data-testid={`button-rotate-qr-${snapshot.id}`}
                     >
-                      <RotateCcw className="h-3 w-3" />
+                      {rotateTokenMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3 w-3" />
+                      )}
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleRevokeQR(snapshot.id)}
+                      disabled={!snapshot.isActive || revokeQRMutation.isPending}
+                      data-testid={`button-revoke-qr-${snapshot.id}`}
+                    >
+                      {revokeQRMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
                     </Button>
                   </div>
                 </CardContent>

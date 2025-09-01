@@ -1,0 +1,67 @@
+Bugs a corregir / mejoras obligatorias
+Persistencia real en BD
+
+
+Asegura que: creación/edición/borrado de lotes, zonas, sensores, estancias, sublotes y QR se guardan en BD que corresponde no en un fichero aparte.
+
+
+Cualquier movimiento en “Seguimiento de Lotes” debe cerrar la estancia abierta (poner salida) y abrir la nueva (entrada) en una transacción (sin solapes).
+
+
+En Portada, los lotes finalizados NO deben contarse ni mostrarse en los resúmenes.
+2. Permitir el borrado de los sensores de las zonas poner cta de papelera y que borre la info que haya del sensor en la bd
+
+
+Detalle de Zona: gráficas 7d/30d
+
+
+Arregla que tras Simular lecturas las vistas 7d/30d carguen siempre desde la BD.
+
+
+
+Seguimiento de Lotes (kanban)
+
+
+Añade una nueva columna a la izquierda: “Sin ubicación”.
+
+
+Muestra aquí todos los lotes sin zona asignada (sin estancias abiertas; también incluir lotes recién creados sin ninguna estancia).
+
+
+Incluye buscador local de lotes en esa columna.
+
+
+Drag & drop: mover desde “Sin ubicación” a una zona ⇒ abre estancia nueva; mover entre zonas ⇒ cierra anterior y abre nueva (transacción).
+
+
+Matadero → Secadero: al soltar, abre diálogo de sublotes:
+
+
+Pregunta si se quieren crear sublotes por pieza. Si “sí”: nombre de pieza + nº de piezas (valida suma vs. animales del lote).
+
+
+Crea sublotes en BD y abre sus estancias en Secadero.
+
+
+Secadero → Distribución: tras persistir el movimiento, muestra opción “Generar Trazabilidad Pública (QR)”. Si se activa:
+
+
+Genera token público no adivinable + snapshot congelado (solo campos públicos) y guárdalos en BD.
+
+
+Muestra toast con Ver / Descargar.
+
+
+Los QR generados deben aparecer en la pestaña “Trazabilidad Pública” y también en la ficha del lote en Distribución.
+
+
+Trazabilidad Pública (QR)
+
+
+Listado con buscador y filtros (lote/sublote, fecha de generación, activo/revocado). Acciones: Vista previa, Descargar QR (PNG/SVG), Copiar enlace, Rotar (nuevo token), Revocar, contador de escaneos.
+
+
+La página pública sirve solo el snapshot (sin tocar tablas operativas), cacheable y no-index.
+
+
+Al construir el snapshot: calcula por fase (Cría/Engorde/Matadero/Secadero/Distribución) duración total y métricas públicas (mín/med/máx de Tª/HR; redondeo 1 decimal) y excluye simulados por defecto.

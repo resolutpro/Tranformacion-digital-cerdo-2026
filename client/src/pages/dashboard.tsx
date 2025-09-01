@@ -159,7 +159,7 @@ export default function Dashboard() {
                   <div>
                     <p className="text-sm font-medium text-blue-700">Total Lotes</p>
                     <p className="text-2xl font-bold text-blue-900">
-                      {totalActiveLotes + dashboardData.loteCounts.unassigned + dashboardData.loteCounts.finished}
+                      {totalActiveLotes + dashboardData.loteCounts.unassigned}
                     </p>
                   </div>
                   <Users className="h-8 w-8 text-blue-600" />

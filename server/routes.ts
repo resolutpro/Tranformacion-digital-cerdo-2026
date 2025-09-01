@@ -867,6 +867,104 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Rotate QR token
+  app.put("/api/qr-snapshots/:id/rotate", requireAuth, async (req: any, res) => {
+    try {
+      const snapshot = await storage.getQrSnapshot(req.params.id);
+      if (!snapshot) {
+        return res.status(404).json({ message: "Código QR no encontrado" });
+      }
+
+      // Verify ownership through lote organization
+      const lote = await storage.getLote(snapshot.loteId, req.organizationId);
+      if (!lote) {
+        return res.status(404).json({ message: "No autorizado para este código QR" });
+      }
+
+      const newToken = randomUUID();
+      const updatedSnapshot = await storage.updateQrSnapshot(snapshot.id, { 
+        token: newToken,
+        scanCount: 0  // Reset scan count on rotation
+      });
+
+      // Audit log for token rotation
+      await storage.createAuditLog({
+        organizationId: req.organizationId,
+        userId: req.user.id,
+        entityType: 'qr_snapshot',
+        entityId: snapshot.id,
+        action: 'rotate',
+        oldData: { token: snapshot.token, scanCount: snapshot.scanCount },
+        newData: { token: newToken, scanCount: 0 }
+      });
+
+      logger.info('QR token rotated', { 
+        snapshotId: snapshot.id,
+        oldToken: snapshot.token,
+        newToken 
+      });
+
+      res.json({ 
+        ...updatedSnapshot,
+        message: "Token rotado exitosamente",
+        newUrl: `/trazabilidad/${newToken}`
+      });
+    } catch (error: any) {
+      logger.error('Error rotating QR token', { 
+        snapshotId: req.params.id, 
+        error: error.message 
+      });
+      res.status(500).json({ message: "Error al rotar token" });
+    }
+  });
+
+  // Revoke QR snapshot
+  app.put("/api/qr-snapshots/:id/revoke", requireAuth, async (req: any, res) => {
+    try {
+      const snapshot = await storage.getQrSnapshot(req.params.id);
+      if (!snapshot) {
+        return res.status(404).json({ message: "Código QR no encontrado" });
+      }
+
+      // Verify ownership through lote organization
+      const lote = await storage.getLote(snapshot.loteId, req.organizationId);
+      if (!lote) {
+        return res.status(404).json({ message: "No autorizado para este código QR" });
+      }
+
+      const updatedSnapshot = await storage.updateQrSnapshot(snapshot.id, { 
+        isActive: false
+      });
+
+      // Audit log for revocation
+      await storage.createAuditLog({
+        organizationId: req.organizationId,
+        userId: req.user.id,
+        entityType: 'qr_snapshot',
+        entityId: snapshot.id,
+        action: 'revoke',
+        oldData: { isActive: true },
+        newData: { isActive: false }
+      });
+
+      logger.info('QR snapshot revoked', { 
+        snapshotId: snapshot.id,
+        token: snapshot.token 
+      });
+
+      res.json({ 
+        ...updatedSnapshot,
+        message: "Código QR revocado exitosamente"
+      });
+    } catch (error: any) {
+      logger.error('Error revoking QR snapshot', { 
+        snapshotId: req.params.id, 
+        error: error.message 
+      });
+      res.status(500).json({ message: "Error al revocar código QR" });
+    }
+  });
+
   // Public traceability endpoint (no auth required)
   app.get("/api/trace/:token", async (req, res) => {
     try {
@@ -891,14 +989,19 @@ export function registerRoutes(app: Express): Server {
       const lotes = await storage.getLotesByOrganization(req.organizationId);
       const qrSnapshots = await storage.getQrSnapshotsByOrganization(req.organizationId);
       
-      // Count lotes by stage and collect unassigned
-      const loteCounts = { cria: 0, engorde: 0, matadero: 0, secadero: 0, distribucion: 0, unassigned: 0, finished: 0 };
+      // Count lotes by stage and collect unassigned (excluding finished)
+      const loteCounts = { cria: 0, engorde: 0, matadero: 0, secadero: 0, distribucion: 0, unassigned: 0 };
       const activeZones = new Set();
       const unassignedLotes = [];
       let totalAnimals = 0;
       let subloteCount = 0;
       
       for (const lote of lotes) {
+        // Skip finished lotes entirely from dashboard summaries
+        if (lote.status === 'finished') {
+          continue;
+        }
+        
         // Count total animals (only from main lotes, not sublotes)
         if (!lote.parentLoteId) {
           totalAnimals += lote.initialAnimals;
@@ -906,9 +1009,7 @@ export function registerRoutes(app: Express): Server {
           subloteCount++;
         }
         
-        if (lote.status === 'finished') {
-          loteCounts.finished++;
-        } else if (lote.status === 'active') {
+        if (lote.status === 'active') {
           const activeStay = await storage.getActiveStayByLote(lote.id);
           if (activeStay) {
             const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
