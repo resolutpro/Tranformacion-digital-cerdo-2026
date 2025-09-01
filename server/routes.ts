@@ -592,6 +592,7 @@ export function registerRoutes(app: Express): Server {
       const lotes = await storage.getLotesByOrganization(req.organizationId);
       
       const board: any = {
+        sinUbicacion: { zones: [], lotes: [] },
         cria: { zones: zones.filter(z => z.stage === 'cria'), lotes: [] },
         engorde: { zones: zones.filter(z => z.stage === 'engorde'), lotes: [] },
         matadero: { zones: zones.filter(z => z.stage === 'matadero'), lotes: [] },
@@ -638,8 +639,8 @@ export function registerRoutes(app: Express): Server {
         }
       }
       
-      // Add lotes without location to cria stage as default
-      board.cria.lotes.push(...lotesWithoutLocation);
+      // Add lotes without location to sinUbicacion stage
+      board.sinUbicacion.lotes.push(...lotesWithoutLocation);
       
       // Add finished lotes
       board.finalizado.lotes = lotes.filter(l => l.status === 'finished');
@@ -658,7 +659,7 @@ export function registerRoutes(app: Express): Server {
         payload: req.body 
       });
 
-      const { zoneId, entryTime, createSublotes, sublotes, generateQrSnapshot } = req.body;
+      const { zoneId, entryTime, exitTime, subLotes, generateQR } = req.body;
       
       const lote = await storage.getLote(req.params.id, req.organizationId);
       if (!lote) {
@@ -675,7 +676,8 @@ export function registerRoutes(app: Express): Server {
       // Close current stay if exists
       const currentStay = await storage.getActiveStayByLote(lote.id);
       if (currentStay) {
-        await storage.closeStay(currentStay.id, new Date(entryTime));
+        const closeTime = exitTime ? new Date(exitTime) : new Date(entryTime);
+        await storage.closeStay(currentStay.id, closeTime);
         
         // Audit log for closing stay
         await storage.createAuditLog({
@@ -685,24 +687,27 @@ export function registerRoutes(app: Express): Server {
           entityId: currentStay.id,
           action: 'close',
           oldData: { exitTime: null },
-          newData: { exitTime: new Date(entryTime) }
+          newData: { exitTime: exitTime ? new Date(exitTime) : new Date(entryTime) }
         });
       }
       
       // Handle sublote creation (Matadero → Secadero)
-      if (createSublotes && sublotes && Array.isArray(sublotes) && sublotes.length > 0) {
+      if (subLotes && Array.isArray(subLotes) && subLotes.length > 0) {
         const createdSublotes = [];
         
-        for (const subloteData of sublotes) {
+        for (const subloteData of subLotes) {
+          if (!subloteData.name || !subloteData.pieces) continue;
+          
           const sublote = await storage.createLote({
             organizationId: req.organizationId,
-            identification: `${lote.identification}-${subloteData.piece}`,
-            initialAnimals: subloteData.count,
-            finalAnimals: subloteData.count,
+            identification: `${lote.identification}-${subloteData.name}`,
+            initialAnimals: subloteData.pieces,
+            finalAnimals: subloteData.pieces,
             foodRegime: lote.foodRegime,
             parentLoteId: lote.id,
-            pieceType: subloteData.piece,
-            status: 'active'
+            pieceType: subloteData.name,
+            status: 'active',
+            customData: { ...lote.customData, pieceType: subloteData.name }
           });
           
           // Create stay for sublote
@@ -721,7 +726,7 @@ export function registerRoutes(app: Express): Server {
             entityId: sublote.id,
             action: 'create',
             oldData: null,
-            newData: { type: 'sublote', parentId: lote.id, piece: subloteData.piece }
+            newData: { type: 'sublote', parentId: lote.id, piece: subloteData.name }
           });
           
           createdSublotes.push(sublote);
@@ -778,7 +783,7 @@ export function registerRoutes(app: Express): Server {
       
       // Generate QR snapshot if moving to distribución and requested
       let qrSnapshot = null;
-      if (generateQrSnapshot && targetZone?.stage === 'distribucion') {
+      if (generateQR && targetZone?.stage === 'distribucion') {
         const snapshotData = await generateSnapshotData(lote.id);
         qrSnapshot = await storage.createQrSnapshot({
           loteId: lote.id,
@@ -828,6 +833,25 @@ export function registerRoutes(app: Express): Server {
         error: error.message 
       });
       res.status(400).json({ message: error.message || "Error al mover lote" });
+    }
+  });
+
+  // Get active stay for a lote
+  app.get("/api/lotes/:id/active-stay", requireAuth, async (req: any, res) => {
+    try {
+      const lote = await storage.getLote(req.params.id, req.organizationId);
+      if (!lote) {
+        return res.status(404).json({ message: "Lote no encontrado" });
+      }
+      
+      const activeStay = await storage.getActiveStayByLote(lote.id);
+      if (!activeStay) {
+        return res.status(404).json({ message: "No hay estancia activa" });
+      }
+      
+      res.json(activeStay);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Error al obtener estancia activa" });
     }
   });
 

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AdvancedMoveModal } from "@/components/modals/advanced-move-modal";
 import { useDragAndDrop } from "@/lib/drag-drop";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +19,8 @@ import {
   Wind,
   Truck,
   Check,
-  MapPin
+  MapPin,
+  ArrowRight
 } from "lucide-react";
 import type { Lote, Zone } from "@shared/schema";
 
@@ -28,6 +30,7 @@ interface ExtendedLote extends Lote {
 }
 
 interface TrackingBoard {
+  sinUbicacion: { zones: Zone[]; lotes: ExtendedLote[] };
   cria: { zones: Zone[]; lotes: ExtendedLote[] };
   engorde: { zones: Zone[]; lotes: ExtendedLote[] };
   matadero: { zones: Zone[]; lotes: ExtendedLote[] };
@@ -37,6 +40,12 @@ interface TrackingBoard {
 }
 
 const stageConfig = {
+  sinUbicacion: { 
+    title: "Sin Ubicación", 
+    icon: MapPin, 
+    color: "bg-orange-50/50 border-orange-200",
+    headerColor: "bg-orange-100/50"
+  },
   cria: { 
     title: "Cría", 
     icon: Sprout, 
@@ -80,15 +89,26 @@ export default function Seguimiento() {
   const [selectedLote, setSelectedLote] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [moveModalLote, setMoveModalLote] = useState<Lote | null>(null);
+  const [moveModalStage, setMoveModalStage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: rawBoard, isLoading } = useQuery<TrackingBoard>({
     queryKey: ["/api/tracking/board"],
   });
 
-  // Filter board data based on search and filters
+  // Filter board data based on search and filters  
   const board = rawBoard ? {
     ...rawBoard,
+    sinUbicacion: {
+      ...rawBoard.sinUbicacion,
+      lotes: rawBoard.sinUbicacion.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    },
     cria: {
       ...rawBoard.cria,
       lotes: rawBoard.cria.lotes.filter(lote => 
@@ -279,7 +299,7 @@ export default function Seguimiento() {
         )}
 
         {/* Kanban Board */}
-        <div className="grid grid-cols-6 gap-4 kanban-column">
+        <div className="grid grid-cols-7 gap-4 kanban-column">
           {Object.entries(stageConfig).map(([stage, config]) => {
             const stageData = board?.[stage as keyof TrackingBoard];
             if (!stageData) return null;
@@ -296,7 +316,56 @@ export default function Seguimiento() {
                   </p>
                 </CardHeader>
                 <CardContent className="p-3 space-y-3">
-                  {stage === 'finalizado' ? (
+                  {stage === 'sinUbicacion' ? (
+                    <div className="space-y-2">
+                      <div className="relative mb-2">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-3 w-3" />
+                        <Input
+                          placeholder="Buscar lotes..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-8 h-8 text-xs"
+                          data-testid="input-search-sin-ubicacion"
+                        />
+                      </div>
+                      {stageData.lotes.map((lote) => (
+                        <div
+                          key={lote.id}
+                          className={`batch-card bg-background border border-orange-200 rounded-md p-3 cursor-move transition-all hover:shadow-md border-l-4 border-l-orange-400 ${
+                            draggedItem === lote.id ? 'batch-card-dragging opacity-50' : ''
+                          } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                          {...dragHandlers.getDraggableProps(lote.id)}
+                          onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                          data-testid={`lote-card-${lote.id}`}
+                        >
+                          <div className="font-medium text-sm" data-testid={`lote-name-${lote.id}`}>
+                            {lote.identification}
+                          </div>
+                          <div className="text-xs text-muted-foreground" data-testid={`lote-animals-${lote.id}`}>
+                            {lote.initialAnimals} animales
+                          </div>
+                          <div className="flex items-center justify-between mt-2">
+                            <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
+                              Sin ubicar
+                            </Badge>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="text-xs h-6 px-2"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMoveModalLote(lote);
+                                setMoveModalStage("sinUbicacion");
+                              }}
+                              data-testid={`assign-zone-${lote.id}`}
+                            >
+                              Asignar zona
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : stage === 'finalizado' ? (
                     <div 
                       className="kanban-zone text-center p-4"
                       {...dragHandlers.getDropZoneProps('finalizado')}
@@ -308,56 +377,6 @@ export default function Seguimiento() {
                     </div>
                   ) : (
                     <>
-                      {/* Lotes sin ubicación solo en etapa Cría */}
-                      {stage === 'cria' && (
-                        <div className="kanban-zone p-2 border-dashed border-2 border-orange-300 bg-orange-50/50">
-                          <div className="text-xs text-orange-600 mb-2 font-medium">
-                            📍 Sin Ubicación
-                          </div>
-                          <div className="space-y-2">
-                            {stageData.lotes.filter(l => !l.currentZone).map((lote) => (
-                              <div
-                                key={lote.id}
-                                className={`batch-card bg-background border border-orange-200 rounded-md p-3 cursor-move transition-all hover:shadow-md border-l-4 border-l-orange-400 ${
-                                  draggedItem === lote.id ? 'batch-card-dragging opacity-50' : ''
-                                } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
-                                {...dragHandlers.getDraggableProps(lote.id)}
-                                onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
-                                data-testid={`lote-card-${lote.id}`}
-                              >
-                                <div className="font-medium text-sm" data-testid={`lote-name-${lote.id}`}>
-                                  {lote.identification}
-                                </div>
-                                <div className="text-xs text-muted-foreground" data-testid={`lote-animals-${lote.id}`}>
-                                  {lote.initialAnimals} animales
-                                </div>
-                                <div className="flex items-center justify-between mt-2">
-                                  <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
-                                    Activo - Sin ubicar
-                                  </Badge>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline" 
-                                    className="text-xs h-6 px-2"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      // TODO: Implement zone assignment modal
-                                      toast({
-                                        title: "Asignar zona",
-                                        description: "Función pendiente de implementar",
-                                      });
-                                    }}
-                                    data-testid={`assign-zone-${lote.id}`}
-                                  >
-                                    Asignar zona
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
                       {/* Zonas normales */}
                       {stageData.zones.map((zone) => {
                         const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
@@ -423,9 +442,14 @@ export default function Seguimiento() {
                                     variant="ghost" 
                                     size="sm" 
                                     className="h-auto p-1"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setMoveModalLote(lote);
+                                      setMoveModalStage(stage);
+                                    }}
                                     data-testid={`button-lote-menu-${lote.id}`}
                                   >
-                                    <MoreVertical className="h-3 w-3" />
+                                    <ArrowRight className="h-3 w-3" />
                                   </Button>
                                 </div>
                                 </div>
@@ -442,6 +466,17 @@ export default function Seguimiento() {
             );
           })}
         </div>
+
+        {/* Advanced Move Modal */}
+        <AdvancedMoveModal
+          isOpen={!!moveModalLote}
+          onClose={() => {
+            setMoveModalLote(null);
+            setMoveModalStage(null);
+          }}
+          lote={moveModalLote}
+          currentStage={moveModalStage}
+        />
       </div>
     </MainLayout>
   );

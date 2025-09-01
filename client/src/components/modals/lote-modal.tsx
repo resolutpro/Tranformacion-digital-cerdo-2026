@@ -1,14 +1,21 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import type { Lote } from "@shared/schema";
+
+interface CustomField {
+  name: string;
+  type: string;
+  required: boolean;
+}
 
 interface LoteModalProps {
   isOpen: boolean;
@@ -24,7 +31,14 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
     finalAnimals: "",
     foodRegime: "",
   });
+  const [customFieldsData, setCustomFieldsData] = useState<Record<string, any>>({});
   const { toast } = useToast();
+
+  // Load lote template for custom fields
+  const { data: template } = useQuery<{customFields: CustomField[]}>({
+    queryKey: ["/api/lote-template"],
+    enabled: isOpen && !lote, // Only load for new lotes
+  });
 
   useEffect(() => {
     if (lote) {
@@ -34,6 +48,7 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
         finalAnimals: lote.finalAnimals?.toString() || "",
         foodRegime: lote.foodRegime || "",
       });
+      setCustomFieldsData(lote.customData || {});
     } else {
       setFormData({
         identification: "",
@@ -41,8 +56,18 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
         finalAnimals: "",
         foodRegime: "",
       });
+      // Initialize custom fields data for new lotes
+      if (template?.customFields) {
+        const initialCustomData: Record<string, any> = {};
+        template.customFields.forEach(field => {
+          initialCustomData[field.name] = "";
+        });
+        setCustomFieldsData(initialCustomData);
+      } else {
+        setCustomFieldsData({});
+      }
     }
-  }, [lote, isOpen]);
+  }, [lote, isOpen, template]);
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
@@ -81,6 +106,7 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
       initialAnimals: parseInt(formData.initialAnimals),
       finalAnimals: formData.finalAnimals ? parseInt(formData.finalAnimals) : undefined,
       foodRegime: formData.foodRegime || undefined,
+      customData: customFieldsData,
     };
 
     mutation.mutate(data);
@@ -150,6 +176,59 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
               data-testid="input-lote-final-animals"
             />
           </div>
+          
+          {/* Dynamic custom fields from template */}
+          {template?.customFields && template.customFields.length > 0 && (
+            <div className="border-t pt-4 space-y-4">
+              <h4 className="font-medium text-sm">Campos personalizados</h4>
+              {template.customFields.map((field, index) => (
+                <div key={index} className="space-y-2">
+                  <Label htmlFor={`custom-${field.name}`}>
+                    {field.name} {field.required && "*"}
+                  </Label>
+                  {field.type === "textarea" ? (
+                    <Textarea
+                      id={`custom-${field.name}`}
+                      value={customFieldsData[field.name] || ""}
+                      onChange={(e) => setCustomFieldsData({
+                        ...customFieldsData,
+                        [field.name]: e.target.value
+                      })}
+                      placeholder={`Ingrese ${field.name.toLowerCase()}`}
+                      required={field.required}
+                      data-testid={`input-custom-${field.name.toLowerCase().replace(/\\s+/g, '-')}`}
+                    />
+                  ) : field.type === "number" ? (
+                    <Input
+                      id={`custom-${field.name}`}
+                      type="number"
+                      value={customFieldsData[field.name] || ""}
+                      onChange={(e) => setCustomFieldsData({
+                        ...customFieldsData,
+                        [field.name]: e.target.value
+                      })}
+                      placeholder={`Ingrese ${field.name.toLowerCase()}`}
+                      required={field.required}
+                      data-testid={`input-custom-${field.name.toLowerCase().replace(/\\s+/g, '-')}`}
+                    />
+                  ) : (
+                    <Input
+                      id={`custom-${field.name}`}
+                      type="text"
+                      value={customFieldsData[field.name] || ""}
+                      onChange={(e) => setCustomFieldsData({
+                        ...customFieldsData,
+                        [field.name]: e.target.value
+                      })}
+                      placeholder={`Ingrese ${field.name.toLowerCase()}`}
+                      required={field.required}
+                      data-testid={`input-custom-${field.name.toLowerCase().replace(/\\s+/g, '-')}`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           
           <div className="flex gap-3 pt-4">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
