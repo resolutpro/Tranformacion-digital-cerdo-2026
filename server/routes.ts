@@ -358,6 +358,26 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.delete("/api/sensors/:id", requireAuth, async (req: any, res) => {
+    try {
+      const sensor = await storage.getSensor(req.params.id);
+      if (!sensor) {
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      }
+      
+      // Verify sensor belongs to user's organization
+      const zone = await storage.getZone(sensor.zoneId, req.organizationId);
+      if (!zone) {
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      }
+      
+      await storage.deleteSensor(req.params.id);
+      res.json({ message: "Sensor eliminado correctamente" });
+    } catch (error) {
+      res.status(500).json({ message: "Error al eliminar sensor" });
+    }
+  });
+
   // Sensor Readings API
   app.get("/api/sensors/:id/readings", requireAuth, async (req: any, res) => {
     try {
@@ -399,41 +419,87 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Sensor no encontrado" });
       }
       
-      const { value, mode, interval, duration } = req.body;
+      const { value, mode, interval, duration, count, minValue, maxValue, addNoise, markAsSimulated, useRealtime } = req.body;
       
       if (mode === 'single') {
         const reading = await storage.createSensorReading({
           sensorId: req.params.id,
           value: value.toString(),
-          timestamp: new Date(),
-          isSimulated: true
+          timestamp: useRealtime ? new Date() : new Date(),
+          isSimulated: markAsSimulated !== false
         });
-        res.json({ message: "Lectura simulada creada", reading });
-      } else {
+        res.json({ message: "Lectura HTTP simulada creada", reading });
+      } else if (mode === 'range') {
+        // Random value within range
+        const min = parseFloat(minValue);
+        const max = parseFloat(maxValue);
+        const randomValue = Math.random() * (max - min) + min;
+        const finalValue = addNoise 
+          ? randomValue * (1 + (Math.random() - 0.5) * 0.1) // ±5% noise
+          : randomValue;
+        
+        const reading = await storage.createSensorReading({
+          sensorId: req.params.id,
+          value: finalValue.toString(),
+          timestamp: useRealtime ? new Date() : new Date(),
+          isSimulated: markAsSimulated !== false
+        });
+        res.json({ message: "Lectura HTTP aleatoria creada", reading });
+      } else if (mode === 'burst') {
         // Burst mode - create multiple readings
+        const burstCount = count || Math.floor(((duration || 5) * 60 * 1000) / ((interval || 30) * 1000));
         const intervalMs = (interval || 30) * 1000;
-        const durationMs = (duration || 5) * 60 * 1000;
-        const count = Math.floor(durationMs / intervalMs);
         
         const readings = [];
-        for (let i = 0; i < count; i++) {
-          const timestamp = new Date(Date.now() + i * intervalMs);
-          const variance = (Math.random() - 0.5) * 0.1; // ±5% variance
-          const adjustedValue = value * (1 + variance);
+        for (let i = 0; i < burstCount; i++) {
+          const baseTimestamp = useRealtime ? Date.now() : Date.now() - (burstCount - i) * intervalMs;
+          const timestamp = new Date(baseTimestamp + i * intervalMs);
+          
+          let simulatedValue = value;
+          if (addNoise) {
+            const variance = (Math.random() - 0.5) * 0.2; // ±10% variance for burst
+            simulatedValue = value * (1 + variance);
+          }
           
           const reading = await storage.createSensorReading({
             sensorId: req.params.id,
-            value: adjustedValue.toString(),
+            value: simulatedValue.toString(),
             timestamp,
-            isSimulated: true
+            isSimulated: markAsSimulated !== false
           });
           readings.push(reading);
         }
         
-        res.json({ message: `${readings.length} lecturas simuladas creadas`, count: readings.length });
+        res.json({ message: `${readings.length} lecturas HTTP en ráfaga creadas`, count: readings.length });
+      } else {
+        res.status(400).json({ message: "Modo de simulación no válido" });
       }
     } catch (error: any) {
       res.status(400).json({ message: error.message || "Error al simular lecturas" });
+    }
+  });
+
+  // Direct HTTP reading endpoint for external devices
+  app.post("/api/sensors/:id/reading", async (req: any, res) => {
+    try {
+      const { deviceId, value, timestamp } = req.body;
+      
+      // Find sensor by device ID for external devices, or by sensor ID for internal
+      const sensor = await storage.getSensorByDeviceId(deviceId) || await storage.getSensor(req.params.id);
+      if (!sensor) {
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      }
+      
+      const reading = await storage.createSensorReading({
+        sensorId: sensor.id,
+        value: value.toString(),
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+        isSimulated: false // External readings are considered real
+      });
+      
+      res.status(201).json({ message: "Lectura recibida correctamente", reading });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Error al procesar lectura" });
     }
   });
 

@@ -1,0 +1,87 @@
+Continúa la app del Gemelo Digital (frontend + backend + BD). UI en español. Guarda tiempos en UTC y renderiza en Europe/Madrid. No rompas lo ya hecho.
+
+1) Lotes — alta sin estado/zona + activo
+Nuevo lote: al guardar NO debe quedar “finalizado” ni asignado a zona/estado. Debe quedar sin ubicación (sin estancia abierta) y se considera activo.
+
+
+Backend: no crear estancia inicial.
+
+
+UI (Lotes): tras crear, toast “Lote creado” con CTA “Asignar a una zona” que abre el modal de movimiento del tablero (selector etapa→zona + fecha/hora por defecto “ahora”).
+
+
+Seguimiento: el lote aparece en el buscador como chip arrastrable gris (gris = sin ubicación). Al asignarlo, toma el color de la etapa.
+
+
+2) Zonas → Sensores: tarjetas visibles, info MQTT y simulación
+En detalle de zona debe verse siempre un botón “Añadir sensor” y, debajo, las tarjetas de los sensores creados en esa zona.
+
+
+Al crear sensor: backend genera device_id, topic MQTT fijo/inmutable y credenciales (usuario/clave) y guarda el sensor en la BD con su zone_id.
+
+
+Cada tarjeta muestra botón ℹ️ que siempre despliega: topic, payload JSON de ejemplo según tipo, última lectura, usuario/clave y acciones Rotar (invalida clave anterior) y Revocar.
+
+
+ACL por dispositivo: el broker solo permite publicar en su topic; recomendar TLS 8883. Cambiar nombre o mover sensor de zona no cambia topic ni device_id (el vínculo a zona es backend).
+
+
+Simulador HTTP en detalle de zona (si no hay MQTT en Replit): botón “Simular lecturas” → modal (elegir sensor, lectura única o ráfaga cada N s durante T min, marcar simulado).
+
+
+Gráficas: selector de sensores + filtros (hoy/7/30/personalizado), eje X correcto, conmutador “en vivo” y toggle “Incluir datos simulados” (por defecto off).
+
+
+BD: asegúrate de persistir sensores y lecturas (con simulado: boolean). Los datos simulados se excluyen de snapshots QR por defecto.
+
+
+3) Panel de Control (Inicio) — refresco con nuevos lotes/zonas
+Si hay datos: mostrar resumen por etapa con cuántos lotes y en qué zonas (estancias abiertas) y Zonas con actividad (última lectura por tipo, máx. 3 chips; “sin datos desde hh:mm” si aplica).
+
+
+Si no hay datos: “Añade lotes y zonas para visualizar información” + CTAs Añadir lotes / Añadir zonas.
+
+
+Refresco: tras crear/borrar lote o zona, revalida los datos del inicio (usa React Query/SWR: invalidate/revalidate al éxito de las mutaciones).
+
+
+4) Registro/Login — persistencia real de usuarios
+Añadir registro de usuario (email/contraseña) y guardar en BD con hash seguro (bcrypt).
+
+
+Login valida contra el hash y crea sesión/JWT.
+
+
+Asociar usuario a una organización (si no existe, crear una por defecto al registrarse) y acotar todos los endpoints a la org del usuario.
+
+
+5) Seguimiento de Lotes — búsqueda arrastrable y zonas vivas
+Tablero con seis columnas: Cría, Engorde, Matadero, Secadero, Distribución, Finalizado.
+
+
+Buscador de lotes activos (incluye sin ubicación).
+
+
+Mostrar resultados como chips/íconos arrastrables: gris si sin ubicación; tinte de etapa si ya está en una zona.
+
+
+Movimiento: drag & drop → diálogo fecha/hora de entrada (“ahora” por defecto); cerrar estancia anterior (si existe) y abrir la nueva sin solapes (transacción). Alternativa accesible “Mover a…” (selector etapa→zona).
+
+
+Zonas vivas: cuando se cree o borre una zona en las páginas de etapa, el tablero debe actualizar sus columnas/contendedores (invalidate/reload del tablero).
+
+
+Sublotes: solo aquí, al mover Matadero→Secadero, preguntar y permitir crear sublotes (pieza + nº piezas) y abrir sus estancias.
+
+
+QR: solo aquí, al mover Secadero→Distribución, opción “Generar Trazabilidad Pública (QR)” → crear token público + snapshot (excluye simulados por defecto).
+
+
+Blockchain (stub): al mover o generar QR, encolar hash del evento para anclaje futuro.
+
+
+8) BD / Backend — asegúrate de la estructura para soportar todo
+Entidades mínimas: Usuario, Organización, Lote, Sublote, Zona (con etapa), Estancia (para lote o sublote), Sensor, Lectura (con simulado y hora de servidor), Objetivos por zona (rango Tª/HR), QR, Snapshot público, Cola de anclaje, Auditoría.
+
+
+Reglas: una sola estancia abierta por lote/sublote; movimientos sin solapes (transacción); sensores con topic fijo e ACL por dispositivo; rotar/revocar credenciales; excluir simulados de QR por defecto.

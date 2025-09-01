@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorModal } from "@/components/modals/sensor-modal";
 import { SimulatorModal } from "@/components/modals/simulator-modal";
+import { SensorInfoModal } from "@/components/modals/sensor-info-modal";
+import { HttpSimulatorModal } from "@/components/modals/http-simulator-modal";
 import { SensorChart } from "@/components/charts/sensor-chart";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -20,7 +23,8 @@ import {
   Settings,
   Trash2,
   RotateCcw,
-  Activity
+  Activity,
+  Zap
 } from "lucide-react";
 import type { Zone, Sensor } from "@shared/schema";
 
@@ -28,6 +32,8 @@ export default function ZoneDetail() {
   const params = useParams();
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
   const [isSimulatorModalOpen, setIsSimulatorModalOpen] = useState(false);
+  const [isSensorInfoModalOpen, setIsSensorInfoModalOpen] = useState(false);
+  const [isHttpSimulatorModalOpen, setIsHttpSimulatorModalOpen] = useState(false);
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
 
   const { data: zone } = useQuery<Zone>({
@@ -93,6 +99,11 @@ export default function ZoneDetail() {
     setIsSimulatorModalOpen(true);
   };
 
+  const handleShowInfo = (sensor: Sensor) => {
+    setSelectedSensor(sensor);
+    setIsSensorInfoModalOpen(true);
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -112,6 +123,14 @@ export default function ZoneDetail() {
             >
               <Plus className="h-4 w-4 mr-2" />
               Añadir Sensor
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsHttpSimulatorModalOpen(true)}
+              data-testid="button-http-simulator"
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Simulador HTTP
             </Button>
             <Button variant="outline" data-testid="button-fixed-info">
               <Info className="h-4 w-4 mr-2" />
@@ -152,6 +171,7 @@ export default function ZoneDetail() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleShowInfo(sensor)}
                         data-testid={`button-sensor-info-${sensor.id}`}
                       >
                         <Info className="h-4 w-4" />
@@ -223,16 +243,7 @@ export default function ZoneDetail() {
         {/* Chart Section */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Condiciones Temporales</span>
-              <div className="flex items-center gap-4">
-                <div className="flex border border-input rounded-md">
-                  <Button size="sm" variant="default" className="rounded-r-none">Hoy</Button>
-                  <Button size="sm" variant="ghost" className="rounded-none">7d</Button>
-                  <Button size="sm" variant="ghost" className="rounded-l-none">30d</Button>
-                </div>
-              </div>
-            </CardTitle>
+            <CardTitle>Condiciones Temporales</CardTitle>
           </CardHeader>
           <CardContent>
             <SensorChart sensors={sensors} />
@@ -269,6 +280,20 @@ export default function ZoneDetail() {
           onClose={() => setIsSimulatorModalOpen(false)}
           sensor={selectedSensor}
           zoneSensors={sensors}
+        />
+
+        <SensorInfoModal 
+          isOpen={isSensorInfoModalOpen}
+          onClose={() => setIsSensorInfoModalOpen(false)}
+          sensor={selectedSensor}
+          latestReading={latestReadings.find(lr => lr.sensorId === selectedSensor?.id)?.reading}
+        />
+
+        <HttpSimulatorModal 
+          isOpen={isHttpSimulatorModalOpen}
+          onClose={() => setIsHttpSimulatorModalOpen(false)}
+          sensor={selectedSensor}
+          allSensors={sensors}
         />
       </div>
     </MainLayout>
