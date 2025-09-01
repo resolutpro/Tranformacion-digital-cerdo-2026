@@ -806,8 +806,8 @@ export function registerRoutes(app: Express): Server {
         const snapshotData = await generateSnapshotData(lote.id);
         qrSnapshot = await storage.createQrSnapshot({
           loteId: lote.id,
-          token: randomUUID(),
-          data: JSON.stringify(snapshotData),
+          publicToken: randomUUID(),
+          snapshotData: snapshotData,
           createdBy: req.user.id
         });
         
@@ -819,13 +819,13 @@ export function registerRoutes(app: Express): Server {
           entityId: qrSnapshot.id,
           action: 'create',
           oldData: null,
-          newData: { loteId: lote.id, token: qrSnapshot.token }
+          newData: { loteId: lote.id, token: qrSnapshot.publicToken }
         });
         
         logger.info('QR snapshot created', { 
           loteId: lote.id, 
           snapshotId: qrSnapshot.id,
-          token: qrSnapshot.token 
+          token: qrSnapshot.publicToken 
         });
       }
       
@@ -839,8 +839,8 @@ export function registerRoutes(app: Express): Server {
       if (qrSnapshot) {
         response.qrSnapshot = {
           id: qrSnapshot.id,
-          token: qrSnapshot.token,
-          url: `/trazabilidad/${qrSnapshot.token}`
+          token: qrSnapshot.publicToken,
+          url: `/trazabilidad/${qrSnapshot.publicToken}`
         };
       }
       

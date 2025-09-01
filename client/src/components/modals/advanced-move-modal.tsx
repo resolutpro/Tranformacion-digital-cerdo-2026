@@ -70,7 +70,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
 
   useEffect(() => {
     if (isOpen) {
-      const now = new Date().toISOString().slice(0, 16);
+      const now = new Date().toISOString().slice(0, 10); // Only date, no time
       setEntryTime(now);
       setExitTime(now);
       setSelectedZoneId("");
@@ -109,15 +109,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
     
     if (!lote) return;
 
-    // Validate dates
-    if (currentStage !== "sinUbicacion" && new Date(exitTime) >= new Date(entryTime)) {
-      toast({
-        title: "Error de fechas",
-        description: "La fecha de entrada debe ser posterior a la fecha de salida",
-        variant: "destructive",
-      });
-      return;
-    }
+    // No date validation needed per user request
 
     // Prepare move data
     const moveData: any = {
@@ -215,7 +207,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
                 <Label htmlFor="exitTime">Fecha de salida *</Label>
                 <Input
                   id="exitTime"
-                  type="datetime-local"
+                  type="date"
                   value={exitTime}
                   onChange={(e) => setExitTime(e.target.value)}
                   required
@@ -227,7 +219,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
               <Label htmlFor="entryTime">Fecha de entrada *</Label>
               <Input
                 id="entryTime"
-                type="datetime-local"
+                type="date"
                 value={entryTime}
                 onChange={(e) => setEntryTime(e.target.value)}
                 required
