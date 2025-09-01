@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";
-import type { SessionStore } from "express-session";
+import type { Store } from "express-session";
 import {
   type User, type InsertUser,
   type Organization, type InsertOrganization,
@@ -21,7 +21,7 @@ const MemoryStore = createMemoryStore(session);
 
 export class SqlStorage implements IStorage {
   private db: Database.Database;
-  public readonly sessionStore: SessionStore;
+  public readonly sessionStore: Store;
 
   constructor(dbPath?: string) {
     this.db = new Database(dbPath || 'livestock.db');
@@ -35,6 +35,23 @@ export class SqlStorage implements IStorage {
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
     });
+  }
+
+  // Transaction wrapper for atomic operations
+  async withTransaction<T>(callback: () => Promise<T>): Promise<T> {
+    const transaction = this.db.transaction(() => {
+      // We'll handle the async operations manually
+    });
+    
+    try {
+      this.db.exec('BEGIN');
+      const result = await callback();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   private initializeTables() {
@@ -353,7 +370,8 @@ export class SqlStorage implements IStorage {
       stmt.run(id, template.organizationId, JSON.stringify(template.customFields));
     }
     
-    return this.getLoteTemplate(template.organizationId) as LoteTemplate;
+    const result = await this.getLoteTemplate(template.organizationId);
+    return result!;
   }
 
   // Zones
@@ -457,6 +475,7 @@ export class SqlStorage implements IStorage {
     return {
       id: row.id,
       name: row.name,
+      email: row.email || '',
       createdAt: new Date(row.created_at)
     };
   }
@@ -895,8 +914,8 @@ export class SqlStorage implements IStorage {
       mqttTopic: row.mqtt_topic,
       mqttUsername: row.mqtt_username,
       mqttPassword: row.mqtt_password,
-      validationMin: row.validation_min ? parseFloat(row.validation_min) : null,
-      validationMax: row.validation_max ? parseFloat(row.validation_max) : null,
+      validationMin: row.validation_min ? row.validation_min.toString() : null,
+      validationMax: row.validation_max ? row.validation_max.toString() : null,
       isActive: Boolean(row.is_active),
       isPublic: Boolean(row.is_public),
       createdAt: new Date(row.created_at)

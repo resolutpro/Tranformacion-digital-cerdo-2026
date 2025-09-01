@@ -273,6 +273,18 @@ export function registerRoutes(app: Express): Server {
       
       logger.info('POST /api/zones', { organizationId: req.organizationId, payload: zoneData });
       const zone = await storage.createZone(zoneData);
+      
+      // Audit log for zone creation
+      await storage.createAuditLog({
+        organizationId: req.organizationId,
+        userId: req.user.id,
+        entityType: 'zone',
+        entityId: zone.id,
+        action: 'create',
+        oldData: null,
+        newData: { name: zone.name, stage: zone.stage }
+      });
+      
       logger.info('Zone created', { zoneId: zone.id });
       res.status(201).json(zone);
     } catch (error: any) {
@@ -310,12 +322,35 @@ export function registerRoutes(app: Express): Server {
 
   app.delete("/api/zones/:id", requireAuth, async (req: any, res) => {
     try {
+      logger.info('DELETE /api/zones/:id', { zoneId: req.params.id, organizationId: req.organizationId });
+      
+      // Get zone data before deletion for audit log
+      const zone = await storage.getZone(req.params.id, req.organizationId);
+      if (!zone) {
+        return res.status(404).json({ message: "Zona no encontrada" });
+      }
+      
       const success = await storage.deleteZone(req.params.id, req.organizationId);
       if (!success) {
+        logger.error('Cannot delete zone', { zoneId: req.params.id, reason: 'active_stays' });
         return res.status(400).json({ message: "No se puede eliminar la zona (tiene estancias activas)" });
       }
+      
+      // Audit log for zone deletion
+      await storage.createAuditLog({
+        organizationId: req.organizationId,
+        userId: req.user.id,
+        entityType: 'zone',
+        entityId: req.params.id,
+        action: 'delete',
+        oldData: { name: zone.name, stage: zone.stage, isActive: true },
+        newData: { isActive: false }
+      });
+      
+      logger.info('Zone deleted', { zoneId: req.params.id });
       res.sendStatus(204);
-    } catch (error) {
+    } catch (error: any) {
+      logger.error('Error deleting zone', { zoneId: req.params.id, error: error.message });
       res.status(500).json({ message: "Error al eliminar zona" });
     }
   });
@@ -360,8 +395,24 @@ export function registerRoutes(app: Express): Server {
         mqttUsername: mqtt.username,
         mqttPassword: mqtt.password
       });
-      logger.info('Sensor created', { sensorId: sensor.id });
       
+      // Audit log for sensor creation
+      await storage.createAuditLog({
+        organizationId: req.organizationId,
+        userId: req.user.id,
+        entityType: 'sensor',
+        entityId: sensor.id,
+        action: 'create',
+        oldData: null,
+        newData: { 
+          name: sensor.name, 
+          zoneId: sensor.zoneId, 
+          sensorType: sensor.sensorType,
+          deviceId: sensor.deviceId 
+        }
+      });
+      
+      logger.info('Sensor created', { sensorId: sensor.id });
       res.status(201).json(sensor);
     } catch (error: any) {
       logger.error('Error creating sensor', { organizationId: req.organizationId, error });
@@ -601,15 +652,23 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/lotes/:id/move", requireAuth, async (req: any, res) => {
     try {
-      const { zoneId, entryTime, createSublotes, sublotes } = req.body;
+      logger.info('POST /api/lotes/:id/move', { 
+        loteId: req.params.id, 
+        organizationId: req.organizationId,
+        payload: req.body 
+      });
+
+      const { zoneId, entryTime, createSublotes, sublotes, generateQrSnapshot } = req.body;
       
       const lote = await storage.getLote(req.params.id, req.organizationId);
       if (!lote) {
+        logger.error('Lote not found', { loteId: req.params.id, organizationId: req.organizationId });
         return res.status(404).json({ message: "Lote no encontrado" });
       }
       
       const targetZone = await storage.getZone(zoneId, req.organizationId);
-      if (!targetZone) {
+      if (!targetZone && zoneId !== 'finalizado') {
+        logger.error('Zone not found', { zoneId, organizationId: req.organizationId });
         return res.status(404).json({ message: "Zona no encontrada" });
       }
       
@@ -617,10 +676,23 @@ export function registerRoutes(app: Express): Server {
       const currentStay = await storage.getActiveStayByLote(lote.id);
       if (currentStay) {
         await storage.closeStay(currentStay.id, new Date(entryTime));
+        
+        // Audit log for closing stay
+        await storage.createAuditLog({
+          organizationId: req.organizationId,
+          userId: req.user.id,
+          entityType: 'stay',
+          entityId: currentStay.id,
+          action: 'close',
+          oldData: { exitTime: null },
+          newData: { exitTime: new Date(entryTime) }
+        });
       }
       
       // Handle sublote creation (Matadero → Secadero)
       if (createSublotes && sublotes && Array.isArray(sublotes) && sublotes.length > 0) {
+        const createdSublotes = [];
+        
         for (const subloteData of sublotes) {
           const sublote = await storage.createLote({
             organizationId: req.organizationId,
@@ -640,26 +712,121 @@ export function registerRoutes(app: Express): Server {
             entryTime: new Date(entryTime),
             createdBy: req.user.id
           });
+          
+          // Audit log for sublote creation
+          await storage.createAuditLog({
+            organizationId: req.organizationId,
+            userId: req.user.id,
+            entityType: 'lote',
+            entityId: sublote.id,
+            action: 'create',
+            oldData: null,
+            newData: { type: 'sublote', parentId: lote.id, piece: subloteData.piece }
+          });
+          
+          createdSublotes.push(sublote);
         }
         
         // Mark parent lote as finished
         await storage.updateLote(lote.id, { status: 'finished' }, req.organizationId);
+        
+        // Audit log for parent lote finishing
+        await storage.createAuditLog({
+          organizationId: req.organizationId,
+          userId: req.user.id,
+          entityType: 'lote',
+          entityId: lote.id,
+          action: 'finish',
+          oldData: { status: 'active' },
+          newData: { status: 'finished', reason: 'sublotes_created' }
+        });
       } else {
         // Regular movement
-        if (targetZone.stage === 'finalizado') {
+        if (targetZone?.stage === 'finalizado' || zoneId === 'finalizado') {
           await storage.updateLote(lote.id, { status: 'finished' }, req.organizationId);
+          
+          // Audit log for finishing
+          await storage.createAuditLog({
+            organizationId: req.organizationId,
+            userId: req.user.id,
+            entityType: 'lote',
+            entityId: lote.id,
+            action: 'finish',
+            oldData: { status: 'active' },
+            newData: { status: 'finished' }
+          });
         } else {
-          await storage.createStay({
+          const newStay = await storage.createStay({
             loteId: lote.id,
             zoneId,
             entryTime: new Date(entryTime),
             createdBy: req.user.id
           });
+          
+          // Audit log for new stay
+          await storage.createAuditLog({
+            organizationId: req.organizationId,
+            userId: req.user.id,
+            entityType: 'stay',
+            entityId: newStay.id,
+            action: 'create',
+            oldData: null,
+            newData: { loteId: lote.id, zoneId, entryTime }
+          });
         }
       }
       
-      res.json({ message: "Movimiento registrado correctamente" });
+      // Generate QR snapshot if moving to distribución and requested
+      let qrSnapshot = null;
+      if (generateQrSnapshot && targetZone?.stage === 'distribucion') {
+        const snapshotData = await generateSnapshotData(lote.id);
+        qrSnapshot = await storage.createQrSnapshot({
+          loteId: lote.id,
+          token: randomUUID(),
+          data: JSON.stringify(snapshotData),
+          createdBy: req.user.id
+        });
+        
+        // Audit log for QR snapshot creation
+        await storage.createAuditLog({
+          organizationId: req.organizationId,
+          userId: req.user.id,
+          entityType: 'qr_snapshot',
+          entityId: qrSnapshot.id,
+          action: 'create',
+          oldData: null,
+          newData: { loteId: lote.id, token: qrSnapshot.token }
+        });
+        
+        logger.info('QR snapshot created', { 
+          loteId: lote.id, 
+          snapshotId: qrSnapshot.id,
+          token: qrSnapshot.token 
+        });
+      }
+      
+      logger.info('Movement completed successfully', { 
+        loteId: lote.id, 
+        targetZoneId: zoneId,
+        userId: req.user.id 
+      });
+      
+      const response: any = { message: "Movimiento registrado correctamente" };
+      if (qrSnapshot) {
+        response.qrSnapshot = {
+          id: qrSnapshot.id,
+          token: qrSnapshot.token,
+          url: `/trazabilidad/${qrSnapshot.token}`
+        };
+      }
+      
+      res.json(response);
     } catch (error: any) {
+      logger.error('Movement failed', { 
+        loteId: req.params.id, 
+        organizationId: req.organizationId,
+        error: error.message 
+      });
       res.status(400).json({ message: error.message || "Error al mover lote" });
     }
   });

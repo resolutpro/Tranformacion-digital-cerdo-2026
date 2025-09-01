@@ -11,14 +11,14 @@ import {
   type AuditLog, type InsertAuditLog
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import session, { SessionStore } from "express-session";
+import session, { Store } from "express-session";
 import createMemoryStore from "memorystore";
 
 const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
   // Auth
-  sessionStore: SessionStore;
+  sessionStore: Store;
   
   // Organizations
   getOrganization(id: string): Promise<Organization | undefined>;

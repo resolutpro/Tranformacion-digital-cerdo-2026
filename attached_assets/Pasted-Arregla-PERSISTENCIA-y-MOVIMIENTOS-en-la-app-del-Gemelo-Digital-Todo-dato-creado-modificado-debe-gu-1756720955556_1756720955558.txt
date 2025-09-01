@@ -1,0 +1,87 @@
+Arregla PERSISTENCIA y MOVIMIENTOS en la app del Gemelo Digital. Todo dato creado/modificado debe guardarse en SQLite y verse tras recargar. No rompas lo que ya funciona. UI en español. Tiempos: UTC en BD / Europe/Madrid en UI.
+
+0) Persistencia obligatoria (crítico)
+
+Usa SqlStorage (better-sqlite3) en producción dev. Sustituye cualquier MemStorage:
+
+import { SqlStorage } from "./SqlStorage";
+export const storage = new SqlStorage(process.env.DB_PATH || "livestock.db");
+
+
+Asegura PRAGMA foreign_keys=ON y journal_mode=WAL.
+
+FKs reales: crear primero organization, luego user, lotes, zonas, sensores con su organizationId.
+
+Todas las mutaciones (crear/editar/borrar usuario, lote, zona, sensor, stay, snapshot QR) deben hacer INSERT/UPDATE en BD con manejo de errores y logs (INFO/ERROR).
+
+Tras cada mutación, revalida datos en UI (etapas, tablero, inicio, detalle de zona).
+
+1) Seguimiento de Lotes — columna “Sin ubicación”
+
+Añade una columna a la izquierda de Cría llamada “Sin ubicación”.
+
+Contiene todos los lotes activos sin estancia abierta.
+
+Arriba, buscador para filtrar lotes por texto (id/nombre).
+
+Los lotes arrastrables desde aquí al resto de columnas.
+
+Backend: endpoint para listar lotes sin estancia activa (JOIN stays → exit_time IS NULL inexistente).
+
+2) Movimientos entre zonas (persistencia real)
+
+Al mover un lote (drag & drop o “Mover a…”), GUARDA EN BD en transacción:
+
+Cerrar la estancia abierta (si existe) con exit_time.
+
+Abrir nueva estancia con entry_time en la zona destino.
+
+Sin solapes. Si no hay estancia previa, solo abre la nueva.
+
+Guardar quién/cuándo (audit log).
+
+Tras guardar, refrescar tablero, lotes y portada.
+
+3) Matadero → Secadero = sublotes (diálogo + persistencia)
+
+Cuando el destino sea Secadero y el origen Matadero, mostrar diálogo “¿Crear sublotes por pieza?”.
+
+Si sí: formulario (nombre de pieza + nº de piezas).
+
+Guardar en BD los sublotes (hijos del lote) y abrir sus estancias en la zona destino.
+
+Validar coherencia con el lote origen.
+
+Tras confirmar, refrescar tablero y lotes.
+
+4) Secadero → Distribución = QR (diálogo + snapshot)
+
+Cuando el destino sea Distribución, el diálogo incluye “Generar Trazabilidad Pública (QR)”.
+
+Si se activa, tras persistir el movimiento:
+
+Crear token público no adivinable y snapshot congelado con:
+
+Datos públicos del lote.
+
+Tiempo por fase (desde estancias).
+
+Agregados de Tª/HR por intervalos vividos (media/mín/máx; % en objetivo si hay).
+
+Guardar snapshot en BD y devolver enlace.
+
+Mostrar toast con “Ver/Descargar”. La tarjeta se ve en Distribución y en Trazabilidad Pública.
+
+5) Creación y listado (todo debe persistir)
+
+Usuarios: registro guarda en BD (email único + hash). Login valida contra BD.
+
+Lotes: alta = activo y sin ubicación (NO finalizado, NO estancia inicial).
+
+Zonas: alta/baja/edición persiste en BD (is_active=1/0) y actualiza etapas + tablero.
+
+Sensores: alta persiste con zone_id, device_id, mqtt_topic inmutable, mqtt_username/password, is_active=1 y aparece como tarjeta en la zona.
+
+En la tarjeta, botón ℹ️: topic, payload ejemplo, última lectura, credenciales + Rotar/Revocar (persistir cambios).
+
+Simulador HTTP (si no hay MQTT): endpoint privado crea lecturas con is_simulated=1 y guarda en BD.

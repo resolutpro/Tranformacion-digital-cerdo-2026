@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Loader2, Plus, Trash2, AlertTriangle, QrCode } from "lucide-react";
 import type { Lote, Zone } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -50,6 +50,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
   const [sublotes, setSublotes] = useState<Sublote[]>([]);
   const [newSubloteType, setNewSubloteType] = useState("");
   const [newSubloteCount, setNewSubloteCount] = useState("");
+  const [generateQrSnapshot, setGenerateQrSnapshot] = useState(false);
   const { toast } = useToast();
 
   // Determine current stage of the lote
@@ -64,6 +65,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
   });
 
   const isMovingToSecadero = selectedStage === 'secadero' && currentStay?.zone?.stage === 'matadero';
+  const isMovingToDistribucion = selectedStage === 'distribucion';
 
   // Get zones for selected stage
   const { data: zones = [] } = useQuery<Zone[]>({
@@ -85,6 +87,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
       setSublotes([]);
       setNewSubloteType("");
       setNewSubloteCount("");
+      setGenerateQrSnapshot(false);
     }
   }, [isOpen]);
 
@@ -132,16 +135,42 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
         payload.sublotes = sublotes;
       }
       
+      // Add QR snapshot generation if moving to distribución
+      if (isMovingToDistribucion && generateQrSnapshot) {
+        payload.generateQrSnapshot = true;
+      }
+      
       const res = await apiRequest("POST", `/api/lotes/${lote.id}/move`, payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tracking/board"] });
-      toast({
-        title: "Lote asignado",
-        description: `El lote ${lote?.identification} ha sido asignado correctamente`,
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      
+      if (data.qrSnapshot) {
+        toast({
+          title: "Movimiento completado y QR generado",
+          description: (
+            <div>
+              <p>El lote {lote?.identification} ha sido asignado correctamente.</p>
+              <a 
+                href={data.qrSnapshot.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary underline hover:no-underline"
+              >
+                Ver/Descargar código QR
+              </a>
+            </div>
+          ),
+        });
+      } else {
+        toast({
+          title: "Lote asignado",
+          description: `El lote ${lote?.identification} ha sido asignado correctamente`,
+        });
+      }
       onClose();
     },
     onError: (error: any) => {
@@ -248,6 +277,29 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
               data-testid="input-entry-datetime"
             />
           </div>
+
+          {/* QR Snapshot Generation for Distribución */}
+          {isMovingToDistribucion && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="generateQrSnapshot"
+                  checked={generateQrSnapshot}
+                  onChange={(e) => setGenerateQrSnapshot(e.target.checked)}
+                  className="h-4 w-4 text-primary"
+                  data-testid="checkbox-generate-qr"
+                />
+                <Label htmlFor="generateQrSnapshot" className="text-sm font-medium flex items-center gap-2">
+                  <QrCode className="h-4 w-4" />
+                  Generar Trazabilidad Pública (QR)
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground ml-6">
+                Se creará un código QR público con el historial completo del lote
+              </p>
+            </div>
+          )}
 
           {/* Sublote Creation Interface */}
           {isMovingToSecadero && (

@@ -160,6 +160,8 @@ export default function Seguimiento() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tracking/board"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({
         title: "Movimiento registrado",
         description: "El lote ha sido movido correctamente",
