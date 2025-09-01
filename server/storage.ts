@@ -498,9 +498,9 @@ export class MemStorage implements IStorage {
   }
 }
 
-import { SqlStorage } from "./sql-storage";
+import { PostgresStorage } from "./postgres-storage";
 
-// Use SQL storage for persistence, fallback to memory for testing
+// Use PostgreSQL for persistence, fallback to memory for testing
 export const storage = process.env.STORAGE === 'memory' 
   ? new MemStorage() 
-  : new SqlStorage();
+  : new PostgresStorage();
