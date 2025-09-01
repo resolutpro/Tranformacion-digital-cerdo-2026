@@ -43,8 +43,8 @@ function generateMqttCredentials(sensorName: string) {
 }
 
 // Generate QR snapshot data
-async function generateSnapshotData(loteId: string) {
-  const lote = await storage.getLote(loteId, ""); // We'll validate org access in the route
+async function generateSnapshotData(loteId: string, organizationId: string) {
+  const lote = await storage.getLote(loteId, organizationId);
   if (!lote) throw new Error("Lote no encontrado");
   
   const stays = await storage.getStaysByLote(loteId);
@@ -803,7 +803,7 @@ export function registerRoutes(app: Express): Server {
       // Generate QR snapshot if moving to distribución and requested
       let qrSnapshot = null;
       if (generateQR && targetZone?.stage === 'distribucion') {
-        const snapshotData = await generateSnapshotData(lote.id);
+        const snapshotData = await generateSnapshotData(lote.id, req.organizationId);
         qrSnapshot = await storage.createQrSnapshot({
           loteId: lote.id,
           publicToken: randomUUID(),

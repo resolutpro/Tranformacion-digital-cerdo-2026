@@ -39,8 +39,7 @@ const stageNames: Record<string, string> = {
 
 export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: AdvancedMoveModalProps) {
   const [selectedZoneId, setSelectedZoneId] = useState("");
-  const [entryTime, setEntryTime] = useState("");
-  const [exitTime, setExitTime] = useState("");
+  const [moveDate, setMoveDate] = useState("");
   const [showSubLotes, setShowSubLotes] = useState(false);
   const [subLotes, setSubLotes] = useState<SubLote[]>([]);
   const [generateQR, setGenerateQR] = useState(false);
@@ -71,8 +70,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
   useEffect(() => {
     if (isOpen) {
       const now = new Date().toISOString().slice(0, 10); // Only date, no time
-      setEntryTime(now);
-      setExitTime(now);
+      setMoveDate(now);
       setSelectedZoneId("");
       setShowSubLotes(false);
       setSubLotes([]);
@@ -113,13 +111,9 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
 
     // Prepare move data
     const moveData: any = {
-      entryTime,
+      entryTime: moveDate,
+      exitTime: moveDate,
     };
-
-    // Add exit time if not moving from "sin ubicación"
-    if (currentStage !== "sinUbicacion") {
-      moveData.exitTime = exitTime;
-    }
 
     // Handle special transitions
     if (currentStage === "matadero" && nextStage === "secadero" && showSubLotes) {
@@ -201,31 +195,16 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
           )}
 
           {/* Date Management */}
-          <div className="grid grid-cols-2 gap-4">
-            {currentStage !== "sinUbicacion" && (
-              <div className="space-y-2">
-                <Label htmlFor="exitTime">Fecha de salida *</Label>
-                <Input
-                  id="exitTime"
-                  type="date"
-                  value={exitTime}
-                  onChange={(e) => setExitTime(e.target.value)}
-                  required
-                  data-testid="input-exit-time"
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="entryTime">Fecha de entrada *</Label>
-              <Input
-                id="entryTime"
-                type="date"
-                value={entryTime}
-                onChange={(e) => setEntryTime(e.target.value)}
-                required
-                data-testid="input-entry-time"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="moveDate">Fecha del movimiento *</Label>
+            <Input
+              id="moveDate"
+              type="date"
+              value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value)}
+              required
+              data-testid="input-move-date"
+            />
           </div>
 
           {/* Sublotes Creation (Matadero → Secadero) */}
