@@ -14,7 +14,12 @@ import {
   MapPin,
   Clock,
   Factory,
-  Truck
+  Truck,
+  AlertCircle,
+  CheckCircle,
+  Users,
+  Plus,
+  ArrowRight
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -26,8 +31,12 @@ interface DashboardData {
     matadero: number;
     secadero: number;
     distribucion: number;
+    unassigned: number;
+    finished: number;
   };
+  totalAnimals: number;
   qrCount: number;
+  subloteCount: number;
   zoneActivity: Array<{
     zone: {
       id: string;
@@ -45,6 +54,13 @@ interface DashboardData {
       timestamp: string;
     }>;
     lastActivity: string | null;
+  }>;
+  unassignedLotes: Array<{
+    id: string;
+    identification: string;
+    initialAnimals: number;
+    createdAt: string;
+    pieceType?: string;
   }>;
 }
 
@@ -121,14 +137,73 @@ export default function Dashboard() {
   }
 
   const hasLotes = Object.values(dashboardData.loteCounts).some(count => count > 0);
+  const totalActiveLotes = Object.entries(dashboardData.loteCounts)
+    .filter(([key]) => key !== 'unassigned' && key !== 'finished')
+    .reduce((sum, [_, count]) => sum + count, 0);
 
   return (
     <MainLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground mb-2">Panel de Control</h1>
           <p className="text-muted-foreground">Resumen general del sistema de trazabilidad</p>
         </div>
+
+        {/* Quick Summary Cards */}
+        {hasLotes && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-blue-700">Total Lotes</p>
+                    <p className="text-2xl font-bold text-blue-900">
+                      {totalActiveLotes + dashboardData.loteCounts.unassigned + dashboardData.loteCounts.finished}
+                    </p>
+                  </div>
+                  <Users className="h-8 w-8 text-blue-600" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-700">Animales</p>
+                    <p className="text-2xl font-bold text-green-900">{dashboardData.totalAnimals}</p>
+                  </div>
+                  <Sprout className="h-8 w-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-purple-700">Sublotes</p>
+                    <p className="text-2xl font-bold text-purple-900">{dashboardData.subloteCount}</p>
+                  </div>
+                  <Wind className="h-8 w-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-orange-700">QR Activos</p>
+                    <p className="text-2xl font-bold text-orange-900">{dashboardData.qrCount}</p>
+                  </div>
+                  <QrCode className="h-8 w-8 text-orange-600" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {!hasLotes ? (
           <div className="text-center py-12">
@@ -144,47 +219,95 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
+            {/* Unassigned Lotes Warning */}
+            {dashboardData.loteCounts.unassigned > 0 && (
+              <Card className="border-orange-200 bg-orange-50/50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="h-5 w-5 text-orange-600" />
+                      <div>
+                        <p className="font-medium text-orange-900">
+                          {dashboardData.loteCounts.unassigned} lotes sin asignar
+                        </p>
+                        <p className="text-sm text-orange-700">
+                          Estos lotes necesitan ser asignados a una zona para comenzar el proceso
+                        </p>
+                      </div>
+                    </div>
+                    <Link href="/seguimiento">
+                      <Button variant="outline" className="border-orange-300 hover:bg-orange-100">
+                        <ArrowRight className="h-4 w-4 mr-2" />
+                        Asignar
+                      </Button>
+                    </Link>
+                  </div>
+                  
+                  {dashboardData.unassignedLotes.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-orange-200">
+                      <p className="text-sm font-medium text-orange-900 mb-2">Lotes pendientes:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {dashboardData.unassignedLotes.slice(0, 5).map((lote) => (
+                          <Badge key={lote.id} variant="outline" className="border-orange-300 text-orange-700">
+                            {lote.identification} ({lote.initialAnimals} animales)
+                          </Badge>
+                        ))}
+                        {dashboardData.unassignedLotes.length > 5 && (
+                          <Badge variant="outline" className="border-orange-300 text-orange-700">
+                            +{dashboardData.unassignedLotes.length - 5} más
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {Object.entries(dashboardData.loteCounts).map(([stage, count]) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+              {Object.entries(dashboardData.loteCounts)
+                .filter(([stage]) => ['cria', 'engorde', 'matadero', 'secadero', 'distribucion'].includes(stage))
+                .map(([stage, count]) => {
                 const Icon = stageIcons[stage as keyof typeof stageIcons];
                 const colorClass = stageColors[stage as keyof typeof stageColors];
                 
                 return (
-                  <Card key={stage} data-testid={`card-stage-${stage}`}>
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${colorClass}`}>
-                          <Icon className="h-6 w-6" />
+                  <Link key={stage} href={`/${stage}`}>
+                    <Card className="cursor-pointer hover:shadow-md transition-shadow" data-testid={`card-stage-${stage}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass}`}>
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <span className="text-xl font-bold text-foreground" data-testid={`count-${stage}`}>
+                            {count}
+                          </span>
                         </div>
-                        <span className="text-2xl font-bold text-foreground" data-testid={`count-${stage}`}>
-                          {count}
-                        </span>
-                      </div>
-                      <h3 className="font-medium text-foreground capitalize">
-                        Lotes en {stage === 'cria' ? 'Cría' : stage}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {/* TODO: Show active zones count */}
-                        Activos
-                      </p>
-                    </CardContent>
-                  </Card>
+                        <h3 className="font-medium text-foreground text-sm capitalize">
+                          {stage === 'cria' ? 'Cría' : stage}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Lotes activos
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 );
               })}
 
-              <Card data-testid="card-qr-count">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 bg-chart-3/10 rounded-lg flex items-center justify-center">
-                      <QrCode className="h-6 w-6 text-chart-3" />
+              <Card className={dashboardData.loteCounts.finished > 0 ? "border-green-200 bg-green-50/50" : ""} data-testid="card-finished">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
                     </div>
-                    <span className="text-2xl font-bold text-foreground" data-testid="count-qr">
-                      {dashboardData.qrCount}
+                    <span className="text-xl font-bold text-foreground" data-testid="count-finished">
+                      {dashboardData.loteCounts.finished}
                     </span>
                   </div>
-                  <h3 className="font-medium text-foreground">QR Generados</h3>
-                  <p className="text-sm text-muted-foreground">Activos</p>
+                  <h3 className="font-medium text-foreground text-sm">Finalizados</h3>
+                  <p className="text-xs text-muted-foreground">Lotes completos</p>
                 </CardContent>
               </Card>
             </div>

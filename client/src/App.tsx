@@ -13,6 +13,11 @@ import ZoneDetail from "@/pages/zona-detail";
 import Seguimiento from "@/pages/seguimiento";
 import Trazabilidad from "@/pages/trazabilidad";
 import PublicTrace from "@/pages/public-trace";
+import CriaPage from "@/pages/cria";
+import EngordePage from "@/pages/engorde";
+import MataderoPage from "@/pages/matadero";
+import SecaderoPage from "@/pages/secadero";
+import DistribucionPage from "@/pages/distribucion";
 
 function Router() {
   return (
@@ -21,7 +26,12 @@ function Router() {
       <Route path="/trace/:token" component={PublicTrace} />
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/lotes" component={Lotes} />
-      <ProtectedRoute path="/zona/:stage/:id" component={ZoneDetail} />
+      <ProtectedRoute path="/cria" component={CriaPage} />
+      <ProtectedRoute path="/engorde" component={EngordePage} />
+      <ProtectedRoute path="/matadero" component={MataderoPage} />
+      <ProtectedRoute path="/secadero" component={SecaderoPage} />
+      <ProtectedRoute path="/distribucion" component={DistribucionPage} />
+      <ProtectedRoute path="/zona/:id" component={ZoneDetail} />
       <ProtectedRoute path="/seguimiento" component={Seguimiento} />
       <ProtectedRoute path="/trazabilidad" component={Trazabilidad} />
       <Route component={NotFound} />

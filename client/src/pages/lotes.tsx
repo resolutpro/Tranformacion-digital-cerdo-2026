@@ -6,15 +6,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { LoteModal } from "@/components/modals/lote-modal";
+import { TemplateEditorModal } from "@/components/modals/template-editor-modal";
+import { MoveToZoneModal } from "@/components/modals/move-to-zone-modal";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Edit, Trash2, Settings } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Settings, MapPin } from "lucide-react";
 import type { Lote } from "@shared/schema";
 
 export default function Lotes() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLote, setSelectedLote] = useState<Lote | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [newlyCreatedLoteId, setNewlyCreatedLoteId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: lotes = [], isLoading } = useQuery<Lote[]>({
@@ -94,8 +99,14 @@ export default function Lotes() {
                   data-testid="input-search-lotes"
                 />
               </div>
-              <Button variant="outline" size="sm" data-testid="button-template-settings">
-                <Settings className="h-4 w-4" />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setIsTemplateModalOpen(true)}
+                data-testid="button-template-settings"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Editar plantilla
               </Button>
             </div>
           </CardHeader>
@@ -155,9 +166,15 @@ export default function Lotes() {
                               Sublote - {lote.pieceType}
                             </Badge>
                           )}
+                          {/* Show "Sin ubicación" badge for lotes without active stays */}
+                          <LoteLocationBadge loteId={lote.id} />
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        <LoteAssignButton lote={lote} onAssign={() => {
+                          setSelectedLote(lote);
+                          setIsMoveModalOpen(true);
+                        }} />
                         <Button
                           variant="ghost"
                           size="sm"
@@ -188,8 +205,90 @@ export default function Lotes() {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           lote={selectedLote}
+          onLoteCreated={(loteId) => {
+            setNewlyCreatedLoteId(loteId);
+            // Show success toast with CTA
+            toast({
+              title: "Lote creado",
+              description: "El lote ha sido creado correctamente",
+              action: (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const lote = { id: loteId } as Lote;
+                    setSelectedLote(lote);
+                    setIsMoveModalOpen(true);
+                  }}
+                >
+                  Asignar a una zona
+                </Button>
+              ),
+            });
+          }}
+        />
+        
+        <TemplateEditorModal 
+          isOpen={isTemplateModalOpen}
+          onClose={() => setIsTemplateModalOpen(false)}
+        />
+        
+        <MoveToZoneModal 
+          isOpen={isMoveModalOpen}
+          onClose={() => {
+            setIsMoveModalOpen(false);
+            setSelectedLote(null);
+          }}
+          lote={selectedLote}
         />
       </div>
     </MainLayout>
   );
+}
+
+// Helper component to show lote location status
+function LoteLocationBadge({ loteId }: { loteId: string }) {
+  const { data: activeStay } = useQuery({
+    queryKey: ["/api/lotes", loteId, "active-stay"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/lotes/${loteId}/active-stay`);
+      return res.status === 404 ? null : res.json();
+    }
+  });
+  
+  if (activeStay === null) {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        Sin ubicación
+      </Badge>
+    );
+  }
+  
+  return null;
+}
+
+// Helper component to show assign button for lotes without location
+function LoteAssignButton({ lote, onAssign }: { lote: Lote; onAssign: () => void }) {
+  const { data: activeStay } = useQuery({
+    queryKey: ["/api/lotes", lote.id, "active-stay"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/lotes/${lote.id}/active-stay`);
+      return res.status === 404 ? null : res.json();
+    }
+  });
+  
+  if (activeStay === null && lote.status === 'active') {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onAssign}
+        data-testid={`button-assign-lote-${lote.id}`}
+      >
+        <MapPin className="h-4 w-4 mr-1" />
+        Asignar
+      </Button>
+    );
+  }
+  
+  return null;
 }

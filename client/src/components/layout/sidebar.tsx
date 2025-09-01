@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Home, 
   Layers, 
-  Sprout, 
+  Heart, 
   TrendingUp, 
   Factory, 
   Wind, 
@@ -14,8 +14,7 @@ import {
   Route,
   QrCode,
   Menu,
-  ChevronLeft,
-  Microchip
+  ChevronLeft
 } from "lucide-react";
 
 interface SidebarProps {
@@ -25,11 +24,11 @@ interface SidebarProps {
 const navigationItems = [
   { icon: Home, label: "Inicio", href: "/" },
   { icon: Layers, label: "Lotes", href: "/lotes" },
-  { icon: Sprout, label: "Cría", href: "/zona/cria" },
-  { icon: TrendingUp, label: "Engorde", href: "/zona/engorde" },
-  { icon: Factory, label: "Matadero", href: "/zona/matadero" },
-  { icon: Wind, label: "Secadero", href: "/zona/secadero" },
-  { icon: Truck, label: "Distribución", href: "/zona/distribucion" },
+  { icon: Heart, label: "Cría", href: "/cria" },
+  { icon: TrendingUp, label: "Engorde", href: "/engorde" },
+  { icon: Factory, label: "Matadero", href: "/matadero" },
+  { icon: Wind, label: "Secadero", href: "/secadero" },
+  { icon: Truck, label: "Distribución", href: "/distribucion" },
   { icon: Route, label: "Seguimiento de Lotes", href: "/seguimiento" },
   { icon: QrCode, label: "Trazabilidad Pública", href: "/trazabilidad" },
 ];
@@ -52,8 +51,18 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Microchip className="h-4 w-4 text-primary-foreground" />
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
+                {/* Pig SVG Icon */}
+                <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 100 100">
+                  <path d="M50,15 C65,15 78,25 78,38 C78,45 75,50 70,53 L70,60 C70,70 62,78 50,78 C38,78 30,70 30,60 L30,53 C25,50 22,45 22,38 C22,25 35,15 50,15 Z"/>
+                  <circle cx="42" cy="35" r="3" fill="white"/>
+                  <circle cx="58" cy="35" r="3" fill="white"/>
+                  <ellipse cx="50" cy="45" rx="8" ry="5" fill="white" opacity="0.8"/>
+                  <circle cx="46" cy="43" r="1.5" fill="currentColor"/>
+                  <circle cx="54" cy="43" r="1.5" fill="currentColor"/>
+                  <path d="M35,25 Q30,20 25,25 Q30,30 35,25" fill="currentColor"/>
+                  <path d="M65,25 Q70,20 75,25 Q70,30 65,25" fill="currentColor"/>
+                </svg>
               </div>
               <div>
                 <h2 className="font-semibold text-foreground text-sm">Gemelo Digital</h2>
@@ -77,8 +86,7 @@ export function Sidebar({ className }: SidebarProps) {
       <ScrollArea className="flex-1 p-2">
         <nav className="space-y-1">
           {navigationItems.map((item) => {
-            const isActive = location === item.href || 
-              (item.href.startsWith('/zona/') && location.startsWith('/zona/') && location.includes(item.href.split('/')[2]));
+            const isActive = location === item.href;
             
             return (
               <Link key={item.href} href={item.href}>

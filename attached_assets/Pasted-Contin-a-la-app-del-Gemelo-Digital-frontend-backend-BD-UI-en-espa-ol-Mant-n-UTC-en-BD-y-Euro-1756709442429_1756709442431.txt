@@ -1,0 +1,107 @@
+Continúa la app del Gemelo Digital (frontend + backend + BD). UI en español. Mantén UTC en BD y Europe/Madrid en la UI. No rompas lo ya hecho.
+
+1) Lotes — alta sin estado/zona + editor de plantilla
+
+Nuevo Lote: al guardar NO debe aparecer “finalizado” ni asignado a ninguna zona. Debe quedar sin ubicación/estado (sin estancia abierta).
+
+Backend: al crear lote no crear ninguna estancia.
+
+UI (Lotes): tras crear, toast “Lote creado” con CTA “Asignar a una zona” que abre el mismo modal de movimiento usado en Seguimiento (selector etapa→zona + fecha/hora de entrada).
+
+Editor de plantilla: añadir botón ⚙️ Editar plantilla en la cabecera de Lotes (junto al +).
+
+Modal para añadir/quitar campos opcionales; guardar configuración por organización; se aplica solo a nuevos lotes.
+
+Mantener validaciones mínimas: Identificación única en la organización y Nº de animales inicial > 0.
+
+2) Etapas (Cría, Engorde, Matadero, Secadero, Distribución) — crear páginas y dinámicas
+
+Crear rutas/páginas reales: /cria, /engorde, /matadero, /secadero, /distribucion (evitar 404).
+
+Sidebar: cambiar icono de Cría a cerdo.
+
+Lista de zonas por etapa: título + botón + (crear zona pidiendo solo nombre); cada tarjeta con papelera (confirmar; bloquear si hay estancias abiertas o sensores activos).
+
+Detalle de zona debe incluir:
+
+Botón + con Añadir sensor y Añadir info fija.
+
+Sensores/MQTT: al crear sensor, backend genera device_id, topic MQTT fijo e inmutable y credenciales (usuario/clave); en la tarjeta del sensor, icono ℹ️ que siempre muestra topic, payload de ejemplo, última lectura y usuario/clave, con acciones rotar/revocar. ACL por dispositivo (solo puede publicar en su topic). Recomendar TLS 8883. Cambiar nombre o mover sensor de zona no cambia topic/device_id (el vínculo a zona lo resuelve backend).
+
+Simulador HTTP: botón “Simular lecturas” → modal (elegir sensor; única o ráfaga; marcar “simulado”). En gráficas, toggle “Incluir datos simulados” (off por defecto; los simulados no se usan en QR salvo opción avanzada al generarlo).
+
+Gráfico temporal: selector de sensores, filtros (hoy/7/30/personalizado), eje X ajustado y conmutador “en vivo”.
+
+Recordatorio de responsabilidades: NO crear sublotes ni QR en estas páginas; eso sucede en Seguimiento. Sí debe estar listo el hook de blockchain a nivel backend (cola de hashes) para cuando desde Seguimiento se muevan lotes o se genere un QR.
+
+3) Seguimiento de Lotes — búsqueda arrastrable + color según estado
+
+Tablero con columnas: Cría, Engorde, Matadero, Secadero, Distribución, Finalizado.
+
+Buscador de lotes activos y lotes sin ubicación.
+
+Resultados como iconos/chips arrastrables.
+
+Color: gris si el lote está sin ubicación; tinte de la etapa si ya tiene estancia abierta en alguna zona.
+
+Movimiento: drag & drop → diálogo con fecha/hora de entrada (“ahora” por defecto). Persistir movimiento cerrando la estancia anterior (si existe) y abriendo la nueva sin solapes. Alternativa accesible “Mover a…” (selector etapa→zona).
+
+Edición manual: menú ⋯ → “Editar estancia” (cambiar zona actual y/o ajustar entrada/salida con previsualización y validación anti-solapes). Toast con Deshacer (y Rehacer si aplica).
+
+Sublotes: al mover Matadero → Secadero, preguntar y permitir crear sublotes (pieza + nº piezas) y abrir sus estancias.
+
+QR: al mover Secadero → Distribución, opción “Generar Trazabilidad Pública (QR)”; si se activa, generar token público + snapshot (excluyendo simulados por defecto).
+
+Blockchain (stub): al mover o generar QR, encolar hash del evento para anclaje futuro.
+
+4) Trazabilidad Pública — listar y gestionar QR
+
+Pestaña Trazabilidad Pública: listar solo los QR ya creados (lotes/sublotes con QR).
+
+Filtros: lote/sublote, fecha de generación, estado activo/revocado, pieza (si aplica).
+
+Acciones: Vista previa, Descargar QR (PNG/SVG), Copiar enlace, Rotar, Revocar, contador de escaneos.
+
+Página pública (al abrir el QR): tiempos por fase, media/mín/máx de Tª/HR por fase, % en objetivo si hay objetivos de zona; sin datos técnicos; cacheable y no-index. Lee solo el snapshot (no tablas operativas).
+
+5) Inicio (Landing/Resumen) — mostrar resumen si hay info
+
+Si hay datos: mostrar frase por etapa con cuántos lotes y en qué zonas (estancias abiertas), y Zonas con actividad (última lectura por tipo, máx. 3 chips; “sin datos desde hh:mm” si aplica).
+
+Si hay lotes sin ubicación, mostrar banner “Tienes N lotes sin ubicación” con chips y botón “Asignar a una zona” (abre el modal de movimiento).
+
+Si no hay datos: texto “Añade lotes y zonas para visualizar información” y CTAs Añadir lotes / Añadir zonas.
+
+6) Branding y Login responsive
+
+Cambiar el logo de Login y Landing por un cerdo (añadir /public/logo-pig.svg y usarlo).
+
+La pantalla de Login no debe quedar cortada: usar contenedor min-h-screen grid place-items-center overflow-y-auto y tarjeta max-w-md w-full p-6 rounded-2xl shadow.
+
+7) BD y backend — estructurar bien para soportar todo
+
+Mantener entidades: Organización, Lote, Sublote, Zona (con su etapa), Estancia (para lote o sublote), Sensor, Lectura (marca simulado/real y hora de servidor), QR (enlace público), Snapshot público, Objetivos por zona (rangos Tª/HR), Cola de anclaje y Auditoría.
+
+Reglas:
+
+Una sola estancia abierta por lote/sublote. Movimientos transaccionales y sin solapes.
+
+Lecturas indexadas por zona/tipo/tiempo; excluir simulados de snapshots por defecto.
+
+Sensores: topic inmutable, ACL por dispositivo, rotar/revocar credenciales; mover sensor de zona no cambia topic/device.
+
+QR: snapshot congelado con agregados por fase; servir la pública leyendo solo ese snapshot.
+
+QA mínimo
+
+Crear lote ⇒ queda sin ubicación (no finalizado). Aparece en banner de Inicio y en buscador del tablero con chip gris.
+
+Editor ⚙️ existe y afecta solo a nuevos lotes.
+
+Rutas de etapas existen; detalle de zona con sensores/MQTT, simulador, gráfica.
+
+Seguimiento: búsqueda en chips arrastrables; color gris/etapa según estado; mover, editar, sublotes y QR en los puntos indicados.
+
+Trazabilidad Pública: pestaña lista QR y acciones; pública muestra snapshot.
+
+Login visible en móvil y logo de cerdo activo.

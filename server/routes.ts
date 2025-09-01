@@ -186,6 +186,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/lotes/:id/active-stay", requireAuth, async (req: any, res) => {
+    try {
+      const lote = await storage.getLote(req.params.id, req.organizationId);
+      if (!lote) {
+        return res.status(404).json({ message: "Lote no encontrado" });
+      }
+      
+      const activeStay = await storage.getActiveStayByLote(req.params.id);
+      if (!activeStay) {
+        return res.status(404).json({ message: "No hay estancia activa" });
+      }
+      
+      res.json(activeStay);
+    } catch (error) {
+      res.status(500).json({ message: "Error al obtener estancia activa" });
+    }
+  });
+
   // Lote Templates API
   app.get("/api/lote-template", requireAuth, async (req: any, res) => {
     try {
@@ -595,17 +613,41 @@ export function registerRoutes(app: Express): Server {
       const lotes = await storage.getLotesByOrganization(req.organizationId);
       const qrSnapshots = await storage.getQrSnapshotsByOrganization(req.organizationId);
       
-      // Count lotes by stage
-      const loteCounts = { cria: 0, engorde: 0, matadero: 0, secadero: 0, distribucion: 0 };
+      // Count lotes by stage and collect unassigned
+      const loteCounts = { cria: 0, engorde: 0, matadero: 0, secadero: 0, distribucion: 0, unassigned: 0, finished: 0 };
       const activeZones = new Set();
+      const unassignedLotes = [];
+      let totalAnimals = 0;
+      let subloteCount = 0;
       
-      for (const lote of lotes.filter(l => l.status === 'active')) {
-        const activeStay = await storage.getActiveStayByLote(lote.id);
-        if (activeStay) {
-          const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
-          if (zone && zone.stage in loteCounts) {
-            loteCounts[zone.stage as keyof typeof loteCounts]++;
-            activeZones.add(zone.id);
+      for (const lote of lotes) {
+        // Count total animals (only from main lotes, not sublotes)
+        if (!lote.parentLoteId) {
+          totalAnimals += lote.initialAnimals;
+        } else {
+          subloteCount++;
+        }
+        
+        if (lote.status === 'finished') {
+          loteCounts.finished++;
+        } else if (lote.status === 'active') {
+          const activeStay = await storage.getActiveStayByLote(lote.id);
+          if (activeStay) {
+            const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
+            if (zone && zone.stage in loteCounts) {
+              loteCounts[zone.stage as keyof typeof loteCounts]++;
+              activeZones.add(zone.id);
+            }
+          } else {
+            // Lote without active stay = unassigned
+            loteCounts.unassigned++;
+            unassignedLotes.push({
+              id: lote.id,
+              identification: lote.identification,
+              initialAnimals: lote.initialAnimals,
+              createdAt: lote.createdAt,
+              pieceType: lote.pieceType
+            });
           }
         }
       }
@@ -629,8 +671,11 @@ export function registerRoutes(app: Express): Server {
       
       res.json({
         loteCounts,
+        totalAnimals,
+        subloteCount,
         qrCount: qrSnapshots.filter(s => s.isActive).length,
-        zoneActivity
+        zoneActivity,
+        unassignedLotes
       });
     } catch (error) {
       res.status(500).json({ message: "Error al cargar dashboard" });

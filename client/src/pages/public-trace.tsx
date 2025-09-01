@@ -26,6 +26,11 @@ interface SnapshotData {
     name: string;
     iberianPercentage?: number;
     regime?: string;
+    pieceType?: string;
+    parentLote?: {
+      id: string;
+      name: string;
+    };
   };
   phases: Array<{
     stage: string;
@@ -43,6 +48,8 @@ interface SnapshotData {
   metadata: {
     generatedAt: string;
     version: string;
+    totalAnimals?: number;
+    originData?: Record<string, any>;
   };
 }
 
@@ -125,9 +132,31 @@ export default function PublicTrace() {
         {/* Hero Section */}
         <Card className="mb-6 shadow-sm" data-testid="hero-section">
           <CardContent className="p-6 text-center">
+            {/* Product Type Header */}
+            {snapshotData.lote.pieceType && (
+              <div className="mb-4">
+                <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-3 py-1">
+                  Pieza Individual
+                </Badge>
+              </div>
+            )}
+            
             <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-3" data-testid="lote-name">
               {snapshotData.lote.name}
             </h1>
+            
+            {/* Sublote info */}
+            {snapshotData.lote.pieceType && snapshotData.lote.parentLote && (
+              <div className="mb-4 p-3 bg-muted/30 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Tipo de pieza:</strong> {snapshotData.lote.pieceType}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  <strong>Lote origen:</strong> {snapshotData.lote.parentLote.name}
+                </p>
+              </div>
+            )}
+            
             <div className="flex flex-wrap justify-center gap-3 mb-4">
               {snapshotData.lote.iberianPercentage && (
                 <Badge className="bg-primary/10 text-primary" data-testid="iberian-percentage">
@@ -139,10 +168,20 @@ export default function PublicTrace() {
                   {snapshotData.lote.regime}
                 </Badge>
               )}
+              {snapshotData.lote.pieceType && (
+                <Badge className="bg-orange-100 text-orange-700 border-orange-200" data-testid="piece-type">
+                  {snapshotData.lote.pieceType}
+                </Badge>
+              )}
             </div>
             <p className="text-lg text-muted-foreground" data-testid="total-duration">
               <strong>{totalDuration} días</strong> de crianza controlada
             </p>
+            {snapshotData.metadata.totalAnimals && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Originalmente de un lote de {snapshotData.metadata.totalAnimals} animales
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -260,6 +299,20 @@ export default function PublicTrace() {
           })}
         </div>
 
+        {/* Authenticity Section */}
+        <Card className="mb-6 shadow-sm bg-gradient-to-r from-emerald-50 to-blue-50 border-emerald-200">
+          <CardContent className="p-6 text-center">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Tag className="h-8 w-8 text-emerald-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">Certificado Verificado</h3>
+            <p className="text-sm text-muted-foreground">
+              Este certificado de trazabilidad ha sido generado automáticamente 
+              y está respaldado por datos reales de sensores IoT y registros auditados.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Footer */}
         <Card className="shadow-sm" data-testid="certificate-footer">
           <CardContent className="p-6 text-center">
@@ -275,6 +328,11 @@ export default function PublicTrace() {
                 <Download className="h-4 w-4 mr-2" />
                 Descargar PDF
               </Button>
+            </div>
+            <div className="mt-6 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                Digital Twin - Sistema de Trazabilidad de Ibérico • Versión {snapshotData.metadata.version}
+              </p>
             </div>
           </CardContent>
         </Card>

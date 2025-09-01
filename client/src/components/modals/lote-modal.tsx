@@ -14,9 +14,10 @@ interface LoteModalProps {
   isOpen: boolean;
   onClose: () => void;
   lote?: Lote | null;
+  onLoteCreated?: (loteId: string) => void;
 }
 
-export function LoteModal({ isOpen, onClose, lote }: LoteModalProps) {
+export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalProps) {
   const [formData, setFormData] = useState({
     identification: "",
     initialAnimals: "",
@@ -50,12 +51,17 @@ export function LoteModal({ isOpen, onClose, lote }: LoteModalProps) {
       const res = await apiRequest(method, endpoint, data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (createdLote) => {
       queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
-      toast({
-        title: lote ? "Lote actualizado" : "Lote creado",
-        description: lote ? "El lote ha sido actualizado correctamente" : "El lote ha sido creado correctamente",
-      });
+      if (lote) {
+        toast({
+          title: "Lote actualizado",
+          description: "El lote ha sido actualizado correctamente",
+        });
+      } else {
+        // For new lotes, call the callback instead of showing toast here
+        onLoteCreated?.(createdLote.id);
+      }
       onClose();
     },
     onError: (error: any) => {

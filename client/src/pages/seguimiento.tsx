@@ -22,13 +22,18 @@ import {
 } from "lucide-react";
 import type { Lote, Zone } from "@shared/schema";
 
+interface ExtendedLote extends Lote {
+  currentZone?: Zone;
+  totalDays?: number;
+}
+
 interface TrackingBoard {
-  cria: { zones: Zone[]; lotes: Array<Lote & { currentZone: Zone; totalDays: number }> };
-  engorde: { zones: Zone[]; lotes: Array<Lote & { currentZone: Zone; totalDays: number }> };
-  matadero: { zones: Zone[]; lotes: Array<Lote & { currentZone: Zone; totalDays: number }> };
-  secadero: { zones: Zone[]; lotes: Array<Lote & { currentZone: Zone; totalDays: number }> };
-  distribucion: { zones: Zone[]; lotes: Array<Lote & { currentZone: Zone; totalDays: number }> };
-  finalizado: { zones: Zone[]; lotes: Lote[] };
+  cria: { zones: Zone[]; lotes: ExtendedLote[] };
+  engorde: { zones: Zone[]; lotes: ExtendedLote[] };
+  matadero: { zones: Zone[]; lotes: ExtendedLote[] };
+  secadero: { zones: Zone[]; lotes: ExtendedLote[] };
+  distribucion: { zones: Zone[]; lotes: ExtendedLote[] };
+  finalizado: { zones: Zone[]; lotes: ExtendedLote[] };
 }
 
 const stageConfig = {
@@ -73,11 +78,77 @@ const stageConfig = {
 export default function Seguimiento() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLote, setSelectedLote] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const { toast } = useToast();
 
-  const { data: board, isLoading } = useQuery<TrackingBoard>({
+  const { data: rawBoard, isLoading } = useQuery<TrackingBoard>({
     queryKey: ["/api/tracking/board"],
   });
+
+  // Filter board data based on search and filters
+  const board = rawBoard ? {
+    ...rawBoard,
+    cria: {
+      ...rawBoard.cria,
+      lotes: rawBoard.cria.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    },
+    engorde: {
+      ...rawBoard.engorde,
+      lotes: rawBoard.engorde.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    },
+    matadero: {
+      ...rawBoard.matadero,
+      lotes: rawBoard.matadero.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    },
+    secadero: {
+      ...rawBoard.secadero,
+      lotes: rawBoard.secadero.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    },
+    distribucion: {
+      ...rawBoard.distribucion,
+      lotes: rawBoard.distribucion.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    },
+    finalizado: {
+      ...rawBoard.finalizado,
+      lotes: rawBoard.finalizado.lotes.filter(lote => 
+        (searchTerm === "" || 
+         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase())
+        ) && (statusFilter === "all" || lote.status === statusFilter)
+      )
+    }
+  } : null;
 
   const moveMutation = useMutation({
     mutationFn: async ({ loteId, zoneId, entryTime }: { loteId: string; zoneId: string; entryTime: string }) => {
@@ -156,12 +227,54 @@ export default function Seguimiento() {
                 data-testid="input-search-tracking"
               />
             </div>
-            <Button variant="outline" data-testid="button-filters">
+            <Button 
+              variant={showFilters ? "default" : "outline"} 
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="button-filters"
+            >
               <Filter className="h-4 w-4 mr-2" />
               Filtros
             </Button>
           </div>
         </div>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <Card className="p-4 bg-muted/10 border-muted/20">
+            <div className="flex gap-4 items-center">
+              <div className="text-sm font-medium">Filtros:</div>
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant={statusFilter === "all" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("all")}
+                  data-testid="filter-all"
+                >
+                  Todos
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant={statusFilter === "active" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("active")}
+                  data-testid="filter-active"
+                >
+                  Activos
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant={statusFilter === "finished" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("finished")}
+                  data-testid="filter-finished"
+                >
+                  Finalizados
+                </Button>
+              </div>
+              <div className="text-xs text-muted-foreground ml-auto">
+                Resultados: {board ? Object.values(board).reduce((total, stage) => total + stage.lotes.length, 0) : 0}
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Kanban Board */}
         <div className="grid grid-cols-6 gap-4 kanban-column">
@@ -193,7 +306,7 @@ export default function Seguimiento() {
                     </div>
                   ) : (
                     stageData.zones.map((zone) => {
-                      const zoneLotes = stageData.lotes.filter(l => l.currentZone.id === zone.id);
+                      const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
                       
                       return (
                         <div 
@@ -206,16 +319,33 @@ export default function Seguimiento() {
                             {zone.name}
                           </div>
                           <div className="space-y-2">
-                            {zoneLotes.map((lote) => (
-                              <div
-                                key={lote.id}
-                                className={`batch-card bg-background border border-border rounded-md p-3 cursor-move ${
-                                  draggedItem === lote.id ? 'batch-card-dragging' : ''
-                                } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
-                                {...dragHandlers.getDraggableProps(lote.id)}
-                                onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
-                                data-testid={`lote-card-${lote.id}`}
-                              >
+                            {zoneLotes.map((lote) => {
+                              // Determine card styling based on duration
+                              const days = lote.totalDays || 0;
+                              let durationStyle = "";
+                              let durationIndicator = "";
+                              
+                              if (days < 30) {
+                                durationStyle = "border-l-4 border-l-green-400";
+                                durationIndicator = "bg-green-100 text-green-700";
+                              } else if (days < 90) {
+                                durationStyle = "border-l-4 border-l-yellow-400";
+                                durationIndicator = "bg-yellow-100 text-yellow-700";
+                              } else {
+                                durationStyle = "border-l-4 border-l-red-400";
+                                durationIndicator = "bg-red-100 text-red-700";
+                              }
+                              
+                              return (
+                                <div
+                                  key={lote.id}
+                                  className={`batch-card bg-background border border-border rounded-md p-3 cursor-move transition-all hover:shadow-md ${durationStyle} ${
+                                    draggedItem === lote.id ? 'batch-card-dragging opacity-50' : ''
+                                  } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                                  {...dragHandlers.getDraggableProps(lote.id)}
+                                  onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                                  data-testid={`lote-card-${lote.id}`}
+                                >
                                 <div className="font-medium text-sm" data-testid={`lote-name-${lote.id}`}>
                                   {lote.identification}
                                 </div>
@@ -223,9 +353,13 @@ export default function Seguimiento() {
                                   {lote.initialAnimals} animales
                                 </div>
                                 <div className="flex justify-between items-center mt-2">
-                                  <span className="text-xs text-muted-foreground" data-testid={`lote-days-${lote.id}`}>
-                                    {lote.totalDays} días
-                                  </span>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs px-1.5 py-0.5 ${durationIndicator}`}
+                                    data-testid={`lote-days-${lote.id}`}
+                                  >
+                                    {lote.totalDays || 0}d
+                                  </Badge>
                                   {selectedLote === lote.id && (
                                     <div className="w-2 h-2 bg-primary rounded-full flex items-center justify-center">
                                       <MapPin className="h-1 w-1" />
@@ -240,8 +374,9 @@ export default function Seguimiento() {
                                     <MoreVertical className="h-3 w-3" />
                                   </Button>
                                 </div>
-                              </div>
-                            ))}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );

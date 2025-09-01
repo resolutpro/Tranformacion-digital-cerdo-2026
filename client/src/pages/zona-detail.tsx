@@ -30,16 +30,34 @@ export default function ZoneDetail() {
   const [isSimulatorModalOpen, setIsSimulatorModalOpen] = useState(false);
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
 
-  const { data: zones = [] } = useQuery<Zone[]>({
-    queryKey: ["/api/zones"],
-    enabled: !!params.stage,
+  const { data: zone } = useQuery<Zone>({
+    queryKey: ["/api/zones", params.id],
+    enabled: !!params.id,
   });
-
-  const zone = zones.find(z => z.id === params.id && z.stage === params.stage);
 
   const { data: sensors = [] } = useQuery<Sensor[]>({
     queryKey: ["/api/zones", params.id, "sensors"],
     enabled: !!params.id,
+  });
+
+  // Get the latest readings for each sensor
+  const { data: latestReadings = [] } = useQuery({
+    queryKey: ["/api/sensors", "latest-readings", sensors.map(s => s.id)],
+    queryFn: async () => {
+      if (sensors.length === 0) return [];
+      const promises = sensors.map(async (sensor) => {
+        try {
+          const res = await apiRequest("GET", `/api/sensors/${sensor.id}/readings/latest`);
+          const reading = await res.json();
+          return { sensorId: sensor.id, reading };
+        } catch (error) {
+          return { sensorId: sensor.id, reading: null };
+        }
+      });
+      return Promise.all(promises);
+    },
+    enabled: sensors.length > 0,
+    refetchInterval: 30000, // Refresh every 30 seconds for real-time data
   });
 
   if (!zone) {
@@ -107,6 +125,7 @@ export default function ZoneDetail() {
           {sensors.map((sensor) => {
             const Icon = getSensorIcon(sensor.sensorType);
             const colorClass = getSensorColor(sensor.sensorType);
+            const latestReading = latestReadings.find(lr => lr.sensorId === sensor.id)?.reading;
             
             return (
               <Card key={sensor.id} data-testid={`sensor-card-${sensor.id}`}>
@@ -125,24 +144,33 @@ export default function ZoneDetail() {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      data-testid={`button-sensor-info-${sensor.id}`}
-                    >
-                      <Info className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {latestReading && (
+                        <div className={`w-2 h-2 rounded-full ${latestReading.isSimulated ? 'bg-orange-400' : 'bg-green-400'}`} 
+                             title={latestReading.isSimulated ? 'Datos simulados' : 'Datos reales'} />
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`button-sensor-info-${sensor.id}`}
+                      >
+                        <Info className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   
                   <div className="mb-4">
                     <div className="text-2xl font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
-                      --
+                      {latestReading ? Number(latestReading.value).toFixed(1) : '--'}
                       <span className="text-sm font-normal ml-1">
                         {sensor.unit || (sensor.sensorType === 'temperature' ? '°C' : sensor.sensorType === 'humidity' ? '%' : '')}
                       </span>
                     </div>
                     <div className="text-sm text-muted-foreground" data-testid={`sensor-last-reading-${sensor.id}`}>
-                      Sin lecturas recientes
+                      {latestReading 
+                        ? `Actualizado ${formatDistanceToNow(new Date(latestReading.timestamp), { addSuffix: true, locale: es })}`
+                        : "Sin lecturas recientes"
+                      }
                     </div>
                   </div>
                   
@@ -150,6 +178,11 @@ export default function ZoneDetail() {
                     <Badge variant="outline" className="text-xs">
                       {sensor.sensorType}
                     </Badge>
+                    {latestReading?.isSimulated && (
+                      <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200">
+                        Simulado
+                      </Badge>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"

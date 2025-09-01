@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Search, 
   Download, 
@@ -15,7 +19,9 @@ import {
   Link as LinkIcon, 
   RotateCcw,
   QrCode,
-  Calendar
+  Calendar,
+  Plus,
+  Loader2
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -29,9 +35,21 @@ export default function Trazabilidad() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState("");
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [selectedLoteId, setSelectedLoteId] = useState("");
+  const { toast } = useToast();
 
   const { data: qrSnapshots = [], isLoading } = useQuery<QrSnapshotWithLote[]>({
     queryKey: ["/api/qr-snapshots"],
+  });
+
+  // Get available lotes for QR generation
+  const { data: availableLotes = [] } = useQuery<Lote[]>({
+    queryKey: ["/api/lotes", { status: "active" }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/lotes?status=active");
+      return res.json();
+    }
   });
 
   const filteredSnapshots = qrSnapshots.filter(snapshot => {
@@ -57,9 +75,68 @@ export default function Trazabilidad() {
     navigator.clipboard.writeText(text);
   };
 
-  const downloadQR = (snapshot: QrSnapshot) => {
-    // TODO: Generate actual QR code image
-    console.log('Download QR for:', snapshot.publicToken);
+  const generateQRMutation = useMutation({
+    mutationFn: async (loteId: string) => {
+      const res = await apiRequest("POST", `/api/lotes/${loteId}/generate-qr`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/qr-snapshots"] });
+      toast({
+        title: "QR generado",
+        description: `Código QR creado exitosamente`,
+      });
+      setShowGenerateModal(false);
+      setSelectedLoteId("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo generar el código QR",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const downloadQR = async (snapshot: QrSnapshot) => {
+    try {
+      const QRCode = (await import('qrcode')).default;
+      const url = getPublicUrl(snapshot.publicToken);
+      
+      // Generate QR code as data URL
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 512,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = qrDataUrl;
+      link.download = `QR-${snapshot.snapshotData.lote.name}-${format(new Date(), 'yyyyMMdd')}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "QR descargado",
+        description: "El código QR se ha descargado exitosamente",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo descargar el código QR",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleGenerateQR = () => {
+    if (!selectedLoteId) return;
+    generateQRMutation.mutate(selectedLoteId);
   };
 
   return (
@@ -70,10 +147,59 @@ export default function Trazabilidad() {
             <h1 className="text-2xl font-bold text-foreground mb-2">Trazabilidad Pública</h1>
             <p className="text-muted-foreground">Gestión de códigos QR y trazabilidad</p>
           </div>
-          <Button variant="outline" data-testid="button-bulk-download">
-            <Download className="h-4 w-4 mr-2" />
-            Descarga masiva
-          </Button>
+          <div className="flex gap-2">
+            <Dialog open={showGenerateModal} onOpenChange={setShowGenerateModal}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-generate-qr">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Generar QR
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Generar Código QR</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="lote">Seleccionar Lote</Label>
+                    <Select value={selectedLoteId} onValueChange={setSelectedLoteId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar lote..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableLotes.map(lote => (
+                          <SelectItem key={lote.id} value={lote.id}>
+                            {lote.identification} ({lote.initialAnimals} animales)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowGenerateModal(false)}
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      onClick={handleGenerateQR}
+                      disabled={!selectedLoteId || generateQRMutation.isPending}
+                      className="flex-1"
+                    >
+                      {generateQRMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Generar
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button variant="outline" data-testid="button-bulk-download">
+              <Download className="h-4 w-4 mr-2" />
+              Descarga masiva
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
