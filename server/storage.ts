@@ -169,7 +169,12 @@ export class MemStorage implements IStorage {
     const newLote: Lote = { 
       ...lote, 
       id, 
-      createdAt: new Date() 
+      createdAt: new Date(),
+      finalAnimals: lote.finalAnimals ?? null,
+      foodRegime: lote.foodRegime ?? null,
+      customData: lote.customData ?? null,
+      parentLoteId: lote.parentLoteId ?? null,
+      pieceType: lote.pieceType ?? null
     };
     this.lotes.set(id, newLote);
     return newLote;
@@ -237,7 +242,11 @@ export class MemStorage implements IStorage {
     const newZone: Zone = { 
       ...zone, 
       id, 
-      createdAt: new Date() 
+      createdAt: new Date(),
+      fixedInfo: zone.fixedInfo ?? null,
+      temperatureTarget: zone.temperatureTarget ?? null,
+      humidityTarget: zone.humidityTarget ?? null,
+      isActive: zone.isActive ?? null
     };
     this.zones.set(id, newZone);
     return newZone;

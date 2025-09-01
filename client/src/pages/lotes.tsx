@@ -203,49 +203,50 @@ export default function Lotes() {
                                 </Badge>
                               )}
                             </div>
-                        <p className="text-sm text-muted-foreground" data-testid={`lote-details-${lote.id}`}>
-                          {lote.initialAnimals} animales iniciales
-                          {lote.finalAnimals && ` → ${lote.finalAnimals} finales`}
-                          {lote.foodRegime && ` • ${lote.foodRegime}`}
-                        </p>
-                        <div className="flex gap-2 mt-2">
-                          <Badge 
-                            variant={lote.status === 'active' ? 'default' : 'secondary'}
-                            data-testid={`lote-status-${lote.id}`}
-                          >
-                            {lote.status === 'active' ? 'Activo' : 'Finalizado'}
-                          </Badge>
-                          {lote.parentLoteId && (
-                            <Badge variant="outline" data-testid={`lote-sublote-${lote.id}`}>
-                              Sublote - {lote.pieceType}
-                            </Badge>
-                          )}
-                          {/* Show "Sin ubicación" badge for lotes without active stays */}
-                          <LoteLocationBadge loteId={lote.id} />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <LoteAssignButton lote={lote} onAssign={() => {
-                          setSelectedLote(lote);
-                          setIsMoveModalOpen(true);
-                        }} />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(lote)}
-                          data-testid={`button-edit-lote-${lote.id}`}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(lote)}
-                          disabled={deleteMutation.isPending}
-                          data-testid={`button-delete-lote-${lote.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                            <p className="text-sm text-muted-foreground" data-testid={`lote-details-${lote.id}`}>
+                              {lote.initialAnimals} animales iniciales
+                              {lote.finalAnimals && ` → ${lote.finalAnimals} finales`}
+                              {lote.foodRegime && ` • ${lote.foodRegime}`}
+                            </p>
+                            <div className="flex gap-2 mt-2">
+                              <Badge 
+                                variant={lote.status === 'active' ? 'default' : 'secondary'}
+                                data-testid={`lote-status-${lote.id}`}
+                              >
+                                {lote.status === 'active' ? 'Activo' : 'Finalizado'}
+                              </Badge>
+                              {lote.parentLoteId && (
+                                <Badge variant="outline" data-testid={`lote-sublote-${lote.id}`}>
+                                  Sublote - {lote.pieceType}
+                                </Badge>
+                              )}
+                              {/* Show "Sin ubicación" badge for lotes without active stays */}
+                              <LoteLocationBadge loteId={lote.id} />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <LoteAssignButton lote={lote} onAssign={() => {
+                              setSelectedLote(lote);
+                              setIsMoveModalOpen(true);
+                            }} />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEdit(lote)}
+                              data-testid={`button-edit-lote-${lote.id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(lote)}
+                              disabled={deleteMutation.isPending}
+                              data-testid={`button-delete-lote-${lote.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
 
