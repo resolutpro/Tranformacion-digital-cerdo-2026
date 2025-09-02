@@ -714,7 +714,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Lote no encontrado" });
       }
       
-      const targetZone = await storage.getZone(zoneId, req.organizationId);
+      const targetZone = zoneId !== 'finalizado' ? await storage.getZone(zoneId, req.organizationId) : null;
       if (!targetZone && zoneId !== 'finalizado') {
         logger.error('Zone not found', { zoneId, organizationId: req.organizationId });
         return res.status(404).json({ message: "Zona no encontrada" });
@@ -725,7 +725,7 @@ export function registerRoutes(app: Express): Server {
       const currentStay = await storage.getActiveStayByLote(lote.id);
       let currentStage = "sinUbicacion";
       
-      if (currentStay) {
+      if (currentStay && currentStay.zoneId) {
         const currentZone = await storage.getZone(currentStay.zoneId, req.organizationId);
         currentStage = currentZone?.stage || "sinUbicacion";
       }
@@ -837,14 +837,7 @@ export function registerRoutes(app: Express): Server {
         });
       } else {
         // Regular movement
-        logger.info('Checking finalizado condition', { 
-          zoneId, 
-          targetZoneStage: targetZone?.stage,
-          isFinalized: (targetZone?.stage === 'finalizado' || zoneId === 'finalizado')
-        });
-        
         if (targetZone?.stage === 'finalizado' || zoneId === 'finalizado') {
-          logger.info('Moving to finalizado - updating lote status to finished');
           await storage.updateLote(lote.id, { status: 'finished' }, req.organizationId);
           
           // Audit log for finishing
