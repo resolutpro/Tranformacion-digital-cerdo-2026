@@ -68,16 +68,29 @@ export default function ZoneDetail() {
     refetchInterval: 30000, // Refresh every 30 seconds for real-time data
   });
 
-  if (!zone) {
-    return (
-      <MainLayout>
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Zona no encontrada</p>
-        </div>
-      </MainLayout>
-    );
-  }
+  // All mutations must be defined before any early returns
+  const deleteSensorMutation = useMutation({
+    mutationFn: async (sensorId: string) => {
+      await apiRequest("DELETE", `/api/sensors/${sensorId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/zones", params.id, "sensors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/zones", params.id, "latest-readings"] });
+      toast({
+        title: "Sensor eliminado",
+        description: "El sensor y todos sus datos han sido eliminados correctamente",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el sensor",
+        variant: "destructive",
+      });
+    },
+  });
 
+  // Helper functions
   const getSensorIcon = (type: string) => {
     switch (type) {
       case 'temperature': return Thermometer;
@@ -106,32 +119,22 @@ export default function ZoneDetail() {
     setIsSensorInfoModalOpen(true);
   };
 
-  const deleteSensorMutation = useMutation({
-    mutationFn: async (sensorId: string) => {
-      await apiRequest("DELETE", `/api/sensors/${sensorId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/zones", params.id, "sensors"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/zones", params.id, "latest-readings"] });
-      toast({
-        title: "Sensor eliminado",
-        description: "El sensor y todos sus datos han sido eliminados correctamente",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo eliminar el sensor",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleDeleteSensor = (sensor: Sensor) => {
     if (window.confirm(`¿Estás seguro de que quieres eliminar el sensor "${sensor.name}"? Esta acción no se puede deshacer.`)) {
       deleteSensorMutation.mutate(sensor.id);
     }
   };
+
+  // Early return after all hooks are defined
+  if (!zone) {
+    return (
+      <MainLayout>
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Zona no encontrada</p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
