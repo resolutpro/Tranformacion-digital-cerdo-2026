@@ -203,7 +203,7 @@ export default function Dashboard() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-orange-700">QR Activos</p>
+                    <p className="text-sm font-medium text-orange-700">Certificación QR</p>
                     <p className="text-2xl font-bold text-orange-900">{dashboardData.qrCount}</p>
                   </div>
                   <QrCode className="h-8 w-8 text-orange-600" />
