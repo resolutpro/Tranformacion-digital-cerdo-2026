@@ -51,10 +51,17 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
   let stays = await storage.getStaysByLote(loteId);
   if (lote.parentLoteId) {
     const parentStays = await storage.getStaysByLote(lote.parentLoteId);
+    logger.info('Sublote inheritance debug', { 
+      loteId, 
+      parentLoteId: lote.parentLoteId,
+      subloteStays: stays.length, 
+      parentStays: parentStays.length 
+    });
     // Combine parent stays with sublote stays, sorted by entry time
     stays = [...parentStays, ...stays].sort((a, b) => 
       a.entryTime.getTime() - b.entryTime.getTime()
     );
+    logger.info('Combined stays', { totalStays: stays.length });
   }
   
   const phases: any[] = [];
@@ -736,15 +743,22 @@ export function registerRoutes(app: Express): Server {
       // Date validation - ensure new entry date is not before previous exit date
       if (currentStay && entryTime) {
         const newEntryDate = new Date(entryTime);
-        const currentExitDate = exitTime ? new Date(exitTime) : newEntryDate;
         
-        // Get the latest stay to check dates
-        const lastExitTime = currentStay.exitTime || currentExitDate;
+        // Get all stays for this lote to find the most recent exit time
+        const allStays = await storage.getStaysByLote(lote.id);
+        const sortedStays = allStays.sort((a, b) => 
+          (b.exitTime || b.entryTime).getTime() - (a.exitTime || a.entryTime).getTime()
+        );
         
-        if (newEntryDate < lastExitTime) {
-          return res.status(400).json({ 
-            message: "Fecha no válida: la fecha de entrada debe ser igual o posterior a la fecha de salida anterior" 
-          });
+        if (sortedStays.length > 0) {
+          const mostRecentStay = sortedStays[0];
+          const mostRecentExitTime = mostRecentStay.exitTime || (exitTime ? new Date(exitTime) : mostRecentStay.entryTime);
+          
+          if (newEntryDate < mostRecentExitTime) {
+            return res.status(400).json({ 
+              message: "Fecha no válida: la fecha de entrada debe ser igual o posterior a la fecha de salida anterior" 
+            });
+          }
         }
       }
       
