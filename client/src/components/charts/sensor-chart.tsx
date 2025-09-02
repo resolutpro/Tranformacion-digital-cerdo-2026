@@ -75,10 +75,16 @@ export function SensorChart({ sensors }: SensorChartProps) {
     let existing = acc.find(point => Math.abs(point.timestamp - timestamp) < 60000); // Group readings within 1 minute
     
     if (!existing) {
+      const readingDate = new Date(reading.timestamp);
       existing = {
         timestamp,
-        time: format(new Date(reading.timestamp), 'HH:mm', { locale: es }),
-        date: format(new Date(reading.timestamp), 'dd/MM', { locale: es }),
+        time: format(readingDate, 'HH:mm', { locale: es }),
+        date: format(readingDate, 'dd/MM', { locale: es }),
+        fullLabel: timeRange === 'today' 
+          ? format(readingDate, 'HH:mm', { locale: es })
+          : timeRange === '7days'
+            ? format(readingDate, 'dd/MM HH:mm', { locale: es })
+            : format(readingDate, 'dd/MM/yy HH:mm', { locale: es })
       };
       acc.push(existing);
     }
@@ -204,10 +210,13 @@ export function SensorChart({ sensors }: SensorChartProps) {
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
-                    dataKey="time" 
+                    dataKey="fullLabel" 
                     tick={{ fontSize: 12 }}
                     domain={['dataMin', 'dataMax']}
                     type="category"
+                    angle={timeRange !== 'today' ? -45 : 0}
+                    textAnchor={timeRange !== 'today' ? 'end' : 'middle'}
+                    height={timeRange !== 'today' ? 80 : 60}
                   />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip 

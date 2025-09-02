@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,7 +91,17 @@ export default function Seguimiento() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [moveModalLote, setMoveModalLote] = useState<Lote | null>(null);
   const [moveModalStage, setMoveModalStage] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const { data: rawBoard, isLoading } = useQuery<TrackingBoard>({
     queryKey: ["/api/tracking/board"],
@@ -234,19 +244,19 @@ export default function Seguimiento() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground mb-2">Seguimiento de Lotes</h1>
             <p className="text-muted-foreground">Tablero de control de movimientos</p>
           </div>
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Buscar lotes activos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
+                className="pl-10 w-full sm:w-64"
                 data-testid="input-search-tracking"
               />
             </div>
@@ -254,6 +264,7 @@ export default function Seguimiento() {
               variant={showFilters ? "default" : "outline"} 
               onClick={() => setShowFilters(!showFilters)}
               data-testid="button-filters"
+              className="w-full sm:w-auto"
             >
               <Filter className="h-4 w-4 mr-2" />
               Filtros
@@ -264,9 +275,9 @@ export default function Seguimiento() {
         {/* Filter Panel */}
         {showFilters && (
           <Card className="p-4 bg-muted/10 border-muted/20">
-            <div className="flex gap-4 items-center">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center">
               <div className="text-sm font-medium">Filtros:</div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button 
                   size="sm" 
                   variant={statusFilter === "all" ? "default" : "outline"}
@@ -292,31 +303,32 @@ export default function Seguimiento() {
                   Finalizados
                 </Button>
               </div>
-              <div className="text-xs text-muted-foreground ml-auto">
+              <div className="text-xs text-muted-foreground md:ml-auto">
                 Resultados: {board ? Object.values(board).reduce((total, stage) => total + stage.lotes.length, 0) : 0}
               </div>
             </div>
           </Card>
         )}
 
-        {/* Kanban Board */}
-        <div className="grid grid-cols-7 gap-4 kanban-column">
-          {Object.entries(stageConfig).map(([stage, config]) => {
-            const stageData = board?.[stage as keyof TrackingBoard];
-            if (!stageData) return null;
+        {/* Kanban Board - Desktop View */}
+        {!isMobile && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-4 kanban-column overflow-x-auto">
+            {Object.entries(stageConfig).map(([stage, config]) => {
+              const stageData = board?.[stage as keyof TrackingBoard];
+              if (!stageData) return null;
 
-            return (
-              <Card key={stage} className={config.color} data-testid={`column-${stage}`}>
-                <CardHeader className={`p-4 border-b border-border ${config.headerColor}`}>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <config.icon className="h-4 w-4" />
-                    {config.title}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {stageData.lotes.length} lotes
-                  </p>
-                </CardHeader>
-                <CardContent className="p-3 space-y-3">
+              return (
+                <Card key={stage} className={config.color} data-testid={`column-${stage}`}>
+                  <CardHeader className={`p-4 border-b border-border ${config.headerColor}`}>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <config.icon className="h-4 w-4" />
+                      {config.title}
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      {stageData.lotes.length} lotes
+                    </p>
+                  </CardHeader>
+                  <CardContent className="p-3 space-y-3">
                   {stage === 'sinUbicacion' ? (
                     <div className="space-y-2">
                       <div className="relative mb-2">
@@ -466,7 +478,160 @@ export default function Seguimiento() {
               </Card>
             );
           })}
-        </div>
+          </div>
+        )}
+
+        {/* Mobile View */}
+        {isMobile && (
+          <div className="space-y-4">
+            {Object.entries(stageConfig).map(([stage, config]) => {
+              const stageData = board?.[stage as keyof TrackingBoard];
+              if (!stageData || stageData.lotes.length === 0) return null;
+
+              return (
+                <Card key={stage} className={config.color} data-testid={`mobile-column-${stage}`}>
+                  <CardHeader className={`p-4 border-b border-border ${config.headerColor}`}>
+                    <CardTitle className="text-sm flex items-center gap-2 justify-between">
+                      <div className="flex items-center gap-2">
+                        <config.icon className="h-4 w-4" />
+                        {config.title}
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {stageData.lotes.length} lotes
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3">
+                    <div className="grid grid-cols-1 gap-3">
+                      {stage === 'sinUbicacion' ? (
+                        stageData.lotes.map((lote) => (
+                          <div
+                            key={lote.id}
+                            className={`bg-background border border-orange-200 rounded-md p-3 border-l-4 border-l-orange-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                            onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                            data-testid={`mobile-lote-card-${lote.id}`}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="font-medium text-sm">{lote.identification}</div>
+                              <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
+                                Sin ubicar
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mb-2">
+                              {lote.initialAnimals} animales
+                            </div>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMoveModalLote(lote);
+                                setMoveModalStage("sinUbicacion");
+                              }}
+                              data-testid={`mobile-assign-zone-${lote.id}`}
+                            >
+                              Asignar zona
+                            </Button>
+                          </div>
+                        ))
+                      ) : stage === 'finalizado' ? (
+                        stageData.lotes.map((lote) => (
+                          <div
+                            key={lote.id}
+                            className={`bg-background border border-border rounded-md p-3 border-l-4 border-l-gray-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                            onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                            data-testid={`mobile-lote-card-${lote.id}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <div className="font-medium text-sm">{lote.identification}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {lote.initialAnimals} animales
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                Finalizado
+                              </Badge>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        stageData.zones.map((zone) => {
+                          const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
+                          if (zoneLotes.length === 0) return null;
+                          
+                          return (
+                            <div key={zone.id} className="space-y-2">
+                              <div className="text-xs text-muted-foreground font-medium bg-muted/30 p-2 rounded">
+                                {zone.name}
+                              </div>
+                              {zoneLotes.map((lote) => {
+                                const days = lote.totalDays || 0;
+                                let durationStyle = "";
+                                let durationIndicator = "";
+                                
+                                if (days < 30) {
+                                  durationStyle = "border-l-4 border-l-green-400";
+                                  durationIndicator = "bg-green-100 text-green-700";
+                                } else if (days < 90) {
+                                  durationStyle = "border-l-4 border-l-yellow-400";
+                                  durationIndicator = "bg-yellow-100 text-yellow-700";
+                                } else {
+                                  durationStyle = "border-l-4 border-l-red-400";
+                                  durationIndicator = "bg-red-100 text-red-700";
+                                }
+                                
+                                return (
+                                  <div
+                                    key={lote.id}
+                                    className={`bg-background border border-border rounded-md p-3 ${durationStyle} ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                                    onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                                    data-testid={`mobile-lote-card-${lote.id}`}
+                                  >
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div>
+                                        <div className="font-medium text-sm">{lote.identification}</div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {lote.initialAnimals} animales
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge 
+                                          variant="outline" 
+                                          className={`text-xs px-1.5 py-0.5 ${durationIndicator}`}
+                                        >
+                                          {days}d
+                                        </Badge>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="h-auto p-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMoveModalLote(lote);
+                                            setMoveModalStage(stage);
+                                          }}
+                                          data-testid={`mobile-button-lote-menu-${lote.id}`}
+                                        >
+                                          <ArrowRight className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
 
         {/* Advanced Move Modal */}
         <AdvancedMoveModal

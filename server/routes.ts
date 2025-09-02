@@ -741,7 +741,7 @@ export function registerRoutes(app: Express): Server {
       }
       
       // Date validation - ensure new entry date is not before previous exit date
-      if (currentStay && entryTime) {
+      if (entryTime) {
         const newEntryDate = new Date(entryTime);
         
         // Get all stays for this lote to find the most recent exit time
@@ -752,7 +752,8 @@ export function registerRoutes(app: Express): Server {
         
         if (sortedStays.length > 0) {
           const mostRecentStay = sortedStays[0];
-          const mostRecentExitTime = mostRecentStay.exitTime || (exitTime ? new Date(exitTime) : mostRecentStay.entryTime);
+          // Use exitTime if it exists, otherwise use entryTime (for ongoing stays)
+          const mostRecentExitTime = mostRecentStay.exitTime || mostRecentStay.entryTime;
           
           if (newEntryDate < mostRecentExitTime) {
             return res.status(400).json({ 
