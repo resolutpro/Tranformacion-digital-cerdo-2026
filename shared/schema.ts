@@ -59,7 +59,7 @@ export const zones = pgTable("zones", {
 export const stays = pgTable("stays", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   loteId: uuid("lote_id").references(() => lotes.id).notNull(),
-  zoneId: uuid("zone_id").references(() => zones.id).notNull(),
+  zoneId: uuid("zone_id").references(() => zones.id),
   entryTime: timestamp("entry_time").notNull(),
   exitTime: timestamp("exit_time"),
   createdBy: uuid("created_by").references(() => users.id).notNull(),
