@@ -114,13 +114,14 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[350px]" data-testid="modal-lote">
+      <DialogContent className="sm:max-w-[350px] max-h-[80vh]" data-testid="modal-lote">
         <DialogHeader>
           <DialogTitle className="text-lg">
             {lote ? "Editar Lote" : "Nuevo Lote"}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="overflow-y-auto max-h-[calc(80vh-120px)]">
+          <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="identification" className="text-sm">Identificación *</Label>
             <Input
@@ -230,21 +231,22 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
             </div>
           )}
           
-          <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-              Cancelar
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={mutation.isPending}
-              className="flex-1"
-              data-testid="button-save-lote"
-            >
-              {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {lote ? "Actualizar" : "Guardar"}
-            </Button>
-          </div>
-        </form>
+            <div className="flex gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={mutation.isPending}
+                className="flex-1"
+                data-testid="button-save-lote"
+              >
+                {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {lote ? "Actualizar" : "Guardar"}
+              </Button>
+            </div>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

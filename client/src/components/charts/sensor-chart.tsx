@@ -206,6 +206,8 @@ export function SensorChart({ sensors }: SensorChartProps) {
                   <XAxis 
                     dataKey="time" 
                     tick={{ fontSize: 12 }}
+                    domain={['dataMin', 'dataMax']}
+                    type="category"
                   />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip 

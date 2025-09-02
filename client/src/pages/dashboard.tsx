@@ -160,7 +160,7 @@ export default function Dashboard() {
 
         {/* Quick Summary Cards */}
         {hasLotes && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
             <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">

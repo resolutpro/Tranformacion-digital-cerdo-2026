@@ -115,7 +115,7 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]" data-testid="modal-sensor-info">
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh]" data-testid="modal-sensor-info">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -125,7 +125,7 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6">
+        <div className="space-y-6 overflow-y-auto max-h-[calc(80vh-120px)]">
           {/* Sensor Details */}
           <div>
             <h3 className="font-medium mb-3 flex items-center gap-2">

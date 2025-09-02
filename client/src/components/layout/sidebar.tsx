@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSidebarState } from "./main-layout";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,13 +34,14 @@ const navigationItems = [
 ];
 
 export function Sidebar({ className }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, setCollapsed } = useSidebarState();
   const [location] = useLocation();
 
   return (
     <div 
       className={cn(
         "fixed left-0 top-0 z-50 h-full bg-card border-r border-border transition-all duration-300",
+        "hidden md:block", // Hide on mobile
         collapsed ? "w-16" : "w-64",
         className
       )}
