@@ -20,7 +20,9 @@ import {
   Truck,
   Check,
   MapPin,
-  ArrowRight
+  ArrowRight,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import type { Lote, Zone } from "@shared/schema";
 
@@ -92,6 +94,7 @@ export default function Seguimiento() {
   const [moveModalLote, setMoveModalLote] = useState<Lote | null>(null);
   const [moveModalStage, setMoveModalStage] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -486,29 +489,52 @@ export default function Seguimiento() {
           <div className="space-y-4">
             {Object.entries(stageConfig).map(([stage, config]) => {
               const stageData = board?.[stage as keyof TrackingBoard];
-              if (!stageData || stageData.lotes.length === 0) return null;
+              if (!stageData) return null;
+              
+              const isCollapsed = collapsedStages[stage] ?? true;
+              const toggleCollapse = () => {
+                setCollapsedStages(prev => ({
+                  ...prev,
+                  [stage]: !isCollapsed
+                }));
+              };
 
               return (
                 <Card key={stage} className={config.color} data-testid={`mobile-column-${stage}`}>
-                  <CardHeader className={`p-4 border-b border-border ${config.headerColor}`}>
+                  <CardHeader 
+                    className={`p-4 border-b border-border ${config.headerColor} cursor-pointer`}
+                    onClick={toggleCollapse}
+                  >
                     <CardTitle className="text-sm flex items-center gap-2 justify-between">
                       <div className="flex items-center gap-2">
                         <config.icon className="h-4 w-4" />
                         {config.title}
+                        {isCollapsed ? (
+                          <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                        ) : (
+                          <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                        )}
                       </div>
                       <Badge variant="outline" className="text-xs">
                         {stageData.lotes.length} lotes
+                        {stage !== 'sinUbicacion' && stage !== 'finalizado' && (
+                          <span className="ml-1 text-muted-foreground">• {stageData.zones.length} zonas</span>
+                        )}
                       </Badge>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-3">
-                    <div className="grid grid-cols-1 gap-3">
+                  {!isCollapsed && (
+                    <CardContent className="p-3">
+                      <div className="grid grid-cols-1 gap-3">
                       {stage === 'sinUbicacion' ? (
                         stageData.lotes.map((lote) => (
                           <div
                             key={lote.id}
-                            className={`bg-background border border-orange-200 rounded-md p-3 border-l-4 border-l-orange-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                            className={`bg-background border border-orange-200 rounded-md p-3 border-l-4 border-l-orange-400 ${
+                              draggedItem === lote.id ? 'opacity-50' : ''
+                            } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
                             onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                            {...dragHandlers.getDraggableProps(lote.id)}
                             data-testid={`mobile-lote-card-${lote.id}`}
                           >
                             <div className="flex justify-between items-start mb-2">
@@ -536,36 +562,71 @@ export default function Seguimiento() {
                           </div>
                         ))
                       ) : stage === 'finalizado' ? (
-                        stageData.lotes.map((lote) => (
-                          <div
-                            key={lote.id}
-                            className={`bg-background border border-border rounded-md p-3 border-l-4 border-l-gray-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
-                            onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
-                            data-testid={`mobile-lote-card-${lote.id}`}
+                        <div>
+                          <div 
+                            className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center mb-3"
+                            {...dragHandlers.getDropZoneProps('finalizado')}
                           >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <div className="font-medium text-sm">{lote.identification}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {lote.initialAnimals} animales
-                                </div>
-                              </div>
-                              <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
-                                Finalizado
-                              </Badge>
+                            <div className="text-xs text-muted-foreground">
+                              Arrastrar aquí para finalizar
                             </div>
                           </div>
-                        ))
+                          {stageData.lotes.map((lote) => (
+                            <div
+                              key={lote.id}
+                              className={`bg-background border border-border rounded-md p-3 border-l-4 border-l-gray-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''} mb-2`}
+                              onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                              data-testid={`mobile-lote-card-${lote.id}`}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="font-medium text-sm">{lote.identification}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {lote.initialAnimals} animales
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-xs bg-gray-100 text-gray-700 border-gray-300">
+                                  Finalizado
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         stageData.zones.map((zone) => {
                           const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
-                          if (zoneLotes.length === 0) return null;
                           
                           return (
                             <div key={zone.id} className="space-y-2">
-                              <div className="text-xs text-muted-foreground font-medium bg-muted/30 p-2 rounded">
-                                {zone.name}
+                              <div className="text-xs text-muted-foreground font-medium bg-muted/30 p-2 rounded flex justify-between items-center">
+                                <span>{zone.name}</span>
+                                <span className="text-xs">({zoneLotes.length} lotes)</span>
                               </div>
+                              
+                              {/* Drop zone for empty zones */}
+                              {zoneLotes.length === 0 && (
+                                <div 
+                                  className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-4 text-center"
+                                  {...dragHandlers.getDropZoneProps(zone.id)}
+                                >
+                                  <div className="text-xs text-muted-foreground">
+                                    Arrastrar lotes aquí
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Drop zone for zones with lotes */}
+                              {zoneLotes.length > 0 && (
+                                <div 
+                                  className="border border-dashed border-muted-foreground/20 rounded-lg p-2 text-center mb-2"
+                                  {...dragHandlers.getDropZoneProps(zone.id)}
+                                >
+                                  <div className="text-xs text-muted-foreground">
+                                    Zona de destino
+                                  </div>
+                                </div>
+                              )}
+                              
                               {zoneLotes.map((lote) => {
                                 const days = lote.totalDays || 0;
                                 let durationStyle = "";
@@ -585,8 +646,11 @@ export default function Seguimiento() {
                                 return (
                                   <div
                                     key={lote.id}
-                                    className={`bg-background border border-border rounded-md p-3 ${durationStyle} ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                                    className={`bg-background border border-border rounded-md p-3 ${durationStyle} ${
+                                      draggedItem === lote.id ? 'opacity-50' : ''
+                                    } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
                                     onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
+                                    {...dragHandlers.getDraggableProps(lote.id)}
                                     data-testid={`mobile-lote-card-${lote.id}`}
                                   >
                                     <div className="flex justify-between items-start mb-2">
@@ -626,7 +690,8 @@ export default function Seguimiento() {
                         })
                       )}
                     </div>
-                  </CardContent>
+                    </CardContent>
+                  )}
                 </Card>
               );
             })}

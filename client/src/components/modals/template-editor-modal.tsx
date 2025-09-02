@@ -82,12 +82,12 @@ export function TemplateEditorModal({ isOpen, onClose }: TemplateEditorModalProp
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]" data-testid="modal-template-editor">
+      <DialogContent className="sm:max-w-[500px] max-h-[80vh]" data-testid="modal-template-editor">
         <DialogHeader>
           <DialogTitle>Editor de Plantilla de Lotes</DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6">
+        <div className="space-y-6 overflow-y-auto max-h-[calc(80vh-120px)]">
           <div>
             <p className="text-sm text-muted-foreground mb-4">
               Define campos opcionales que se aplicarán a los nuevos lotes. 
