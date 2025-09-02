@@ -837,7 +837,9 @@ export function registerRoutes(app: Express): Server {
         });
       } else {
         // Regular movement
+        logger.info('Regular movement debug', { zoneId, targetZoneStage: targetZone?.stage });
         if (targetZone?.stage === 'finalizado' || zoneId === 'finalizado') {
+          logger.info('Marking lote as finished');
           await storage.updateLote(lote.id, { status: 'finished' }, req.organizationId);
           
           // Audit log for finishing
