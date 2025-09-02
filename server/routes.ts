@@ -47,7 +47,16 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
   const lote = await storage.getLote(loteId, organizationId);
   if (!lote) throw new Error("Lote no encontrado");
   
-  const stays = await storage.getStaysByLote(loteId);
+  // For sublotes, also include parent lote's history
+  let stays = await storage.getStaysByLote(loteId);
+  if (lote.parentLoteId) {
+    const parentStays = await storage.getStaysByLote(lote.parentLoteId);
+    // Combine parent stays with sublote stays, sorted by entry time
+    stays = [...parentStays, ...stays].sort((a, b) => 
+      a.entryTime.getTime() - b.entryTime.getTime()
+    );
+  }
+  
   const phases: any[] = [];
   
   // Group stays by stage
@@ -722,6 +731,21 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ 
           message: "Movimiento no permitido: solo se pueden hacer movimientos hacia adelante en la secuencia de producción" 
         });
+      }
+      
+      // Date validation - ensure new entry date is not before previous exit date
+      if (currentStay && entryTime) {
+        const newEntryDate = new Date(entryTime);
+        const currentExitDate = exitTime ? new Date(exitTime) : newEntryDate;
+        
+        // Get the latest stay to check dates
+        const lastExitTime = currentStay.exitTime || currentExitDate;
+        
+        if (newEntryDate < lastExitTime) {
+          return res.status(400).json({ 
+            message: "Fecha no válida: la fecha de entrada debe ser igual o posterior a la fecha de salida anterior" 
+          });
+        }
       }
       
       // Close current stay if exists  
