@@ -798,13 +798,15 @@ export function registerRoutes(app: Express): Server {
             customData: { ...lote.customData, pieceType: subloteData.name }
           });
           
-          // Create stay for sublote
-          await storage.createStay({
-            loteId: sublote.id,
-            zoneId,
-            entryTime: new Date(entryTime),
-            createdBy: req.user.id
-          });
+          // Create stay for sublote only if zoneId is not 'finalizado'
+          if (zoneId !== 'finalizado') {
+            await storage.createStay({
+              loteId: sublote.id,
+              zoneId,
+              entryTime: new Date(entryTime),
+              createdBy: req.user.id
+            });
+          }
           
           // Audit log for sublote creation
           await storage.createAuditLog({
