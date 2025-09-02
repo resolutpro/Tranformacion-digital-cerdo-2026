@@ -52,7 +52,7 @@ export default function AuthPage() {
           <div className="max-w-md mx-auto w-full">
             {/* Logo */}
             <div className="text-center mb-8">
-              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center mb-4 shadow-lg">
+              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center mb-4 shadow-lg">
                 {/* Pig SVG Icon */}
                 <svg className="h-10 w-10 text-white" fill="currentColor" viewBox="0 0 100 100">
                   <path d="M50,15 C65,15 78,25 78,38 C78,45 75,50 70,53 L70,60 C70,70 62,78 50,78 C38,78 30,70 30,60 L30,53 C25,50 22,45 22,38 C22,25 35,15 50,15 Z"/>

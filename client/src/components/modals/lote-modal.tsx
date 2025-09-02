@@ -114,15 +114,15 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]" data-testid="modal-lote">
+      <DialogContent className="sm:max-w-[350px]" data-testid="modal-lote">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="text-lg">
             {lote ? "Editar Lote" : "Nuevo Lote"}
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="identification">Identificación *</Label>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="identification" className="text-sm">Identificación *</Label>
             <Input
               id="identification"
               value={formData.identification}
@@ -133,8 +133,8 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="initialAnimals">Nº de animales iniciales *</Label>
+          <div className="space-y-1">
+            <Label htmlFor="initialAnimals" className="text-sm">Nº de animales iniciales *</Label>
             <Input
               id="initialAnimals"
               type="number"
@@ -147,8 +147,8 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
             />
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="foodRegime">Régimen de comida</Label>
+          <div className="space-y-1">
+            <Label htmlFor="foodRegime" className="text-sm">Régimen de comida</Label>
             <Select 
               value={formData.foodRegime} 
               onValueChange={(value) => setFormData({ ...formData, foodRegime: value })}
@@ -164,8 +164,8 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
             </Select>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="finalAnimals">Nº de animales finales</Label>
+          <div className="space-y-1">
+            <Label htmlFor="finalAnimals" className="text-sm">Nº de animales finales</Label>
             <Input
               id="finalAnimals"
               type="number"

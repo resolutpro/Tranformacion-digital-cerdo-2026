@@ -51,7 +51,7 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-700 rounded-lg flex items-center justify-center">
                 {/* Pig SVG Icon */}
                 <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 100 100">
                   <path d="M50,15 C65,15 78,25 78,38 C78,45 75,50 70,53 L70,60 C70,70 62,78 50,78 C38,78 30,70 30,60 L30,53 C25,50 22,45 22,38 C22,25 35,15 50,15 Z"/>

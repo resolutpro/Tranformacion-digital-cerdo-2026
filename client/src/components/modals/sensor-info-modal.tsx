@@ -92,10 +92,21 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
   };
 
   const getExamplePayload = (sensorType: string) => {
+    let value;
+    if (sensorType === 'temperature') {
+      value = 22.5;
+    } else if (sensorType === 'humidity') {
+      value = 65.2;
+    } else if (sensorType === 'location') {
+      value = JSON.stringify({ lat: 40.4168, lon: -3.7038 });
+    } else {
+      value = 42.0;
+    }
+    
     const basePayload = {
       deviceId: sensor.deviceId,
       timestamp: new Date().toISOString(),
-      value: sensorType === 'temperature' ? 22.5 : sensorType === 'humidity' ? 65.2 : 42.0
+      value
     };
     return JSON.stringify(basePayload, null, 2);
   };
@@ -151,51 +162,53 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
 
           {/* MQTT Configuration */}
           <div>
-            <h3 className="font-medium mb-3 flex items-center gap-2">
-              <Wifi className="h-4 w-4" />
-              Configuración MQTT
+            <h3 className="font-medium mb-2 flex items-center gap-2 text-sm">
+              <Wifi className="h-3 w-3" />
+              MQTT
             </h3>
-            <div className="space-y-3 bg-muted/30 p-4 rounded-lg">
+            <div className="space-y-2 bg-muted/30 p-3 rounded-lg text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Topic:</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-sm bg-background px-2 py-1 rounded">{mqttTopic}</code>
+                <span className="text-muted-foreground">Topic:</span>
+                <div className="flex items-center gap-1">
+                  <code className="bg-background px-1 py-0.5 rounded">{mqttTopic}</code>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => copyToClipboard(mqttTopic, "Topic MQTT")}
                     data-testid="button-copy-topic"
+                    className="h-6 w-6 p-0"
                   >
-                    <Copy className="h-3 w-3" />
+                    <Copy className="h-2 w-2" />
                   </Button>
                 </div>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Broker:</span>
-                <span className="text-sm">broker.replit.dev:8883 (TLS)</span>
+                <span className="text-muted-foreground">Broker:</span>
+                <span>broker.replit.dev:8883</span>
               </div>
             </div>
           </div>
 
           {/* MQTT Credentials */}
           <div>
-            <h3 className="font-medium mb-3 flex items-center gap-2">
-              <Key className="h-4 w-4" />
-              Credenciales MQTT
+            <h3 className="font-medium mb-2 flex items-center gap-2 text-sm">
+              <Key className="h-3 w-3" />
+              Credenciales
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setShowCredentials(!showCredentials)}
                 data-testid="button-toggle-credentials"
+                className="h-6 w-6 p-0"
               >
-                {showCredentials ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showCredentials ? <EyeOff className="h-2 w-2" /> : <Eye className="h-2 w-2" />}
               </Button>
             </h3>
-            <div className="space-y-3 bg-muted/30 p-4 rounded-lg">
+            <div className="space-y-2 bg-muted/30 p-3 rounded-lg text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Usuario:</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-sm bg-background px-2 py-1 rounded">
+                <span className="text-muted-foreground">Usuario:</span>
+                <div className="flex items-center gap-1">
+                  <code className="bg-background px-1 py-0.5 rounded">
                     {showCredentials ? sensor.mqttUsername : '••••••••'}
                   </code>
                   {showCredentials && (
@@ -204,16 +217,17 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
                       variant="ghost"
                       onClick={() => copyToClipboard(sensor.mqttUsername || '', "Usuario MQTT")}
                       data-testid="button-copy-username"
+                      className="h-6 w-6 p-0"
                     >
-                      <Copy className="h-3 w-3" />
+                      <Copy className="h-2 w-2" />
                     </Button>
                   )}
                 </div>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Contraseña:</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-sm bg-background px-2 py-1 rounded">
+                <span className="text-muted-foreground">Contraseña:</span>
+                <div className="flex items-center gap-1">
+                  <code className="bg-background px-1 py-0.5 rounded">
                     {showCredentials ? sensor.mqttPassword : '••••••••'}
                   </code>
                   {showCredentials && (
@@ -222,8 +236,9 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
                       variant="ghost"
                       onClick={() => copyToClipboard(sensor.mqttPassword || '', "Contraseña MQTT")}
                       data-testid="button-copy-password"
+                      className="h-6 w-6 p-0"
                     >
-                      <Copy className="h-3 w-3" />
+                      <Copy className="h-2 w-2" />
                     </Button>
                   )}
                 </div>

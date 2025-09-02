@@ -62,8 +62,18 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
     stageGroups.get(zone.stage).push({ stay, zone });
   }
   
-  // Process each stage
-  for (const [stage, stayZones] of Array.from(stageGroups.entries())) {
+  // Define stage order
+  const stageOrder = ['cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
+  
+  // Sort stages by defined order
+  const sortedStages = Array.from(stageGroups.entries()).sort((a, b) => {
+    const indexA = stageOrder.indexOf(a[0]);
+    const indexB = stageOrder.indexOf(b[0]);
+    return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+  });
+  
+  // Process each stage in order
+  for (const [stage, stayZones] of sortedStages) {
     const startTime = Math.min(...stayZones.map((sz: any) => sz.stay.entryTime.getTime()));
     const endTime = Math.max(...stayZones.map((sz: any) => sz.stay.exitTime?.getTime() || Date.now()));
     const duration = Math.floor((endTime - startTime) / (1000 * 60 * 60 * 24)); // days

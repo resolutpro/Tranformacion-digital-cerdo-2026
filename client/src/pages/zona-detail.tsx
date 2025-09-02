@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import type { Zone, Sensor } from "@shared/schema";
 
 export default function ZoneDetail() {
   const params = useParams();
+  const { toast } = useToast();
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
   const [isSimulatorModalOpen, setIsSimulatorModalOpen] = useState(false);
   const [isSensorInfoModalOpen, setIsSensorInfoModalOpen] = useState(false);
@@ -104,6 +106,33 @@ export default function ZoneDetail() {
     setIsSensorInfoModalOpen(true);
   };
 
+  const deleteSensorMutation = useMutation({
+    mutationFn: async (sensorId: string) => {
+      await apiRequest("DELETE", `/api/sensors/${sensorId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/zones", params.id, "sensors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/zones", params.id, "latest-readings"] });
+      toast({
+        title: "Sensor eliminado",
+        description: "El sensor y todos sus datos han sido eliminados correctamente",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo eliminar el sensor",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteSensor = (sensor: Sensor) => {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar el sensor "${sensor.name}"? Esta acción no se puede deshacer.`)) {
+      deleteSensorMutation.mutate(sensor.id);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -171,6 +200,16 @@ export default function ZoneDetail() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleDeleteSensor(sensor)}
+                        disabled={deleteSensorMutation.isPending}
+                        data-testid={`button-delete-sensor-${sensor.id}`}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleShowInfo(sensor)}
                         data-testid={`button-sensor-info-${sensor.id}`}
                       >
@@ -180,12 +219,40 @@ export default function ZoneDetail() {
                   </div>
                   
                   <div className="mb-4">
-                    <div className="text-2xl font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
-                      {latestReading ? Number(latestReading.value).toFixed(1) : '--'}
-                      <span className="text-sm font-normal ml-1">
-                        {sensor.unit || (sensor.sensorType === 'temperature' ? '°C' : sensor.sensorType === 'humidity' ? '%' : '')}
-                      </span>
-                    </div>
+                    {sensor.sensorType === 'location' && latestReading ? (
+                      <div className="text-lg font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
+                        {(() => {
+                          try {
+                            const coords = JSON.parse(latestReading.value);
+                            return (
+                              <div className="space-y-1">
+                                <div>Lat: {Number(coords.lat || coords.latitude || 0).toFixed(6)}°</div>
+                                <div>Lon: {Number(coords.lon || coords.longitude || 0).toFixed(6)}°</div>
+                              </div>
+                            );
+                          } catch {
+                            // Fallback for old format or invalid JSON
+                            const parts = latestReading.value.split(',');
+                            if (parts.length === 2) {
+                              return (
+                                <div className="space-y-1">
+                                  <div>Lat: {Number(parts[0]).toFixed(6)}°</div>
+                                  <div>Lon: {Number(parts[1]).toFixed(6)}°</div>
+                                </div>
+                              );
+                            }
+                            return latestReading.value;
+                          }
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="text-2xl font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
+                        {latestReading ? Number(latestReading.value).toFixed(1) : '--'}
+                        <span className="text-sm font-normal ml-1">
+                          {sensor.unit || (sensor.sensorType === 'temperature' ? '°C' : sensor.sensorType === 'humidity' ? '%' : '')}
+                        </span>
+                      </div>
+                    )}
                     <div className="text-sm text-muted-foreground" data-testid={`sensor-last-reading-${sensor.id}`}>
                       {latestReading 
                         ? `Actualizado ${formatDistanceToNow(new Date(latestReading.timestamp), { addSuffix: true, locale: es })}`
@@ -250,24 +317,6 @@ export default function ZoneDetail() {
           </CardContent>
         </Card>
 
-        {/* Zone Fixed Info */}
-        {Object.keys(zone.fixedInfo || {}).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Información Fija</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                {Object.entries(zone.fixedInfo || {}).map(([key, value]) => (
-                  <div key={key}>
-                    <p className="text-sm font-medium text-foreground">{key}</p>
-                    <p className="text-muted-foreground">{String(value)}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <SensorModal 
           isOpen={isSensorModalOpen}
