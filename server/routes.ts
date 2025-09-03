@@ -366,12 +366,27 @@ export function registerRoutes(app: Express): Server {
       }
       
       // Get previous stage to find available lotes
-      const stageOrder = ['cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
+      const stageOrder = ['sinUbicacion', 'cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
       const currentStageIndex = stageOrder.indexOf(zone.stage);
-      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : null;
+      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : 'sinUbicacion';
       
       let availableLotes = [];
-      if (previousStage) {
+      if (previousStage === 'sinUbicacion') {
+        // Get unassigned lotes (lotes without any active stay)
+        const allLotes = await storage.getLotesByOrganization(zone.organizationId);
+        for (const lote of allLotes.filter(l => l.status === 'active')) {
+          const activeStay = await storage.getActiveStayByLote(lote.id);
+          if (!activeStay) {
+            availableLotes.push({
+              id: lote.id,
+              identification: lote.identification,
+              quantity: lote.initialAnimals,
+              currentZone: 'Sin ubicación',
+              stayId: null
+            });
+          }
+        }
+      } else if (previousStage) {
         // Get zones in previous stage
         const previousZones = await storage.getZonesByStage(zone.organizationId, previousStage);
         
@@ -1260,7 +1275,13 @@ export function registerRoutes(app: Express): Server {
       // Get available lotes from previous stage
       const stageOrder = ['sinUbicacion', 'cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
       const currentStageIndex = stageOrder.indexOf(zone.stage);
-      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : null;
+      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : 'sinUbicacion';
+      
+      console.log('[DEBUG] Zone stage analysis:', {
+        zoneStage: zone.stage,
+        currentStageIndex,
+        previousStage
+      });
       
       let availableLotes: any[] = [];
       if (previousStage === 'sinUbicacion') {
@@ -1273,6 +1294,13 @@ export function registerRoutes(app: Express): Server {
           })
         );
         availableLotes = unassignedLotes.filter(Boolean);
+        
+        console.log('[DEBUG] Unassigned lotes analysis:', {
+          totalLotes: allLotes.length,
+          activeLotes: allLotes.filter(lote => lote.status === 'active').length,
+          unassignedLotes: availableLotes.length,
+          loteIds: allLotes.map(l => l.id).slice(0, 3)
+        });
       } else if (previousStage) {
         // Get lotes from previous stage zones
         const previousZones = await storage.getZonesByStage(zone.organizationId, previousStage);
@@ -1293,6 +1321,9 @@ export function registerRoutes(app: Express): Server {
       res.json({
         zone,
         availableLotes,
+        previousStage, // Add for debugging
+        canSplit: zone.stage !== 'distribucion', // Add missing fields
+        canGenerateQr: zone.stage === 'distribucion',
         baseUrl: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get('host')}`}`
       });
     } catch (error: any) {

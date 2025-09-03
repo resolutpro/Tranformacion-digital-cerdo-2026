@@ -37,12 +37,19 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
   const { user } = useAuth();
 
   // Load lote template for custom fields
-  const { data: template, isLoading: isLoadingTemplate, error: templateError } = useQuery<{customFields: CustomField[]}>({
+  const { data: template, isLoading: isLoadingTemplate, error: templateError, refetch: refetchTemplate } = useQuery<{customFields: CustomField[]}>({
     queryKey: ["/api/lote-template"],
     enabled: isOpen && !!user, // Only load when modal is open AND user is authenticated
     retry: 3,
     retryDelay: 1000,
   });
+
+  // Invalidate template when modal opens to ensure fresh data
+  useEffect(() => {
+    if (isOpen && user) {
+      queryClient.invalidateQueries({ queryKey: ["/api/lote-template"] });
+    }
+  }, [isOpen, user]);
 
   useEffect(() => {
     if (lote) {
