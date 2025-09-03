@@ -348,6 +348,187 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Zone QR public endpoints (no auth required)
+  app.get("/api/zone-qr/:publicToken", async (req: any, res) => {
+    try {
+      const { publicToken } = req.params;
+      
+      // Get zone QR by public token
+      const zoneQr = await storage.getZoneQrByToken(publicToken);
+      if (!zoneQr) {
+        return res.status(404).json({ message: "Token de QR no válido o expirado" });
+      }
+      
+      // Get zone information
+      const zone = await storage.getZoneById(zoneQr.zoneId);
+      if (!zone) {
+        return res.status(404).json({ message: "Zona no encontrada" });
+      }
+      
+      // Get previous stage to find available lotes
+      const stageOrder = ['cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
+      const currentStageIndex = stageOrder.indexOf(zone.stage);
+      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : null;
+      
+      let availableLotes = [];
+      if (previousStage) {
+        // Get zones in previous stage
+        const previousZones = await storage.getZonesByStage(zone.organizationId, previousStage);
+        
+        // Get lotes currently in previous stage zones
+        for (const prevZone of previousZones) {
+          const activeStays = await storage.getActiveStaysByZone(prevZone.id);
+          for (const stay of activeStays) {
+            const lote = await storage.getLote(stay.loteId, zone.organizationId);
+            if (lote && lote.status === 'active') {
+              availableLotes.push({
+                id: lote.id,
+                identification: lote.identification,
+                quantity: lote.currentAnimals,
+                currentZone: prevZone.name,
+                stayId: stay.id
+              });
+            }
+          }
+        }
+      }
+      
+      res.json({
+        zone: {
+          id: zone.id,
+          name: zone.name,
+          stage: zone.stage,
+          organizationId: zone.organizationId
+        },
+        availableLotes,
+        previousStage,
+        canSplit: zone.stage === 'secadero', // Allow splitting when moving from matadero to secadero
+        canGenerateQr: zone.stage === 'distribucion' // Allow QR generation when moving to distribucion
+      });
+    } catch (error: any) {
+      logger.error('Error getting zone QR data', { publicToken: req.params.publicToken, error: error.message });
+      res.status(500).json({ message: error.message || "Error al obtener datos de zona" });
+    }
+  });
+
+  app.post("/api/zone-qr/:publicToken/move-lote", async (req: any, res) => {
+    try {
+      const { publicToken } = req.params;
+      const { loteId, entryTime, organizationId, sublotes, shouldGenerateQr } = req.body;
+      
+      // Get zone QR by public token
+      const zoneQr = await storage.getZoneQrByToken(publicToken);
+      if (!zoneQr) {
+        return res.status(404).json({ message: "Token de QR no válido o expirado" });
+      }
+      
+      // Get zone information
+      const zone = await storage.getZoneById(zoneQr.zoneId);
+      if (!zone || zone.organizationId !== organizationId) {
+        return res.status(404).json({ message: "Zona no encontrada o no autorizada" });
+      }
+      
+      // Get lote
+      const lote = await storage.getLote(loteId, organizationId);
+      if (!lote) {
+        return res.status(404).json({ message: "Lote no encontrado" });
+      }
+      
+      // Validate entry time
+      const entryDate = new Date(entryTime);
+      const now = new Date();
+      if (entryDate > now) {
+        return res.status(400).json({ message: "La fecha de entrada no puede ser futura" });
+      }
+      
+      // Get current active stay
+      const currentStay = await storage.getActiveStayByLote(loteId);
+      if (!currentStay) {
+        return res.status(400).json({ message: "El lote no tiene una estancia activa" });
+      }
+      
+      // End current stay
+      await storage.updateStay(currentStay.id, { exitTime: entryDate });
+      
+      // Handle sublote splitting if provided (matadero -> secadero)
+      if (sublotes && Array.isArray(sublotes) && zone.stage === 'secadero') {
+        let totalSubloteQuantity = 0;
+        const createdSublotes = [];
+        
+        for (const subloteData of sublotes) {
+          totalSubloteQuantity += subloteData.quantity;
+          
+          // Create sublote
+          const sublote = await storage.createLote({
+            identification: subloteData.identification,
+            initialAnimals: subloteData.quantity,
+            currentAnimals: subloteData.quantity,
+            status: 'active',
+            organizationId,
+            parentLoteId: loteId,
+            templateData: lote.templateData
+          });
+          
+          // Create stay for sublote
+          await storage.createStay({
+            loteId: sublote.id,
+            zoneId: zone.id,
+            entryTime: entryDate,
+            exitTime: null
+          });
+          
+          createdSublotes.push(sublote);
+        }
+        
+        // Update parent lote status
+        await storage.updateLote(loteId, { 
+          status: 'completed',
+          currentAnimals: 0
+        });
+        
+        return res.json({
+          message: `Lote dividido en ${sublotes.length} sublotes y movido a ${zone.name}`,
+          sublotes: createdSublotes
+        });
+      }
+      
+      // Regular move (no splitting)
+      const newStay = await storage.createStay({
+        loteId,
+        zoneId: zone.id,
+        entryTime: entryDate,
+        exitTime: null
+      });
+      
+      // If moving to distribucion and QR generation is requested
+      if (shouldGenerateQr && zone.stage === 'distribucion') {
+        const snapshot = await storage.createQrSnapshot({
+          loteId,
+          publicToken: randomUUID(),
+          snapshotData: await generateSnapshotData(lote.id, storage),
+          organizationId
+        });
+        
+        return res.json({
+          message: `Lote movido a ${zone.name} y QR de trazabilidad generado`,
+          qrToken: snapshot.publicToken
+        });
+      }
+      
+      res.json({
+        message: `Lote movido exitosamente a ${zone.name}`,
+        stay: newStay
+      });
+    } catch (error: any) {
+      logger.error('Error moving lote via QR', { 
+        publicToken: req.params.publicToken, 
+        loteId: req.body.loteId,
+        error: error.message 
+      });
+      res.status(500).json({ message: error.message || "Error al mover lote" });
+    }
+  });
+
   // Zones API
   app.get("/api/zones", requireAuth, async (req: any, res) => {
     try {

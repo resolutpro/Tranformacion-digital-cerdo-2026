@@ -25,7 +25,7 @@ function Router() {
     <Switch>
       <Route path="/auth" component={AuthPage} />
       <Route path="/trazabilidad/:token" component={PublicTraceability} />
-      <Route path="/zona-movimiento" component={ZoneMovementPage} />
+      <Route path="/zona-movimiento/:token" component={ZoneMovementPage} />
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/lotes" component={Lotes} />
       <ProtectedRoute path="/cria" component={CriaPage} />

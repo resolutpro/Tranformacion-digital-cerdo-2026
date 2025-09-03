@@ -46,6 +46,8 @@ export interface IStorage {
   // Zones
   getZonesByOrganization(organizationId: string): Promise<Zone[]>;
   getZonesByStage(organizationId: string, stage: string): Promise<Zone[]>;
+  getZoneById(id: string): Promise<Zone | undefined>;
+  getActiveStaysByZone(zoneId: string): Promise<Stay[]>;
   getZone(id: string, organizationId: string): Promise<Zone | undefined>;
   createZone(zone: InsertZone): Promise<Zone>;
   updateZone(id: string, zone: Partial<InsertZone>, organizationId: string): Promise<Zone | undefined>;
@@ -297,6 +299,16 @@ export class MemStorage implements IStorage {
 
   async getStaysByZone(zoneId: string): Promise<Stay[]> {
     return Array.from(this.stays.values()).filter(stay => stay.zoneId === zoneId);
+  }
+
+  async getZoneById(id: string): Promise<Zone | undefined> {
+    return this.zones.get(id);
+  }
+
+  async getActiveStaysByZone(zoneId: string): Promise<Stay[]> {
+    return Array.from(this.stays.values()).filter(stay => 
+      stay.zoneId === zoneId && !stay.exitTime
+    );
   }
 
   async createStay(stay: InsertStay): Promise<Stay> {

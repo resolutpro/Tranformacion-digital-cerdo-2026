@@ -154,6 +154,17 @@ export class PostgresStorage implements IStorage {
       .where(and(eq(zones.organizationId, organizationId), eq(zones.stage, stage)));
   }
 
+  async getZoneById(id: string): Promise<Zone | undefined> {
+    const result = await this.db.select().from(zones).where(eq(zones.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getActiveStaysByZone(zoneId: string): Promise<Stay[]> {
+    return await this.db.select().from(stays)
+      .where(and(eq(stays.zoneId, zoneId), isNull(stays.exitTime)))
+      .orderBy(desc(stays.entryTime));
+  }
+
   async getZone(id: string, organizationId: string): Promise<Zone | undefined> {
     const result = await this.db.select().from(zones)
       .where(and(eq(zones.id, id), eq(zones.organizationId, organizationId)))

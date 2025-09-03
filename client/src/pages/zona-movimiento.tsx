@@ -1,27 +1,34 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, ArrowRight, CheckCircle, AlertCircle, Split, QrCode, Plus, Minus } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
+interface SubLote {
+  identification: string;
+  quantity: number;
+}
+
 export default function ZoneMovementPage() {
-  const [token, setToken] = useState<string>("");
+  const [, params] = useRoute("/zona-movimiento/:token");
   const [selectedLoteId, setSelectedLoteId] = useState<string>("");
   const [entryTime, setEntryTime] = useState<string>("");
+  const [shouldSplit, setShouldSplit] = useState<boolean>(false);
+  const [sublotes, setSublotes] = useState<SubLote[]>([{ identification: "", quantity: 1 }]);
+  const [shouldGenerateQr, setShouldGenerateQr] = useState<boolean>(false);
   const { toast } = useToast();
 
+  const token = params?.token || "";
+
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenParam = urlParams.get('token');
-    if (tokenParam) {
-      setToken(tokenParam);
-    }
-    
     // Set current time as default
     const now = new Date();
     const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -31,7 +38,7 @@ export default function ZoneMovementPage() {
   const { data: zoneData, isLoading: isLoadingZone } = useQuery({
     queryKey: ["/api/zone-qr", token],
     queryFn: async () => {
-      const res = await fetch(`/api/zone-qr/${token}?organizationId=dummy`);
+      const res = await fetch(`/api/zone-qr/${token}`);
       if (!res.ok) {
         throw new Error('Token de QR no válido o expirado');
       }
@@ -43,16 +50,28 @@ export default function ZoneMovementPage() {
 
   const moveLotemutation = useMutation({
     mutationFn: async ({ loteId, entryTime }: { loteId: string; entryTime: string }) => {
+      const payload: any = {
+        loteId,
+        entryTime,
+        organizationId: zoneData?.zone.organizationId
+      };
+
+      // Add splitting logic if enabled
+      if (shouldSplit && zoneData?.canSplit && sublotes.length > 0) {
+        payload.sublotes = sublotes.filter(s => s.identification && s.quantity > 0);
+      }
+
+      // Add QR generation flag if enabled
+      if (shouldGenerateQr && zoneData?.canGenerateQr) {
+        payload.shouldGenerateQr = true;
+      }
+
       const res = await fetch(`/api/zone-qr/${token}/move-lote`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          loteId,
-          entryTime,
-          organizationId: zoneData?.zone.organizationId
-        })
+        body: JSON.stringify(payload)
       });
       
       if (!res.ok) {
@@ -68,6 +87,17 @@ export default function ZoneMovementPage() {
         description: data.message,
       });
       setSelectedLoteId("");
+      setShouldSplit(false);
+      setShouldGenerateQr(false);
+      setSublotes([{ identification: "", quantity: 1 }]);
+      
+      // Show QR token if generated
+      if (data.qrToken) {
+        toast({
+          title: "QR de trazabilidad generado",
+          description: `Token público: ${data.qrToken}`,
+        });
+      }
     },
     onError: (error: any) => {
       toast({
@@ -82,7 +112,40 @@ export default function ZoneMovementPage() {
     e.preventDefault();
     if (!selectedLoteId || !entryTime) return;
     
+    // Validate sublotes if splitting is enabled
+    if (shouldSplit && zoneData?.canSplit) {
+      const validSublotes = sublotes.filter(s => s.identification && s.quantity > 0);
+      if (validSublotes.length === 0) {
+        toast({
+          title: "Error de validación",
+          description: "Debes agregar al menos un sublote válido para dividir",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     moveLotemutation.mutate({ loteId: selectedLoteId, entryTime });
+  };
+
+  const addSublote = () => {
+    setSublotes([...sublotes, { identification: "", quantity: 1 }]);
+  };
+
+  const removeSublote = (index: number) => {
+    if (sublotes.length > 1) {
+      setSublotes(sublotes.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateSublote = (index: number, field: keyof SubLote, value: string | number) => {
+    const newSublotes = [...sublotes];
+    if (field === 'quantity') {
+      newSublotes[index][field] = Math.max(1, Number(value));
+    } else {
+      newSublotes[index][field] = value as string;
+    }
+    setSublotes(newSublotes);
   };
 
   if (!token) {
@@ -138,7 +201,8 @@ export default function ZoneMovementPage() {
     );
   }
 
-  const { zone, availableLotes } = zoneData;
+  const { zone, availableLotes, previousStage, canSplit, canGenerateQr } = zoneData;
+  const selectedLote = availableLotes.find((lote: any) => lote.id === selectedLoteId);
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -152,6 +216,11 @@ export default function ZoneMovementPage() {
               <div className="bg-primary/10 rounded-lg p-4">
                 <h2 className="text-xl font-semibold text-primary">{zone.name}</h2>
                 <p className="text-sm text-muted-foreground capitalize">Etapa: {zone.stage}</p>
+                {previousStage && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Lotes disponibles desde: {previousStage}
+                  </p>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -165,7 +234,10 @@ export default function ZoneMovementPage() {
             {availableLotes.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
-                  No hay lotes disponibles para mover a esta zona en este momento.
+                  {previousStage 
+                    ? `No hay lotes disponibles en "${previousStage}" para mover aquí`
+                    : "No hay lotes disponibles para mover a esta zona en este momento"
+                  }
                 </p>
               </div>
             ) : (
@@ -179,7 +251,7 @@ export default function ZoneMovementPage() {
                     <SelectContent>
                       {availableLotes.map((lote: any) => (
                         <SelectItem key={lote.id} value={lote.id}>
-                          {lote.identification} - {lote.quantity} unidades
+                          {lote.identification} - {lote.quantity} unidades ({lote.currentZone})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -196,6 +268,99 @@ export default function ZoneMovementPage() {
                     required
                   />
                 </div>
+
+                {/* Splitting options for matadero -> secadero */}
+                {canSplit && selectedLoteId && (
+                  <div className="space-y-4">
+                    <Separator />
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="shouldSplit" 
+                        checked={shouldSplit}
+                        onCheckedChange={setShouldSplit}
+                      />
+                      <Label htmlFor="shouldSplit" className="flex items-center gap-2">
+                        <Split className="h-4 w-4" />
+                        Dividir en sublotes (opcional)
+                      </Label>
+                    </div>
+
+                    {shouldSplit && (
+                      <div className="bg-muted/30 p-4 rounded-lg space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="font-medium">Sublotes a crear</Label>
+                          <Button type="button" variant="outline" size="sm" onClick={addSublote}>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Agregar sublote
+                          </Button>
+                        </div>
+                        
+                        {sublotes.map((sublote, index) => (
+                          <div key={index} className="flex gap-2 items-end">
+                            <div className="flex-1">
+                              <Label>Identificación</Label>
+                              <Input
+                                placeholder="ID del sublote"
+                                value={sublote.identification}
+                                onChange={(e) => updateSublote(index, 'identification', e.target.value)}
+                              />
+                            </div>
+                            <div className="w-24">
+                              <Label>Cantidad</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                value={sublote.quantity}
+                                onChange={(e) => updateSublote(index, 'quantity', e.target.value)}
+                              />
+                            </div>
+                            {sublotes.length > 1 && (
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => removeSublote(index)}
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                        
+                        {selectedLote && (
+                          <div className="text-sm text-muted-foreground">
+                            Total disponible: {selectedLote.quantity} unidades
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* QR generation option for secadero -> distribucion */}
+                {canGenerateQr && selectedLoteId && (
+                  <div className="space-y-4">
+                    <Separator />
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="shouldGenerateQr" 
+                        checked={shouldGenerateQr}
+                        onCheckedChange={setShouldGenerateQr}
+                      />
+                      <Label htmlFor="shouldGenerateQr" className="flex items-center gap-2">
+                        <QrCode className="h-4 w-4" />
+                        Generar QR de trazabilidad final
+                      </Label>
+                    </div>
+                    {shouldGenerateQr && (
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg">
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          Se generará un código QR público para que los consumidores puedan ver la trazabilidad completa del lote.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <Button 
