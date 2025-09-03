@@ -91,6 +91,10 @@ export default function ZoneMovementPage() {
         title: "Lote movido exitosamente",
         description: data.message,
       });
+      
+      // Refresh zone data to update available lotes
+      queryClient.invalidateQueries({ queryKey: ["/api/zone-qr", token] });
+      
       setSelectedLoteId("");
       setShouldSplit(false);
       setShouldGenerateQr(false);

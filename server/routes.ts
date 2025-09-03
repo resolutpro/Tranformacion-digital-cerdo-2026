@@ -274,14 +274,27 @@ export function registerRoutes(app: Express): Server {
 
   app.put("/api/lote-template", requireAuth, async (req: any, res) => {
     try {
+      logger.info('PUT /api/lote-template', { 
+        organizationId: req.organizationId, 
+        customFields: req.body.customFields,
+        fieldsCount: req.body.customFields?.length 
+      });
+      
       const templateData = insertLoteTemplateSchema.parse({
         ...req.body,
         organizationId: req.organizationId
       });
       
       const template = await storage.updateLoteTemplate(templateData);
+      
+      logger.info('Template updated successfully', {
+        templateId: template.id,
+        fieldsCount: template.customFields?.length
+      });
+      
       res.json(template);
     } catch (error: any) {
+      logger.error('Error updating template', { error: error.message });
       res.status(400).json({ message: error.message || "Error al actualizar plantilla" });
     }
   });
@@ -474,10 +487,15 @@ export function registerRoutes(app: Express): Server {
       
       // Only validate stay timing if there's a current stay
       if (currentStay) {
-        // Validate entry time is not earlier than current stay entry time
-        if (entryDate < currentStay.entryTime) {
+        // Validate entry time is not earlier than current stay entry time (allow same date)
+        const currentStayDate = new Date(currentStay.entryTime);
+        currentStayDate.setHours(0, 0, 0, 0); // Start of day for comparison
+        const entryDateStart = new Date(entryDate);
+        entryDateStart.setHours(0, 0, 0, 0); // Start of day for comparison
+        
+        if (entryDateStart < currentStayDate) {
           return res.status(400).json({ 
-            message: `La fecha de entrada no puede ser anterior a la fecha de entrada actual (${currentStay.entryTime.toLocaleString('es-ES')})` 
+            message: `La fecha de entrada no puede ser anterior al ${currentStayDate.toLocaleDateString('es-ES')}` 
           });
         }
         
@@ -563,7 +581,8 @@ export function registerRoutes(app: Express): Server {
       
       res.json({
         message: `Lote movido exitosamente a ${zone.name}`,
-        stay: newStay
+        stay: newStay,
+        success: true
       });
     } catch (error: any) {
       logger.error('Error moving lote via QR', { 
