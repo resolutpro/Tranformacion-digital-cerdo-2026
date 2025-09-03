@@ -37,7 +37,7 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
   // Load lote template for custom fields
   const { data: template } = useQuery<{customFields: CustomField[]}>({
     queryKey: ["/api/lote-template"],
-    enabled: isOpen && !lote, // Only load for new lotes
+    enabled: isOpen, // Load for both new and existing lotes
   });
 
   useEffect(() => {

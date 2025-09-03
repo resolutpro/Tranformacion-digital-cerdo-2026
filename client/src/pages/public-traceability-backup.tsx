@@ -76,118 +76,144 @@ export default function PublicTraceability() {
     );
   }
 
-  if (error) {
+  if (error || !data) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <QrCode className="w-12 h-12 mx-auto text-gray-400" />
-          <p className="mt-4 text-red-600 font-medium">{error}</p>
+          <QrCode className="w-12 h-12 mx-auto text-red-400" />
+          <h1 className="mt-4 text-xl font-semibold text-gray-900">Código QR no válido</h1>
+          <p className="mt-2 text-gray-600">{error || "No se pudo obtener la información de trazabilidad"}</p>
         </div>
       </div>
     );
   }
 
-  if (!data) return null;
-
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('es-ES', {
-      day: 'numeric',
+      year: 'numeric',
       month: 'long',
-      year: 'numeric'
+      day: 'numeric'
     });
   };
 
   const getStageColors = (stage: string) => {
     const colors = {
       'cria': 'from-green-500 to-emerald-600',
-      'engorde': 'from-amber-500 to-yellow-600', 
+      'engorde': 'from-yellow-500 to-orange-600', 
       'matadero': 'from-red-500 to-rose-600',
-      'secadero': 'from-purple-500 to-violet-600',
-      'distribucion': 'from-blue-500 to-indigo-600'
+      'secadero': 'from-purple-500 to-indigo-600',
+      'distribucion': 'from-blue-500 to-cyan-600'
     };
     return colors[stage as keyof typeof colors] || 'from-gray-500 to-slate-600';
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-3 bg-white/80 backdrop-blur-sm rounded-full px-6 py-3 shadow-lg border mb-6">
-            <QrCode className="w-6 h-6 text-slate-600" />
-            <span className="font-semibold text-slate-700">Certificado de Trazabilidad</span>
-          </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            {data.lote.name}
-          </h1>
-          <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-2 bg-white/70 px-3 py-1 rounded-full">
-              <Clock className="w-4 h-4" />
-              <span>Generado el {formatDate(data.metadata.generatedAt)}</span>
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-blue-100 mx-auto max-w-2xl">
+            <QrCode className="w-20 h-20 mx-auto text-blue-600 mb-6" />
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">🥩 Trazabilidad Garantizada</h1>
+            <p className="text-xl text-gray-700 leading-relaxed">
+              Descubre el viaje completo de este producto ibérico desde la cría hasta tu mesa.
+              Cada etapa ha sido cuidadosamente monitoreada y documentada.
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-4 text-sm text-gray-600">
+              <span className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                Certificado
+              </span>
+              <span className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                Monitoreo 24/7
+              </span>
+              <span className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                Trazabilidad Completa
+              </span>
             </div>
-            {data.lote.iberianPercentage && (
-              <Badge variant="secondary" className="bg-amber-100 text-amber-800">
-                {data.lote.iberianPercentage}% Ibérico
-              </Badge>
-            )}
-            {data.lote.regime && (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                {data.lote.regime}
-              </Badge>
-            )}
           </div>
         </div>
 
-        {/* Product Information */}
-        <div className="mb-12">
-          <Card className="bg-white/70 backdrop-blur-sm border shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span className="text-xl">📋</span>
-                </div>
-                Información del Producto
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid sm:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-sm font-medium text-gray-600">Identificación</div>
-                    <div className="text-lg font-semibold text-gray-900">{data.lote.name}</div>
+        {/* Lote Information */}
+        <div className="grid md:grid-cols-3 gap-8 mb-12">
+          <div className="md:col-span-2">
+            <Card className="h-full bg-white/60 backdrop-blur-sm border-amber-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-2xl">
+                  <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                    🏷️
                   </div>
+                  <span className="text-amber-800">
+                    Lote {data.lote.name}
+                  </span>
+                </CardTitle>
+                <CardDescription className="text-lg text-gray-600">
+                  Información detallada del producto ibérico certificado
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid sm:grid-cols-2 gap-6">
                   {data.lote.iberianPercentage && (
-                    <div>
-                      <div className="text-sm font-medium text-gray-600">Pureza Ibérica</div>
-                      <div className="text-lg font-semibold text-amber-700">{data.lote.iberianPercentage}%</div>
+                    <div className="bg-red-50 p-4 rounded-xl">
+                      <div className="text-sm font-medium text-red-600 uppercase tracking-wide">Porcentaje Ibérico</div>
+                      <div className="text-2xl font-bold text-red-800">{data.lote.iberianPercentage}%</div>
                     </div>
                   )}
-                </div>
-                <div className="space-y-4">
                   {data.lote.regime && (
-                    <div>
-                      <div className="text-sm font-medium text-gray-600">Régimen Alimentario</div>
-                      <div className="text-lg font-semibold text-green-700">{data.lote.regime}</div>
+                    <div className="bg-green-50 p-4 rounded-xl">
+                      <div className="text-sm font-medium text-green-600 uppercase tracking-wide">Régimen Alimentario</div>
+                      <div className="text-xl font-semibold text-green-800">{data.lote.regime}</div>
                     </div>
                   )}
                 </div>
-              </div>
-              
-              {Object.keys(data.lote).filter(key => !['id', 'name', 'iberianPercentage', 'regime'].includes(key)).length > 0 && (
-                <div className="mt-8 pt-6 border-t border-gray-200">
-                  <h4 className="text-lg font-semibold text-gray-800 mb-4">Información Adicional</h4>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {Object.entries(data.lote).filter(([key]) => !['id', 'name', 'iberianPercentage', 'regime'].includes(key)).map(([key, value]) => (
-                      <div key={key} className="bg-gray-50 p-3 rounded-lg">
-                        <div className="text-sm font-medium text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                        <div className="text-base font-semibold text-gray-800">{String(value)}</div>
-                      </div>
-                    ))}
+                
+                {/* Additional lote data */}
+                {Object.keys(data.lote).filter(key => !['id', 'name', 'iberianPercentage', 'regime'].includes(key)).length > 0 && (
+                  <div className="pt-4 border-t border-gray-200">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Información Adicional</h4>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {Object.entries(data.lote).filter(([key]) => !['id', 'name', 'iberianPercentage', 'regime'].includes(key)).map(([key, value]) => (
+                        <div key={key} className="bg-gray-50 p-3 rounded-lg">
+                          <div className="text-sm font-medium text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                          <div className="text-base font-semibold text-gray-800">{String(value)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          
+          <div>
+            <Card className="bg-blue-50/50 backdrop-blur-sm border-blue-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-blue-800">
+                  <Clock className="h-5 w-5" />
+                  Datos del Sistema
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-blue-600">Generado el</div>
+                  <div className="text-base font-semibold text-blue-800">
+                    {formatDate(data.metadata.generatedAt)}
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <div>
+                  <div className="text-sm font-medium text-blue-600">Versión del Sistema</div>
+                  <div className="text-base font-semibold text-blue-800">{data.metadata.version}</div>
+                </div>
+                <div className="mt-6 p-4 bg-white/70 rounded-lg border border-blue-100">
+                  <div className="text-xs text-blue-600 font-medium mb-2">TOTAL DE FASES</div>
+                  <div className="text-3xl font-bold text-blue-800">{data.phases.length}</div>
+                  <div className="text-sm text-blue-600">etapas monitoreadas</div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Quality Guarantee Section */}
@@ -359,8 +385,7 @@ export default function PublicTraceability() {
                 )}
               </CardContent>
             </Card>
-          );
-        })}
+          ))}
         </div>
         
         {/* Footer */}

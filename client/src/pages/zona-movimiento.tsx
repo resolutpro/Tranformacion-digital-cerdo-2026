@@ -18,7 +18,7 @@ interface SubLote {
 }
 
 export default function ZoneMovementPage() {
-  const [, params] = useRoute("/zona-movimiento/:token");
+  const [token, setToken] = useState<string>("");
   const [selectedLoteId, setSelectedLoteId] = useState<string>("");
   const [entryTime, setEntryTime] = useState<string>("");
   const [shouldSplit, setShouldSplit] = useState<boolean>(false);
@@ -26,9 +26,14 @@ export default function ZoneMovementPage() {
   const [shouldGenerateQr, setShouldGenerateQr] = useState<boolean>(false);
   const { toast } = useToast();
 
-  const token = params?.token || "";
-
   useEffect(() => {
+    // Extract token from URL path
+    const pathSegments = window.location.pathname.split('/');
+    const tokenFromPath = pathSegments[pathSegments.length - 1];
+    if (tokenFromPath && tokenFromPath !== 'zona-movimiento') {
+      setToken(tokenFromPath);
+    }
+    
     // Set current time as default
     const now = new Date();
     const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);

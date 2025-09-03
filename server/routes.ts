@@ -447,6 +447,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "El lote no tiene una estancia activa" });
       }
       
+      // Validate entry time is not earlier than current stay entry time
+      if (entryDate < currentStay.entryTime) {
+        return res.status(400).json({ 
+          message: `La fecha de entrada no puede ser anterior a la fecha de entrada actual (${currentStay.entryTime.toLocaleString('es-ES')})` 
+        });
+      }
+      
       // End current stay
       await storage.updateStay(currentStay.id, { exitTime: entryDate });
       
@@ -505,7 +512,7 @@ export function registerRoutes(app: Express): Server {
         const snapshot = await storage.createQrSnapshot({
           loteId,
           publicToken: randomUUID(),
-          snapshotData: await generateSnapshotData(lote.id, storage),
+          snapshotData: await generateSnapshotData(lote.id, organizationId),
           organizationId
         });
         
