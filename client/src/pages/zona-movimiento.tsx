@@ -282,7 +282,7 @@ export default function ZoneMovementPage() {
                       <Checkbox 
                         id="shouldSplit" 
                         checked={shouldSplit}
-                        onCheckedChange={setShouldSplit}
+                        onCheckedChange={(checked) => setShouldSplit(!!checked)}
                       />
                       <Label htmlFor="shouldSplit" className="flex items-center gap-2">
                         <Split className="h-4 w-4" />
@@ -350,7 +350,7 @@ export default function ZoneMovementPage() {
                       <Checkbox 
                         id="shouldGenerateQr" 
                         checked={shouldGenerateQr}
-                        onCheckedChange={setShouldGenerateQr}
+                        onCheckedChange={(checked) => setShouldGenerateQr(!!checked)}
                       />
                       <Label htmlFor="shouldGenerateQr" className="flex items-center gap-2">
                         <QrCode className="h-4 w-4" />

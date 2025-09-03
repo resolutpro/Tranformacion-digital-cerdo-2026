@@ -454,6 +454,13 @@ export function registerRoutes(app: Express): Server {
         });
       }
       
+      // If current stay already has an exit time, the new entry time must be after it
+      if (currentStay.exitTime && entryDate < currentStay.exitTime) {
+        return res.status(400).json({
+          message: `La fecha de entrada no puede ser anterior a la fecha de salida anterior (${currentStay.exitTime.toLocaleString('es-ES')})`
+        });
+      }
+      
       // End current stay
       await storage.updateStay(currentStay.id, { exitTime: entryDate });
       
