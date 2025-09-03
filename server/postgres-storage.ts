@@ -13,6 +13,7 @@ import {
   type Stay, type InsertStay,
   type Sensor, type InsertSensor,
   type SensorReading, type InsertSensorReading,
+  type ZoneQr, type InsertZoneQr,
   type QrSnapshot, type InsertQrSnapshot,
   type LoteTemplate, type InsertLoteTemplate,
   type AuditLog, type InsertAuditLog,
@@ -23,6 +24,7 @@ import {
   stays,
   sensors,
   sensorReadings,
+  zoneQrs,
   qrSnapshots,
   loteTemplates,
   auditLog
@@ -323,6 +325,22 @@ export class PostgresStorage implements IStorage {
 
   async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
     const result = await this.db.insert(sensorReadings).values([reading]).returning();
+    return result[0];
+  }
+
+  // Zone QR Codes
+  async getZoneQr(zoneId: string): Promise<ZoneQr | undefined> {
+    const result = await this.db.select().from(zoneQrs).where(eq(zoneQrs.zoneId, zoneId)).limit(1);
+    return result[0];
+  }
+
+  async getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined> {
+    const result = await this.db.select().from(zoneQrs).where(eq(zoneQrs.publicToken, publicToken)).limit(1);
+    return result[0];
+  }
+
+  async createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr> {
+    const result = await this.db.insert(zoneQrs).values([zoneQr]).returning();
     return result[0];
   }
 
