@@ -316,8 +316,8 @@ export function registerRoutes(app: Express): Server {
       const publicUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get('host')}`}/zona-movimiento/${zoneQr.publicToken}`;
       
       // Generate QR code image
-      const QRCode = require('qrcode');
-      const qrUrl = await QRCode.toDataURL(publicUrl, {
+      const QRCode = await import('qrcode');
+      const qrUrl = await QRCode.default.toDataURL(publicUrl, {
         width: 300,
         margin: 2,
         color: {
