@@ -1243,9 +1243,6 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Zone QR public page for lote movement
-  app.get("/zona-movimiento/:token", async (req, res) => {
-    res.redirect(`/zona-movimiento.html?token=${req.params.token}`);
-  });
 
   // Zone QR API endpoints
   app.get("/api/zone-qr/:token", async (req, res) => {

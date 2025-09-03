@@ -35,12 +35,22 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
   const { toast } = useToast();
 
   // Load lote template for custom fields
-  const { data: template } = useQuery<{customFields: CustomField[]}>({
+  const { data: template, isLoading: isLoadingTemplate, error: templateError } = useQuery<{customFields: CustomField[]}>({
     queryKey: ["/api/lote-template"],
     enabled: isOpen, // Load for both new and existing lotes
+    retry: 3,
+    retryDelay: 1000,
   });
 
   useEffect(() => {
+    console.log('LoteModal useEffect triggered:', { 
+      lote: !!lote, 
+      isOpen, 
+      template: template?.customFields?.length || 0,
+      isLoadingTemplate,
+      templateError: !!templateError
+    });
+    
     if (lote) {
       setFormData({
         identification: lote.identification,
@@ -57,17 +67,19 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
         foodRegime: "",
       });
       // Initialize custom fields data for new lotes
-      if (template?.customFields) {
+      if (template?.customFields && template.customFields.length > 0) {
+        console.log('Initializing custom fields:', template.customFields);
         const initialCustomData: Record<string, any> = {};
         template.customFields.forEach(field => {
           initialCustomData[field.name] = "";
         });
         setCustomFieldsData(initialCustomData);
       } else {
+        console.log('No custom fields to initialize');
         setCustomFieldsData({});
       }
     }
-  }, [lote, isOpen, template]);
+  }, [lote, isOpen, template, isLoadingTemplate]);
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
@@ -178,10 +190,20 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
             />
           </div>
           
+          {/* Loading indicator for template */}
+          {isLoadingTemplate && (
+            <div className="border-t pt-4 space-y-4">
+              <div className="flex items-center space-x-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Cargando campos personalizados...</span>
+              </div>
+            </div>
+          )}
+
           {/* Dynamic custom fields from template */}
           {template?.customFields && template.customFields.length > 0 && (
             <div className="border-t pt-4 space-y-4">
-              <h4 className="font-medium text-sm">Campos personalizados</h4>
+              <h4 className="font-medium text-sm">Campos personalizados ({template.customFields.length})</h4>
               {template.customFields.map((field, index) => (
                 <div key={index} className="space-y-2">
                   <Label htmlFor={`custom-${field.name}`}>
