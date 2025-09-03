@@ -289,8 +289,15 @@ export function registerRoutes(app: Express): Server {
   // Zone QR management
   app.get("/api/zones/:zoneId/qr", requireAuth, async (req: any, res) => {
     try {
+      logger.info('GET /api/zones/:zoneId/qr', { 
+        zoneId: req.params.zoneId, 
+        organizationId: req.organizationId,
+        hasAuth: !!req.user 
+      });
+      
       const zone = await storage.getZone(req.params.zoneId, req.organizationId);
       if (!zone) {
+        logger.warn('Zone not found', { zoneId: req.params.zoneId, organizationId: req.organizationId });
         return res.status(404).json({ message: "Zona no encontrada" });
       }
 
@@ -299,6 +306,7 @@ export function registerRoutes(app: Express): Server {
       if (!zoneQr) {
         // Create QR if it doesn't exist
         const publicToken = randomUUID();
+        logger.info('Creating new zone QR', { zoneId: zone.id, publicToken });
         zoneQr = await storage.createZoneQr({
           zoneId: zone.id,
           publicToken
@@ -318,6 +326,8 @@ export function registerRoutes(app: Express): Server {
         }
       });
 
+      logger.info('Zone QR generated successfully', { zoneId: zone.id, publicUrl });
+      
       res.json({
         zoneQr,
         publicUrl,
@@ -329,6 +339,11 @@ export function registerRoutes(app: Express): Server {
         }
       });
     } catch (error: any) {
+      logger.error('Error getting zone QR', { 
+        zoneId: req.params.zoneId, 
+        organizationId: req.organizationId,
+        error: error.message 
+      });
       res.status(500).json({ message: error.message || "Error al obtener QR de zona" });
     }
   });
