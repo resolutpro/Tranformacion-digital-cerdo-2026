@@ -95,6 +95,14 @@ export const sensorReadings = pgTable("sensor_readings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Zone QR Codes for movement
+export const zoneQrs = pgTable("zone_qrs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  zoneId: uuid("zone_id").references(() => zones.id).notNull(),
+  publicToken: text("public_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // QR Traceability
 export const qrSnapshots = pgTable("qr_snapshots", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -189,6 +197,12 @@ export const insertSensorReadingSchema = createInsertSchema(sensorReadings).omit
   createdAt: true,
 });
 
+export const insertZoneQrSchema = createInsertSchema(zoneQrs).omit({
+  id: true,
+  createdAt: true,
+  publicToken: true,
+});
+
 export const insertQrSnapshotSchema = createInsertSchema(qrSnapshots).omit({
   id: true,
   createdAt: true,
@@ -210,6 +224,7 @@ export type Zone = typeof zones.$inferSelect;
 export type Stay = typeof stays.$inferSelect;
 export type Sensor = typeof sensors.$inferSelect;
 export type SensorReading = typeof sensorReadings.$inferSelect;
+export type ZoneQr = typeof zoneQrs.$inferSelect;
 export type QrSnapshot = typeof qrSnapshots.$inferSelect;
 export type AuditLog = typeof auditLog.$inferSelect;
 
@@ -221,5 +236,6 @@ export type InsertZone = z.infer<typeof insertZoneSchema>;
 export type InsertStay = z.infer<typeof insertStaySchema>;
 export type InsertSensor = z.infer<typeof insertSensorSchema>;
 export type InsertSensorReading = z.infer<typeof insertSensorReadingSchema>;
+export type InsertZoneQr = z.infer<typeof insertZoneQrSchema>;
 export type InsertQrSnapshot = z.infer<typeof insertQrSnapshotSchema>;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

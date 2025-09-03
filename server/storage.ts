@@ -6,6 +6,7 @@ import {
   type Stay, type InsertStay,
   type Sensor, type InsertSensor,
   type SensorReading, type InsertSensorReading,
+  type ZoneQr, type InsertZoneQr,
   type QrSnapshot, type InsertQrSnapshot,
   type LoteTemplate, type InsertLoteTemplate,
   type AuditLog, type InsertAuditLog
@@ -74,6 +75,11 @@ export interface IStorage {
   getLatestReadingsByZone(zoneId: string, today?: Date): Promise<Array<SensorReading & { sensor: Sensor }>>;
   createSensorReading(reading: InsertSensorReading): Promise<SensorReading>;
   
+  // Zone QR Codes
+  getZoneQr(zoneId: string): Promise<ZoneQr | undefined>;
+  getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined>;
+  createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr>;
+  
   // QR Snapshots
   getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]>;
   getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined>;
@@ -97,6 +103,7 @@ export class MemStorage implements IStorage {
   private stays: Map<string, Stay> = new Map();
   private sensors: Map<string, Sensor> = new Map();
   private sensorReadings: Map<string, SensorReading> = new Map();
+  private zoneQrs: Map<string, ZoneQr> = new Map();
   private qrSnapshots: Map<string, QrSnapshot> = new Map();
   private auditLogs: Map<string, AuditLog> = new Map();
   
@@ -445,6 +452,26 @@ export class MemStorage implements IStorage {
     };
     this.sensorReadings.set(id, newReading);
     return newReading;
+  }
+
+  // Zone QR Codes
+  async getZoneQr(zoneId: string): Promise<ZoneQr | undefined> {
+    return Array.from(this.zoneQrs.values()).find(qr => qr.zoneId === zoneId);
+  }
+
+  async getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined> {
+    return Array.from(this.zoneQrs.values()).find(qr => qr.publicToken === publicToken);
+  }
+
+  async createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr> {
+    const id = randomUUID();
+    const newZoneQr: ZoneQr = { 
+      ...zoneQr, 
+      id, 
+      createdAt: new Date() 
+    };
+    this.zoneQrs.set(id, newZoneQr);
+    return newZoneQr;
   }
 
   // QR Snapshots
