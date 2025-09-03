@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { ZoneQrButton } from "@/components/zone-qr-button";
 import type { Zone } from "@shared/schema";
 
 export default function MataderoPage() {
@@ -171,16 +172,22 @@ export default function MataderoPage() {
                     <CardTitle className="text-lg" data-testid={`zone-name-${zone.id}`}>
                       {zone.name}
                     </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteZone(zone)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      disabled={deleteZoneMutation.isPending}
-                      data-testid={`button-delete-zone-${zone.id}`}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <ZoneQrButton 
+                        zone={zone} 
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteZone(zone)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        disabled={deleteZoneMutation.isPending}
+                        data-testid={`button-delete-zone-${zone.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>

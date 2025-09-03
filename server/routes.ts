@@ -70,7 +70,7 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
   // Group stays by stage
   const stageGroups = new Map();
   for (const stay of stays) {
-    const zone = await storage.getZone(stay.zoneId, lote.organizationId);
+    const zone = await storage.getZone(stay.zoneId, lote.organizationId!);
     if (!zone) continue;
     
     if (!stageGroups.has(zone.stage)) {
@@ -714,7 +714,7 @@ export function registerRoutes(app: Express): Server {
       for (const lote of activeLotes) {
         const activeStay = await storage.getActiveStayByLote(lote.id);
         if (activeStay) {
-          const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
+          const zone = await storage.getZone(activeStay.zoneId, req.organizationId!);
           if (zone) {
             const stays = await storage.getStaysByLote(lote.id);
             const totalDays = stays.reduce((total, stay) => {
@@ -1304,7 +1304,7 @@ export function registerRoutes(app: Express): Server {
         if (lote.status === 'active') {
           const activeStay = await storage.getActiveStayByLote(lote.id);
           if (activeStay) {
-            const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
+            const zone = await storage.getZone(activeStay.zoneId, req.organizationId!);
             if (zone && zone.stage in loteCounts) {
               loteCounts[zone.stage as keyof typeof loteCounts]++;
               animalCounts[zone.stage as keyof typeof animalCounts] += lote.initialAnimals;
