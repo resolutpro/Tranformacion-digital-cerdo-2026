@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import type { Lote } from "@shared/schema";
 
@@ -33,24 +34,17 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
   });
   const [customFieldsData, setCustomFieldsData] = useState<Record<string, any>>({});
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Load lote template for custom fields
   const { data: template, isLoading: isLoadingTemplate, error: templateError } = useQuery<{customFields: CustomField[]}>({
     queryKey: ["/api/lote-template"],
-    enabled: isOpen, // Load for both new and existing lotes
+    enabled: isOpen && !!user, // Only load when modal is open AND user is authenticated
     retry: 3,
     retryDelay: 1000,
   });
 
   useEffect(() => {
-    console.log('LoteModal useEffect triggered:', { 
-      lote: !!lote, 
-      isOpen, 
-      template: template?.customFields?.length || 0,
-      isLoadingTemplate,
-      templateError: !!templateError
-    });
-    
     if (lote) {
       setFormData({
         identification: lote.identification,
@@ -68,14 +62,12 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
       });
       // Initialize custom fields data for new lotes
       if (template?.customFields && template.customFields.length > 0) {
-        console.log('Initializing custom fields:', template.customFields);
         const initialCustomData: Record<string, any> = {};
         template.customFields.forEach(field => {
           initialCustomData[field.name] = "";
         });
         setCustomFieldsData(initialCustomData);
       } else {
-        console.log('No custom fields to initialize');
         setCustomFieldsData({});
       }
     }

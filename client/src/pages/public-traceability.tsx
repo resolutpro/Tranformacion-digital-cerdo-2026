@@ -130,13 +130,31 @@ export default function PublicTraceability() {
                 {data.lote.iberianPercentage}% Ibérico
               </Badge>
             )}
-            {data.lote.regime && (
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                {data.lote.regime}
-              </Badge>
-            )}
           </div>
         </div>
+
+        {/* Featured Feeding Regime Section */}
+        {data.lote.regime && (
+          <div className="mb-12">
+            <Card className="bg-gradient-to-r from-emerald-500 to-green-600 border-0 shadow-2xl">
+              <CardContent className="p-8 text-center text-white">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 rounded-full mb-6">
+                  <span className="text-4xl">🌿</span>
+                </div>
+                <h2 className="text-3xl font-bold mb-4">Alimentación {data.lote.regime}</h2>
+                <p className="text-xl text-green-50 mb-6 max-w-2xl mx-auto leading-relaxed">
+                  {data.lote.regime === 'bellota' && 'Cerdos alimentados exclusivamente con bellotas y recursos naturales de la dehesa, garantizando el sabor más auténtico y la máxima calidad nutricional.'}
+                  {data.lote.regime === 'recebo' && 'Alimentación mixta con bellotas y piensos naturales seleccionados, ofreciendo un equilibrio perfecto entre tradición y calidad controlada.'}
+                  {data.lote.regime === 'cebo' && 'Alimentación con piensos naturales de alta calidad, siguiendo estrictos controles para garantizar un producto ibérico excepcional.'}
+                  {!['bellota', 'recebo', 'cebo'].includes(data.lote.regime) && `Régimen alimentario ${data.lote.regime} que garantiza la calidad y autenticidad del producto ibérico.`}
+                </p>
+                <Badge className="bg-white/20 text-white border-white/30 text-lg px-6 py-2">
+                  ✨ Certificado {data.lote.regime.toUpperCase()}
+                </Badge>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Product Information */}
         <div className="mb-12">
@@ -164,12 +182,7 @@ export default function PublicTraceability() {
                   )}
                 </div>
                 <div className="space-y-4">
-                  {data.lote.regime && (
-                    <div>
-                      <div className="text-sm font-medium text-gray-600">Régimen Alimentario</div>
-                      <div className="text-lg font-semibold text-green-700">{data.lote.regime}</div>
-                    </div>
-                  )}
+                  {/* Régimen alimentario ahora se muestra arriba de forma destacada */}
                 </div>
               </div>
               

@@ -1264,12 +1264,15 @@ export function registerRoutes(app: Express): Server {
       
       let availableLotes: any[] = [];
       if (previousStage === 'sinUbicacion') {
-        // Get unassigned lotes
-        availableLotes = await storage.getLotesByOrganization(zone.organizationId);
-        availableLotes = availableLotes.filter(lote => {
-          // Filter lotes without active stays (unassigned)
-          return lote.status === 'active';
-        });
+        // Get unassigned lotes (lotes without any active stay)
+        const allLotes = await storage.getLotesByOrganization(zone.organizationId);
+        const unassignedLotes = await Promise.all(
+          allLotes.filter(lote => lote.status === 'active').map(async lote => {
+            const activeStay = await storage.getActiveStayByLote(lote.id);
+            return activeStay ? null : lote;
+          })
+        );
+        availableLotes = unassignedLotes.filter(Boolean);
       } else if (previousStage) {
         // Get lotes from previous stage zones
         const previousZones = await storage.getZonesByStage(zone.organizationId, previousStage);
