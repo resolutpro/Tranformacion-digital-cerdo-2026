@@ -286,6 +286,53 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Zone QR management
+  app.get("/api/zones/:zoneId/qr", requireAuth, async (req: any, res) => {
+    try {
+      const zone = await storage.getZone(req.params.zoneId, req.organizationId);
+      if (!zone) {
+        return res.status(404).json({ message: "Zona no encontrada" });
+      }
+
+      let zoneQr = await storage.getZoneQr(zone.id);
+      
+      if (!zoneQr) {
+        // Create QR if it doesn't exist
+        const publicToken = randomUUID();
+        zoneQr = await storage.createZoneQr({
+          zoneId: zone.id,
+          publicToken
+        });
+      }
+
+      const publicUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get('host')}`}/zona-movimiento/${zoneQr.publicToken}`;
+      
+      // Generate QR code image
+      const QRCode = require('qrcode');
+      const qrUrl = await QRCode.toDataURL(publicUrl, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+
+      res.json({
+        zoneQr,
+        publicUrl,
+        qrUrl,
+        zone: {
+          id: zone.id,
+          name: zone.name,
+          stage: zone.stage
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message || "Error al obtener QR de zona" });
+    }
+  });
+
   // Zones API
   app.get("/api/zones", requireAuth, async (req: any, res) => {
     try {

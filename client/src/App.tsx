@@ -18,12 +18,14 @@ import EngordePage from "@/pages/engorde";
 import MataderoPage from "@/pages/matadero";
 import SecaderoPage from "@/pages/secadero";
 import DistribucionPage from "@/pages/distribucion";
+import ZoneMovementPage from "@/pages/zona-movimiento";
 
 function Router() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
       <Route path="/trazabilidad/:token" component={PublicTraceability} />
+      <Route path="/zona-movimiento" component={ZoneMovementPage} />
       <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/lotes" component={Lotes} />
       <ProtectedRoute path="/cria" component={CriaPage} />
