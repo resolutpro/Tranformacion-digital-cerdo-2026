@@ -511,12 +511,14 @@ export function registerRoutes(app: Express): Server {
             templateData: lote.templateData
           });
           
-          // Create stay for sublote
+          // Create stay for sublote - Use system user for QR moves
+          const systemUserId = '626d9faf-69ff-44b3-b35d-387fd7919537';
           await storage.createStay({
             loteId: sublote.id,
             zoneId: zone.id,
             entryTime: entryDate,
-            exitTime: null
+            exitTime: null,
+            createdBy: systemUserId
           });
           
           createdSublotes.push(sublote);
@@ -534,12 +536,14 @@ export function registerRoutes(app: Express): Server {
         });
       }
       
-      // Regular move (no splitting)
+      // Regular move (no splitting) - Use system user for QR moves
+      const systemUserId = '626d9faf-69ff-44b3-b35d-387fd7919537'; // System user for QR operations
       const newStay = await storage.createStay({
         loteId,
         zoneId: zone.id,
         entryTime: entryDate,
-        exitTime: null
+        exitTime: null,
+        createdBy: systemUserId
       });
       
       // If moving to distribucion and QR generation is requested

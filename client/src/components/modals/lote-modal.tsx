@@ -67,18 +67,20 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
         finalAnimals: "",
         foodRegime: "",
       });
-      // Initialize custom fields data for new lotes
-      if (template?.customFields && template.customFields.length > 0) {
-        const initialCustomData: Record<string, any> = {};
-        template.customFields.forEach(field => {
-          initialCustomData[field.name] = "";
-        });
-        setCustomFieldsData(initialCustomData);
-      } else {
-        setCustomFieldsData({});
-      }
+      setCustomFieldsData({});
     }
-  }, [lote, isOpen, template, isLoadingTemplate]);
+  }, [lote, isOpen]);
+
+  // Separate effect for template changes to initialize custom fields for new lotes
+  useEffect(() => {
+    if (!lote && template?.customFields && template.customFields.length > 0 && isOpen) {
+      const initialCustomData: Record<string, any> = {};
+      template.customFields.forEach(field => {
+        initialCustomData[field.name] = "";
+      });
+      setCustomFieldsData(initialCustomData);
+    }
+  }, [template, lote, isOpen]);
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
