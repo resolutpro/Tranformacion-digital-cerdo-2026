@@ -449,35 +449,48 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Lote no encontrado" });
       }
       
-      // Validate entry time
+      // Validate entry time - allow dates up to end of current day to handle timezone issues
       const entryDate = new Date(entryTime);
       const now = new Date();
-      if (entryDate > now) {
-        return res.status(400).json({ message: "La fecha de entrada no puede ser futura" });
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      
+      if (entryDate > endOfToday) {
+        return res.status(400).json({ 
+          message: "La fecha de entrada no puede ser posterior al día de hoy" 
+        });
       }
       
       // Get current active stay
       const currentStay = await storage.getActiveStayByLote(loteId);
-      if (!currentStay) {
+      
+      // For lotes moving from 'sinUbicacion' (no location), there won't be a current stay
+      const stageOrder = ['sinUbicacion', 'cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
+      const currentStageIndex = stageOrder.indexOf(zone.stage);
+      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : 'sinUbicacion';
+      
+      if (!currentStay && previousStage !== 'sinUbicacion') {
         return res.status(400).json({ message: "El lote no tiene una estancia activa" });
       }
       
-      // Validate entry time is not earlier than current stay entry time
-      if (entryDate < currentStay.entryTime) {
-        return res.status(400).json({ 
-          message: `La fecha de entrada no puede ser anterior a la fecha de entrada actual (${currentStay.entryTime.toLocaleString('es-ES')})` 
-        });
+      // Only validate stay timing if there's a current stay
+      if (currentStay) {
+        // Validate entry time is not earlier than current stay entry time
+        if (entryDate < currentStay.entryTime) {
+          return res.status(400).json({ 
+            message: `La fecha de entrada no puede ser anterior a la fecha de entrada actual (${currentStay.entryTime.toLocaleString('es-ES')})` 
+          });
+        }
+        
+        // If current stay already has an exit time, the new entry time must be after it
+        if (currentStay.exitTime && entryDate < currentStay.exitTime) {
+          return res.status(400).json({
+            message: `La fecha de entrada no puede ser anterior a la fecha de salida anterior (${currentStay.exitTime.toLocaleString('es-ES')})`
+          });
+        }
+        
+        // End current stay
+        await storage.updateStay(currentStay.id, { exitTime: entryDate });
       }
-      
-      // If current stay already has an exit time, the new entry time must be after it
-      if (currentStay.exitTime && entryDate < currentStay.exitTime) {
-        return res.status(400).json({
-          message: `La fecha de entrada no puede ser anterior a la fecha de salida anterior (${currentStay.exitTime.toLocaleString('es-ES')})`
-        });
-      }
-      
-      // End current stay
-      await storage.updateStay(currentStay.id, { exitTime: entryDate });
       
       // Handle sublote splitting if provided (matadero -> secadero)
       if (sublotes && Array.isArray(sublotes) && zone.stage === 'secadero') {
