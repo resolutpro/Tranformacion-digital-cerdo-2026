@@ -34,6 +34,7 @@ function requireAuth(req: any, res: any, next: any) {
   next();
 }
 
+
 // Generate MQTT credentials
 function generateMqttCredentials(sensorName: string) {
   const deviceId = `SENSOR_${randomUUID().substring(0, 8).toUpperCase()}`;
@@ -184,15 +185,6 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Health check endpoint for deployment readiness
-  app.get("/health", (req, res) => {
-    console.log(`[HEALTH-CHECK] ${new Date().toISOString()} - Health check accessed from ${req.ip}`);
-    res.status(200).json({ 
-      status: "healthy", 
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      version: "1.0.0"
-    });
-  });
 
   // Additional health check paths that deployment services might use
   app.get("/api/health", (req, res) => {

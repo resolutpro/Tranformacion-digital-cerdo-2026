@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
@@ -23,11 +24,17 @@ app.use((req, res, next) => {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         try {
-          logLine += ` :: ${JSON.stringify(capturedJsonResponse, (key, value) => 
-            typeof value === 'bigint' ? value.toString() : value
-          )}`;
+          logLine += ` :: ${JSON.stringify(capturedJsonResponse, (key, value) => {
+            if (typeof value === 'bigint') {
+              return value.toString();
+            }
+            if (value instanceof Date) {
+              return value.toISOString();
+            }
+            return value;
+          })}`;
         } catch (error) {
-          logLine += ` :: [Response not serializable]`;
+          logLine += ` :: [Response not serializable: ${error instanceof Error ? error.message : String(error)}]`;
         }
       }
 
@@ -79,6 +86,25 @@ app.use((req, res, next) => {
   } else {
     console.log(`[SETUP] Using static file serving for production`);
     serveStatic(app);
+    
+    // CRITICAL: Add SPA fallback for production - serve index.html for non-API routes
+    app.use("*", (req, res) => {
+      // Don't interfere with API routes
+      if (req.originalUrl.startsWith('/api')) {
+        return res.status(404).json({ message: "API endpoint not found" });
+      }
+      
+      const timestamp = new Date().toISOString();
+      console.log(`[SPA-FALLBACK] ${timestamp} - Serving SPA for route: ${req.originalUrl} from ${req.ip}`);
+      
+      const distPath = path.resolve(import.meta.dirname, "public");
+      res.sendFile(path.resolve(distPath, "index.html"), (err) => {
+        if (err) {
+          console.error(`[SPA-ERROR] ${timestamp} - Failed to serve index.html:`, err.message);
+          res.status(500).send("Internal Server Error");
+        }
+      });
+    });
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
