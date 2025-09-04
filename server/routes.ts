@@ -1293,76 +1293,9 @@ export function registerRoutes(app: Express): Server {
 
   // Zone QR public page for lote movement
 
-  // Zone QR API endpoints
+  // Legacy zone QR route - redirect to publicToken version
   app.get("/api/zone-qr/:token", async (req, res) => {
-    try {
-      const zoneQr = await storage.getZoneQrByToken(req.params.token);
-      if (!zoneQr) {
-        return res.status(404).json({ message: "QR de zona no encontrado" });
-      }
-
-      const zone = await storage.getZone(zoneQr.zoneId, req.query.organizationId as string);
-      if (!zone) {
-        return res.status(404).json({ message: "Zona no encontrada" });
-      }
-
-      // Get available lotes from previous stage
-      const stageOrder = ['sinUbicacion', 'cria', 'engorde', 'matadero', 'secadero', 'distribucion'];
-      const currentStageIndex = stageOrder.indexOf(zone.stage);
-      const previousStage = currentStageIndex > 0 ? stageOrder[currentStageIndex - 1] : 'sinUbicacion';
-      
-      console.log('[DEBUG] Zone stage analysis:', {
-        zoneStage: zone.stage,
-        currentStageIndex,
-        previousStage
-      });
-      
-      let availableLotes: any[] = [];
-      if (previousStage === 'sinUbicacion') {
-        // Get unassigned lotes (lotes without any active stay)
-        const allLotes = await storage.getLotesByOrganization(zone.organizationId);
-        const unassignedLotes = await Promise.all(
-          allLotes.filter(lote => lote.status === 'active').map(async lote => {
-            const activeStay = await storage.getActiveStayByLote(lote.id);
-            return activeStay ? null : lote;
-          })
-        );
-        availableLotes = unassignedLotes.filter(Boolean);
-        
-        console.log('[DEBUG] Unassigned lotes analysis:', {
-          totalLotes: allLotes.length,
-          activeLotes: allLotes.filter(lote => lote.status === 'active').length,
-          unassignedLotes: availableLotes.length,
-          loteIds: allLotes.map(l => l.id).slice(0, 3)
-        });
-      } else if (previousStage) {
-        // Get lotes from previous stage zones
-        const previousZones = await storage.getZonesByStage(zone.organizationId, previousStage);
-        for (const prevZone of previousZones) {
-          const stays = await storage.getStaysByZone(prevZone.id);
-          const activeLotes = await Promise.all(
-            stays
-              .filter(stay => !stay.exitTime)
-              .map(async stay => {
-                const lote = await storage.getLote(stay.loteId, zone.organizationId);
-                return lote && lote.status === 'active' ? { ...lote, currentStay: stay } : null;
-              })
-          );
-          availableLotes.push(...activeLotes.filter(Boolean));
-        }
-      }
-
-      res.json({
-        zone,
-        availableLotes,
-        previousStage, // Add for debugging
-        canSplit: zone.stage !== 'distribucion', // Add missing fields
-        canGenerateQr: zone.stage === 'distribucion',
-        baseUrl: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get('host')}`}`
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message || "Error al obtener datos del QR de zona" });
-    }
+    res.redirect(301, `/api/zone-qr/${req.params.token}`);
   });
 
   app.post("/api/zone-qr/:token/move-lote", async (req, res) => {
