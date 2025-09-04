@@ -115,7 +115,7 @@ export default function Seguimiento() {
     ...rawBoard,
     sinUbicacion: {
       ...rawBoard.sinUbicacion,
-      lotes: rawBoard.sinUbicacion?.lotes?.filter(lote => 
+      lotes: (rawBoard.sinUbicacion?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase())
@@ -124,7 +124,7 @@ export default function Seguimiento() {
     },
     cria: {
       ...rawBoard.cria,
-      lotes: rawBoard.cria?.lotes?.filter(lote => 
+      lotes: (rawBoard.cria?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -134,7 +134,7 @@ export default function Seguimiento() {
     },
     engorde: {
       ...rawBoard.engorde,
-      lotes: rawBoard.engorde?.lotes?.filter(lote => 
+      lotes: (rawBoard.engorde?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -144,7 +144,7 @@ export default function Seguimiento() {
     },
     matadero: {
       ...rawBoard.matadero,
-      lotes: rawBoard.matadero?.lotes?.filter(lote => 
+      lotes: (rawBoard.matadero?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -154,7 +154,7 @@ export default function Seguimiento() {
     },
     secadero: {
       ...rawBoard.secadero,
-      lotes: rawBoard.secadero?.lotes?.filter(lote => 
+      lotes: (rawBoard.secadero?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -164,7 +164,7 @@ export default function Seguimiento() {
     },
     distribucion: {
       ...rawBoard.distribucion,
-      lotes: rawBoard.distribucion?.lotes?.filter(lote => 
+      lotes: (rawBoard.distribucion?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -174,7 +174,7 @@ export default function Seguimiento() {
     },
     finalizado: {
       ...rawBoard.finalizado,
-      lotes: rawBoard.finalizado?.lotes?.filter(lote => 
+      lotes: (rawBoard.finalizado?.lotes || []).filter(lote => 
         (searchTerm === "" || 
          lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase())
@@ -215,7 +215,7 @@ export default function Seguimiento() {
       const draggedLote = board ? Object.values(board).flat()
         .find(stage => stage.lotes.find(l => l.id === draggedLoteId))
         ?.lotes.find(l => l.id === draggedLoteId) : null;
-      
+
       if (!draggedLote) return;
 
       // Determine current stage
@@ -223,7 +223,7 @@ export default function Seguimiento() {
       if (draggedLote.currentZone) {
         currentStage = draggedLote.currentZone.stage;
       }
-      
+
       // Open advanced move modal instead of direct mutation
       setMoveModalLote(draggedLote);
       setMoveModalStage(currentStage);
@@ -344,7 +344,7 @@ export default function Seguimiento() {
                           data-testid="input-search-sin-ubicacion"
                         />
                       </div>
-                      {stageData.lotes?.map((lote) => (
+                      {(stageData.lotes || []).map((lote) => (
                         <div
                           key={lote.id}
                           className={`batch-card bg-background border border-orange-200 rounded-md p-3 cursor-move transition-all hover:shadow-md border-l-4 border-l-orange-400 ${
@@ -394,9 +394,11 @@ export default function Seguimiento() {
                   ) : (
                     <>
                       {/* Zonas normales */}
-                      {stageData.zones?.map((zone) => {
-                        const zoneLotes = stageData.lotes?.filter(l => l.currentZone?.id === zone.id) || [];
-                        
+                      {(stageData.zones || []).map((zone) => {
+                        const zoneLotes = (stageData.lotes || []).filter((lote) => 
+                          lote.currentZone?.id === zone.id
+                        );
+
                         return (
                           <div 
                             key={zone.id}
@@ -413,7 +415,7 @@ export default function Seguimiento() {
                               const days = lote.totalDays || 0;
                               let durationStyle = "";
                               let durationIndicator = "";
-                              
+
                               if (days < 30) {
                                 durationStyle = "border-l-4 border-l-green-400";
                                 durationIndicator = "bg-green-100 text-green-700";
@@ -424,7 +426,7 @@ export default function Seguimiento() {
                                 durationStyle = "border-l-4 border-l-red-400";
                                 durationIndicator = "bg-red-100 text-red-700";
                               }
-                              
+
                               return (
                                 <div
                                   key={lote.id}
@@ -490,7 +492,7 @@ export default function Seguimiento() {
             {Object.entries(stageConfig).map(([stage, config]) => {
               const stageData = board?.[stage as keyof TrackingBoard];
               if (!stageData) return null;
-              
+
               const isCollapsed = collapsedStages[stage] ?? true;
               const toggleCollapse = () => {
                 setCollapsedStages(prev => ({
@@ -527,12 +529,10 @@ export default function Seguimiento() {
                     <CardContent className="p-3">
                       <div className="grid grid-cols-1 gap-3">
                       {stage === 'sinUbicacion' ? (
-                        stageData.lotes?.map((lote) => (
+                        (stageData.lotes || []).map((lote) => (
                           <div
                             key={lote.id}
-                            className={`bg-background border border-orange-200 rounded-md p-3 border-l-4 border-l-orange-400 ${
-                              draggedItem === lote.id ? 'opacity-50' : ''
-                            } ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''}`}
+                            className={`bg-background border border-border rounded-md p-3 border-l-4 border-l-orange-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''} mb-2`}
                             onClick={() => setSelectedLote(lote.id === selectedLote ? null : lote.id)}
                             {...dragHandlers.getDraggableProps(lote.id)}
                             data-testid={`mobile-lote-card-${lote.id}`}
@@ -571,7 +571,7 @@ export default function Seguimiento() {
                               Arrastrar aquí para finalizar
                             </div>
                           </div>
-                          {stageData.lotes.map((lote) => (
+                          {(stageData.lotes || []).map((lote) => (
                             <div
                               key={lote.id}
                               className={`bg-background border border-border rounded-md p-3 border-l-4 border-l-gray-400 ${selectedLote === lote.id ? 'ring-2 ring-primary' : ''} mb-2`}
@@ -593,16 +593,18 @@ export default function Seguimiento() {
                           ))}
                         </div>
                       ) : (
-                        stageData.zones?.map((zone) => {
-                          const zoneLotes = stageData.lotes?.filter(l => l.currentZone?.id === zone.id) || [];
-                          
+                        (stageData.zones || []).map((zone) => {
+                          const zoneLotes = (stageData.lotes || []).filter((lote) => 
+                            lote.currentZone?.id === zone.id
+                          );
+
                           return (
                             <div key={zone.id} className="space-y-2">
                               <div className="text-xs text-muted-foreground font-medium bg-muted/30 p-2 rounded flex justify-between items-center">
                                 <span>{zone.name}</span>
                                 <span className="text-xs">({zoneLotes.length} lotes)</span>
                               </div>
-                              
+
                               {/* Drop zone for empty zones */}
                               {zoneLotes.length === 0 && (
                                 <div 
@@ -614,7 +616,7 @@ export default function Seguimiento() {
                                   </div>
                                 </div>
                               )}
-                              
+
                               {/* Drop zone for zones with lotes */}
                               {zoneLotes.length > 0 && (
                                 <div 
@@ -626,12 +628,12 @@ export default function Seguimiento() {
                                   </div>
                                 </div>
                               )}
-                              
-                              {zoneLotes.map((lote) => {
+
+                              {(zoneLotes || []).map((lote) => {
                                 const days = lote.totalDays || 0;
                                 let durationStyle = "";
                                 let durationIndicator = "";
-                                
+
                                 if (days < 30) {
                                   durationStyle = "border-l-4 border-l-green-400";
                                   durationIndicator = "bg-green-100 text-green-700";
@@ -642,7 +644,7 @@ export default function Seguimiento() {
                                   durationStyle = "border-l-4 border-l-red-400";
                                   durationIndicator = "bg-red-100 text-red-700";
                                 }
-                                
+
                                 return (
                                   <div
                                     key={lote.id}
