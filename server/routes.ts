@@ -199,6 +199,23 @@ export function registerRoutes(app: Express): Server {
     });
   });
 
+  // Handle static assets that might cause 502 errors in production
+  app.get("/favicon.ico", (req, res) => {
+    console.log(`[FAVICON] ${new Date().toISOString()} - Favicon requested from ${req.ip}`);
+    res.status(204).end();
+  });
+
+  app.get("/robots.txt", (req, res) => {
+    console.log(`[ROBOTS] ${new Date().toISOString()} - Robots.txt requested from ${req.ip}`);
+    res.type('text/plain').send('User-agent: *\nAllow: /\n');
+  });
+
+  // Catch-all for any other static assets that might be missing
+  app.use('/assets/*', (req, res, next) => {
+    console.log(`[STATIC-ASSET] ${new Date().toISOString()} - Asset requested: ${req.url} from ${req.ip}`);
+    next();
+  });
+
   // Lotes API
   app.get("/api/lotes", requireAuth, async (req: any, res) => {
     try {
@@ -398,6 +415,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/zone-qr/:publicToken", async (req: any, res) => {
     try {
       const { publicToken } = req.params;
+      console.log(`[ZONE-QR-PUBLIC] ${new Date().toISOString()} - Public zone QR accessed: ${publicToken} from ${req.ip}`);
       
       // Get zone QR by public token
       const zoneQr = await storage.getZoneQrByToken(publicToken);
@@ -476,6 +494,7 @@ export function registerRoutes(app: Express): Server {
     try {
       const { publicToken } = req.params;
       const { loteId, entryTime, organizationId, sublotes, shouldGenerateQr } = req.body;
+      console.log(`[ZONE-MOVE-PUBLIC] ${new Date().toISOString()} - Lote movement via QR: token=${publicToken}, loteId=${loteId} from ${req.ip}`);
       
       // Get zone QR by public token
       const zoneQr = await storage.getZoneQrByToken(publicToken);
