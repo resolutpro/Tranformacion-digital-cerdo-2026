@@ -37,17 +37,23 @@ app.use((req, res, next) => {
   };
 
   res.on("finish", () => {
-    if (!path.startsWith("/api")) return;
     const duration = Date.now() - start;
-
-    let line = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-    if (capturedJsonResponse !== undefined) {
-      const s = safeSerialize(capturedJsonResponse) ?? "[unserializable-json]";
-      const snippet = s.length > 300 ? s.slice(0, 299) + "…" : s;
-      line += ` :: ${snippet}`;
+    
+    // Log todas las rutas que no sean archivos estáticos comunes
+    if (!path.match(/\.(js|css|ico|png|jpg|svg|woff|woff2)$/)) {
+      let line = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      
+      if (path.startsWith("/api") && capturedJsonResponse !== undefined) {
+        const s = safeSerialize(capturedJsonResponse) ?? "[unserializable-json]";
+        const snippet = s.length > 300 ? s.slice(0, 299) + "…" : s;
+        line += ` :: ${snippet}`;
+      } else if (!path.startsWith("/api")) {
+        line += ` [SPA-ROUTE]`;
+      }
+      
+      if (line.length > 1000) line = line.slice(0, 999) + "…";
+      log(line);
     }
-    if (line.length > 1000) line = line.slice(0, 999) + "…";
-    log(line);
   });
 
   next();
@@ -58,24 +64,29 @@ app.use((req, res, next) => {
   const server = await registerRoutes(app);
 
   // manejador de errores (no relanzar)
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err?.status || err?.statusCode || 500;
     const message = err?.message || "Internal Server Error";
-    console.error("[ERROR]", status, message, err?.stack);
+    console.error(`[ERROR] ${req.method} ${req.path} - Status: ${status}, Message: ${message}`);
+    console.error(`[ERROR-STACK]`, err?.stack);
     if (!res.headersSent) res.status(status).json({ message });
   });
 
-  if (
-    process.env.NODE_ENV === "development" ||
-    app.get("env") === "development"
-  ) {
+  const isDev = process.env.NODE_ENV === "development" || app.get("env") === "development";
+  console.log(`[STARTUP] Environment: ${process.env.NODE_ENV || 'undefined'}`);
+  console.log(`[STARTUP] App environment: ${app.get("env")}`);
+  console.log(`[STARTUP] Is development: ${isDev}`);
+
+  if (isDev) {
+    console.log(`[STARTUP] Using Vite development server`);
     await setupVite(app, server);
   } else {
+    console.log(`[STARTUP] Using static file server for production`);
     serveStatic(app);
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen({ port, host: "0.0.0.0", reusePort: true }, () =>
-    log(`serving on port ${port}`),
-  );
+  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+    log(`serving on port ${port} in ${isDev ? 'development' : 'production'} mode`);
+  });
 })();
