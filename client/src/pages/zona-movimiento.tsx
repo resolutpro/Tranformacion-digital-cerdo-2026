@@ -173,20 +173,7 @@ export default function ZoneMovementPage() {
         return;
       }
 
-      // Validar que la suma no supere lo disponible
-      const selected = zoneData?.availableLotes?.find(
-        (l: any) => String(l.id) === String(selectedLoteId),
-      );
-      const total = validSublotes.reduce((a, b) => a + b.quantity, 0);
-      const max = selected?.quantity ?? 0;
-      if (total > max) {
-        toast({
-          title: "Cantidad excedida",
-          description: `La suma de sublotes (${total}) supera la cantidad disponible (${max}).`,
-          variant: "destructive",
-        });
-        return;
-      }
+      // La suma de sublotes puede ser mayor al número de animales disponibles
     }
 
     moveLotemutation.mutate({
