@@ -36,10 +36,14 @@ export function TemplateEditorModal({ isOpen, onClose }: TemplateEditorModalProp
   });
 
   useEffect(() => {
-    if (template?.customFields) {
-      setCustomFields(template.customFields);
+    if (isOpen) {
+      if (template?.customFields) {
+        setCustomFields(template.customFields);
+      } else {
+        setCustomFields([]);
+      }
     }
-  }, [template]);
+  }, [template, isOpen]);
 
   const saveMutation = useMutation({
     mutationFn: async (fields: CustomField[]) => {
@@ -65,19 +69,23 @@ export function TemplateEditorModal({ isOpen, onClose }: TemplateEditorModalProp
     },
   });
 
-  const addField = () => {
-    if (!newField.name) return;
-    
-    setCustomFields([...customFields, { ...newField }]);
-    setNewField({ name: "", type: "text", required: false });
-  };
 
   const removeField = (index: number) => {
     setCustomFields(customFields.filter((_, i) => i !== index));
   };
 
   const handleSave = () => {
+    console.log('[DEBUG] Template handleSave called with fields:', customFields);
     saveMutation.mutate(customFields);
+  };
+
+  const addField = () => {
+    if (!newField.name) return;
+    
+    const updatedFields = [...customFields, { ...newField }];
+    console.log('[DEBUG] Adding field - before:', customFields, 'after:', updatedFields);
+    setCustomFields(updatedFields);
+    setNewField({ name: "", type: "text", required: false });
   };
 
   return (

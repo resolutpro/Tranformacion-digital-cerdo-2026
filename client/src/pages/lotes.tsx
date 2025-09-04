@@ -10,7 +10,16 @@ import { TemplateEditorModal } from "@/components/modals/template-editor-modal";
 import { MoveToZoneModal } from "@/components/modals/move-to-zone-modal";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Edit, Trash2, Settings, MapPin, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Settings,
+  MapPin,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import type { Lote } from "@shared/schema";
 
 export default function Lotes() {
@@ -19,9 +28,12 @@ export default function Lotes() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
-  const [newlyCreatedLoteId, setNewlyCreatedLoteId] = useState<string | null>(null);
+  const [newlyCreatedLoteId, setNewlyCreatedLoteId] = useState<string | null>(
+    null,
+  );
   const [expandedLotes, setExpandedLotes] = useState<Set<string>>(new Set());
   const [sublotesData, setSublotesData] = useState<Record<string, Lote[]>>({});
+  const [templateRefresh, setTemplateRefresh] = useState(0); // <<--- NUEVO
   const { toast } = useToast();
 
   const { data: lotes = [], isLoading } = useQuery<Lote[]>({
@@ -48,11 +60,11 @@ export default function Lotes() {
     },
   });
 
-  const filteredLotes = lotes.filter(lote => 
-    !lote.parentLoteId && ( // Only show parent lotes, not sublotes
-      lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lote.foodRegime?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  const filteredLotes = lotes.filter(
+    (lote) =>
+      !lote.parentLoteId &&
+      (lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        lote.foodRegime?.toLowerCase().includes(searchTerm.toLowerCase())),
   );
 
   const handleEdit = (lote: Lote) => {
@@ -61,12 +73,24 @@ export default function Lotes() {
   };
 
   const handleDelete = (lote: Lote) => {
-    if (confirm(`¿Estás seguro de que quieres eliminar el lote ${lote.identification}?`)) {
+    if (
+      confirm(
+        `¿Estás seguro de que quieres eliminar el lote ${lote.identification}?`,
+      )
+    ) {
       deleteMutation.mutate(lote.id);
     }
   };
 
   const handleNewLote = () => {
+    // Asegura que cualquier plantilla cacheada se invalide antes de abrir el modal
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        q.queryKey.some(
+          (k) => typeof k === "string" && k.includes("lote-template"),
+        ),
+    });
     setSelectedLote(null);
     setIsModalOpen(true);
   };
@@ -76,28 +100,45 @@ export default function Lotes() {
     setSelectedLote(null);
   };
 
+  // Callback cuando se guarda la plantilla en el modal de plantillas
+  const handleTemplateSaved = () => {
+    // Invalida cualquier query relacionada con la plantilla
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        q.queryKey.some(
+          (k) => typeof k === "string" && k.includes("lote-template"),
+        ),
+    });
+    // Fuerza remount del LoteModal (volverá a leer la plantilla)
+    setTemplateRefresh((prev) => prev + 1);
+    setIsTemplateModalOpen(false);
+    toast({
+      title: "Plantilla actualizada",
+      description: "Los nuevos campos estarán disponibles al crear un lote.",
+    });
+  };
+
   const toggleLoteExpansion = async (loteId: string) => {
     const newExpanded = new Set(expandedLotes);
-    
+
     if (expandedLotes.has(loteId)) {
       newExpanded.delete(loteId);
     } else {
       newExpanded.add(loteId);
-      
-      // Load sublotes if not already loaded
       if (!sublotesData[loteId]) {
         try {
           const res = await fetch(`/api/lotes/${loteId}/sublotes`);
           if (res.ok) {
             const sublotes = await res.json();
-            setSublotesData(prev => ({ ...prev, [loteId]: sublotes }));
+            setSublotesData((prev) => ({ ...prev, [loteId]: sublotes }));
           }
         } catch (error) {
-          console.error('Error loading sublotes:', error);
+          console.error("Error loading sublotes:", error);
         }
       }
     }
-    
+
     setExpandedLotes(newExpanded);
   };
 
@@ -106,10 +147,18 @@ export default function Lotes() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-foreground mb-2">Gestión de Lotes</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Administra los lotes de animales</p>
+            <h1 className="text-xl md:text-2xl font-bold text-foreground mb-2">
+              Gestión de Lotes
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Administra los lotes de animales
+            </p>
           </div>
-          <Button onClick={handleNewLote} data-testid="button-new-lote" className="w-full md:w-auto">
+          <Button
+            onClick={handleNewLote}
+            data-testid="button-new-lote"
+            className="w-full md:w-auto"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Lote
           </Button>
@@ -128,9 +177,9 @@ export default function Lotes() {
                   data-testid="input-search-lotes"
                 />
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setIsTemplateModalOpen(true)}
                 data-testid="button-template-settings"
                 className="w-full md:w-auto"
@@ -145,7 +194,10 @@ export default function Lotes() {
             {isLoading ? (
               <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="p-4 border border-border rounded-lg animate-pulse">
+                  <div
+                    key={i}
+                    className="p-4 border border-border rounded-lg animate-pulse"
+                  >
                     <div className="h-4 bg-muted rounded w-1/4 mb-2"></div>
                     <div className="h-3 bg-muted rounded w-1/2 mb-3"></div>
                     <div className="flex gap-2">
@@ -158,10 +210,15 @@ export default function Lotes() {
             ) : filteredLotes.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground mb-4">
-                  {searchTerm ? "No se encontraron lotes" : "No hay lotes creados"}
+                  {searchTerm
+                    ? "No se encontraron lotes"
+                    : "No hay lotes creados"}
                 </p>
                 {!searchTerm && (
-                  <Button onClick={handleNewLote} data-testid="button-new-lote-empty">
+                  <Button
+                    onClick={handleNewLote}
+                    data-testid="button-new-lote-empty"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Crear primer lote
                   </Button>
@@ -172,10 +229,10 @@ export default function Lotes() {
                 {filteredLotes.map((lote) => {
                   const hasSubLotes = sublotesData[lote.id]?.length > 0;
                   const isExpanded = expandedLotes.has(lote.id);
-                  
+
                   return (
                     <div key={lote.id}>
-                      <div 
+                      <div
                         className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                         data-testid={`lote-${lote.id}`}
                       >
@@ -196,29 +253,48 @@ export default function Lotes() {
                                   <ChevronRight className="h-4 w-4" />
                                 )}
                               </Button>
-                              <h3 className="font-medium text-foreground" data-testid={`lote-name-${lote.id}`}>
+                              <h3
+                                className="font-medium text-foreground"
+                                data-testid={`lote-name-${lote.id}`}
+                              >
                                 {lote.identification}
                               </h3>
                               {hasSubLotes && (
-                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-blue-100 text-blue-700 text-xs"
+                                >
                                   {sublotesData[lote.id].length} sublotes
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground" data-testid={`lote-details-${lote.id}`}>
+                            <p
+                              className="text-sm text-muted-foreground"
+                              data-testid={`lote-details-${lote.id}`}
+                            >
                               {lote.initialAnimals} animales iniciales
-                              {lote.finalAnimals && ` → ${lote.finalAnimals} finales`}
+                              {lote.finalAnimals &&
+                                ` → ${lote.finalAnimals} finales`}
                               {lote.foodRegime && ` • ${lote.foodRegime}`}
                             </p>
                             <div className="flex gap-2 mt-2">
-                              <Badge 
-                                variant={lote.status === 'active' ? 'default' : 'secondary'}
+                              <Badge
+                                variant={
+                                  lote.status === "active"
+                                    ? "default"
+                                    : "secondary"
+                                }
                                 data-testid={`lote-status-${lote.id}`}
                               >
-                                {lote.status === 'active' ? 'Activo' : 'Finalizado'}
+                                {lote.status === "active"
+                                  ? "Activo"
+                                  : "Finalizado"}
                               </Badge>
                               {lote.parentLoteId && (
-                                <Badge variant="outline" data-testid={`lote-sublote-${lote.id}`}>
+                                <Badge
+                                  variant="outline"
+                                  data-testid={`lote-sublote-${lote.id}`}
+                                >
                                   Sublote - {lote.pieceType}
                                 </Badge>
                               )}
@@ -227,10 +303,13 @@ export default function Lotes() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <LoteAssignButton lote={lote} onAssign={() => {
-                              setSelectedLote(lote);
-                              setIsMoveModalOpen(true);
-                            }} />
+                            <LoteAssignButton
+                              lote={lote}
+                              onAssign={() => {
+                                setSelectedLote(lote);
+                                setIsMoveModalOpen(true);
+                              }}
+                            />
                             <Button
                               variant="ghost"
                               size="sm"
@@ -256,7 +335,7 @@ export default function Lotes() {
                       {isExpanded && hasSubLotes && (
                         <div className="ml-8 mt-4 space-y-2">
                           {sublotesData[lote.id].map((sublote) => (
-                            <div 
+                            <div
                               key={sublote.id}
                               className="p-3 bg-gray-50 rounded-lg border border-gray-200"
                               data-testid={`sublote-${sublote.id}`}
@@ -264,8 +343,11 @@ export default function Lotes() {
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700">
-                                      {sublote.pieceType || 'Sublote'}
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs bg-orange-100 text-orange-700"
+                                    >
+                                      {sublote.pieceType || "Sublote"}
                                     </Badge>
                                     <h4 className="text-sm font-medium text-foreground">
                                       {sublote.identification}
@@ -273,7 +355,8 @@ export default function Lotes() {
                                   </div>
                                   <p className="text-xs text-muted-foreground mt-1">
                                     {sublote.initialAnimals} piezas
-                                    {sublote.foodRegime && ` • ${sublote.foodRegime}`}
+                                    {sublote.foodRegime &&
+                                      ` • ${sublote.foodRegime}`}
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -310,13 +393,14 @@ export default function Lotes() {
           </CardContent>
         </Card>
 
-        <LoteModal 
+        {/* IMPORTANTE: key={templateRefresh} fuerza remount tras guardar plantilla */}
+        <LoteModal
+          key={templateRefresh}
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           lote={selectedLote}
           onLoteCreated={(loteId) => {
             setNewlyCreatedLoteId(loteId);
-            // Show success toast with CTA
             toast({
               title: "Lote creado",
               description: "El lote ha sido creado correctamente",
@@ -335,13 +419,14 @@ export default function Lotes() {
             });
           }}
         />
-        
-        <TemplateEditorModal 
+
+        <TemplateEditorModal
           isOpen={isTemplateModalOpen}
           onClose={() => setIsTemplateModalOpen(false)}
+          onSaved={handleTemplateSaved} // <<--- NUEVO
         />
-        
-        <MoveToZoneModal 
+
+        <MoveToZoneModal
           isOpen={isMoveModalOpen}
           onClose={() => {
             setIsMoveModalOpen(false);
@@ -361,9 +446,9 @@ function LoteLocationBadge({ loteId }: { loteId: string }) {
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/lotes/${loteId}/active-stay`);
       return res.status === 404 ? null : res.json();
-    }
+    },
   });
-  
+
   if (activeStay === null) {
     return (
       <Badge variant="outline" className="text-muted-foreground">
@@ -371,21 +456,27 @@ function LoteLocationBadge({ loteId }: { loteId: string }) {
       </Badge>
     );
   }
-  
+
   return null;
 }
 
 // Helper component to show assign button for lotes without location
-function LoteAssignButton({ lote, onAssign }: { lote: Lote; onAssign: () => void }) {
+function LoteAssignButton({
+  lote,
+  onAssign,
+}: {
+  lote: Lote;
+  onAssign: () => void;
+}) {
   const { data: activeStay } = useQuery({
     queryKey: ["/api/lotes", lote.id, "active-stay"],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/lotes/${lote.id}/active-stay`);
       return res.status === 404 ? null : res.json();
-    }
+    },
   });
-  
-  if (activeStay === null && lote.status === 'active') {
+
+  if (activeStay === null && lote.status === "active") {
     return (
       <Button
         variant="outline"
@@ -398,6 +489,6 @@ function LoteAssignButton({ lote, onAssign }: { lote: Lote; onAssign: () => void
       </Button>
     );
   }
-  
+
   return null;
 }

@@ -570,7 +570,8 @@ export function registerRoutes(app: Express): Server {
           loteId,
           publicToken: randomUUID(),
           snapshotData: await generateSnapshotData(lote.id, organizationId),
-          organizationId
+          organizationId,
+          createdBy: systemUserId
         });
         
         return res.json({
