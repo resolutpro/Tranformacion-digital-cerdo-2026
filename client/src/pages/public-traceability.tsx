@@ -344,22 +344,7 @@ export default function PublicTraceability() {
                             </div>
                           </div>
                           
-                          {metricData.pctInTarget !== undefined && (
-                            <div className="mt-4 pt-4 border-t border-gray-100">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-700">Dentro del rango óptimo</span>
-                                <span className={`text-sm font-bold ${metricData.pctInTarget >= 90 ? 'text-green-600' : metricData.pctInTarget >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                  {metricData.pctInTarget}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className={`h-2 rounded-full transition-all ${metricData.pctInTarget >= 90 ? 'bg-green-500' : metricData.pctInTarget >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                  style={{ width: `${metricData.pctInTarget}%` }}
-                                ></div>
-                              </div>
-                            </div>
-                          )}
+                          
                         </div>
                       ))}
                     </div>

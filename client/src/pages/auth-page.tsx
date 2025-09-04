@@ -229,8 +229,8 @@ export default function AuthPage() {
             <div className="text-center space-y-6">
               <div className="mb-8">
                 {/* Large decorative pig illustration */}
-                <div className="mx-auto w-32 h-32 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mb-6">
-                  <svg className="h-20 w-20 text-orange-600" fill="currentColor" viewBox="0 0 100 100">
+                <div className="mx-auto w-32 h-32 bg-gradient-to-br from-blue-100 to-blue-100 rounded-full flex items-center justify-center mb-6">
+                  <svg className="h-20 w-20 text-blue-600" fill="currentColor" viewBox="0 0 100 100">
                     <path d="M50,15 C65,15 78,25 78,38 C78,45 75,50 70,53 L70,60 C70,70 62,78 50,78 C38,78 30,70 30,60 L30,53 C25,50 22,45 22,38 C22,25 35,15 50,15 Z"/>
                     <circle cx="42" cy="35" r="3" fill="white"/>
                     <circle cx="58" cy="35" r="3" fill="white"/>
@@ -276,7 +276,11 @@ export default function AuthPage() {
                 <div className="text-center p-4">
                   <div className="w-16 h-16 bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg flex items-center justify-center mx-auto mb-3">
                     <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                      <rect x="3" y="3" width="7" height="7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                      <rect x="14" y="3" width="7" height="7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                      <rect x="14" y="14" width="7" height="7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                      <path d="M5 5h2v2H5V5zm8 0h2v2h-2V5zm8 8h2v2h-2v-2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                      <path d="M3 14h4m0 4v4m4-4h4" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
                     </svg>
                   </div>
                   <h3 className="font-semibold text-foreground mb-2">Certificación QR</h3>
