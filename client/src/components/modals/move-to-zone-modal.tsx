@@ -98,7 +98,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
 
   const addSublote = () => {
     if (!newSubloteType || !newSubloteCount || parseInt(newSubloteCount) <= 0) return;
-    
+
     const existingIndex = sublotes.findIndex(s => s.piece === newSubloteType);
     if (existingIndex >= 0) {
       // Update existing
@@ -109,7 +109,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
       // Add new
       setSublotes([...sublotes, { piece: newSubloteType, count: parseInt(newSubloteCount) }]);
     }
-    
+
     setNewSubloteType("");
     setNewSubloteCount("");
   };
@@ -118,12 +118,14 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
     setSublotes(sublotes.filter(s => s.piece !== piece));
   };
 
-  const totalSubloteCount = sublotes.reduce((total, s) => total + s.count, 0);
+  // Validation for sublotes
+  const totalSubloteCount = sublotes.reduce((sum, s) => sum + s.count, 0);
+  const canProceed = !isMovingToSecadero || sublotes.length > 0;
 
   const moveMutation = useMutation({
     mutationFn: async () => {
       if (!lote || !selectedZone || !entryDateTime) return;
-      
+
       const payload: any = {
         zoneId: selectedZone,
         entryTime: new Date(entryDateTime).toISOString()
@@ -134,12 +136,12 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
         payload.createSublotes = true;
         payload.sublotes = sublotes;
       }
-      
+
       // Add QR snapshot generation if moving to distribución
       if (isMovingToDistribucion && generateQrSnapshot) {
         payload.generateQrSnapshot = true;
       }
-      
+
       const res = await apiRequest("POST", `/api/lotes/${lote.id}/move`, payload);
       return res.json();
     },
@@ -147,7 +149,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
       queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tracking/board"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      
+
       if (data.qrSnapshot) {
         toast({
           title: "Movimiento completado y QR generado",
@@ -185,7 +187,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedZone || !entryDateTime) return;
-    
+
     // Validate sublotes if moving to secadero
     if (isMovingToSecadero && sublotes.length === 0) {
       toast({
@@ -195,7 +197,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
       });
       return;
     }
-    
+
     moveMutation.mutate();
   };
 
@@ -207,7 +209,7 @@ export function MoveToZoneModal({ isOpen, onClose, lote }: MoveToZoneModalProps)
         <DialogHeader>
           <DialogTitle>Asignar Lote a Zona</DialogTitle>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Lote</Label>

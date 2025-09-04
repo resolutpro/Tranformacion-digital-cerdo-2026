@@ -29,10 +29,10 @@ const stageOrder = ["sinUbicacion", "cria", "engorde", "matadero", "secadero", "
 
 const stageNames: Record<string, string> = {
   sinUbicacion: "Sin Ubicación",
-  cria: "Cría", 
+  cria: "Cría",
   engorde: "Engorde",
   matadero: "Matadero",
-  secadero: "Secadero", 
+  secadero: "Secadero",
   distribucion: "Distribución",
   finalizado: "Finalizado"
 };
@@ -104,10 +104,8 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!lote) return;
 
-    // No date validation needed per user request
+    if (!lote) return;
 
     // Prepare move data
     const moveData: any = {
@@ -173,7 +171,7 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
             {currentStage ? `De ${stageNames[currentStage]}` : ""} → {nextStage ? stageNames[nextStage] : "Finalizado"}
           </p>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Zone Selection */}
           {nextStage && nextStage !== "finalizado" && (
@@ -303,9 +301,9 @@ export function AdvancedMoveModal({ isOpen, onClose, lote, currentStage }: Advan
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancelar
             </Button>
-            <Button 
-              type="submit" 
-              disabled={moveMutation.isPending || (!selectedZoneId && nextStage !== "finalizado")}
+            <Button
+              type="submit"
+              disabled={moveMutation.isPending || (!selectedZoneId && nextStage !== "finalizado") || (showSubLotes && subLotes.length === 0)}
               className="flex-1"
               data-testid="button-confirm-move"
             >
