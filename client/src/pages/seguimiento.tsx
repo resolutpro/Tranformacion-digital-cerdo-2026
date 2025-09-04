@@ -112,74 +112,73 @@ export default function Seguimiento() {
 
   // Filter board data based on search and filters  
   const board = rawBoard ? {
-    ...rawBoard,
     sinUbicacion: {
-      ...rawBoard.sinUbicacion,
+      zones: rawBoard.sinUbicacion?.zones || [],
       lotes: (rawBoard.sinUbicacion?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     },
     cria: {
-      ...rawBoard.cria,
+      zones: rawBoard.cria?.zones || [],
       lotes: (rawBoard.cria?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+         lote.currentZone?.name?.toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     },
     engorde: {
-      ...rawBoard.engorde,
+      zones: rawBoard.engorde?.zones || [],
       lotes: (rawBoard.engorde?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+         lote.currentZone?.name?.toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     },
     matadero: {
-      ...rawBoard.matadero,
+      zones: rawBoard.matadero?.zones || [],
       lotes: (rawBoard.matadero?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+         lote.currentZone?.name?.toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     },
     secadero: {
-      ...rawBoard.secadero,
+      zones: rawBoard.secadero?.zones || [],
       lotes: (rawBoard.secadero?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+         lote.currentZone?.name?.toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     },
     distribucion: {
-      ...rawBoard.distribucion,
+      zones: rawBoard.distribucion?.zones || [],
       lotes: (rawBoard.distribucion?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-         lote.currentZone?.name.toLowerCase().includes(searchTerm.toLowerCase())
+         lote.currentZone?.name?.toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     },
     finalizado: {
-      ...rawBoard.finalizado,
+      zones: rawBoard.finalizado?.zones || [],
       lotes: (rawBoard.finalizado?.lotes || []).filter(lote => 
         (searchTerm === "" || 
-         lote.identification.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         lote.identification?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          lote.customData?.origen?.toString().toLowerCase().includes(searchTerm.toLowerCase())
         ) && (statusFilter === "all" || lote.status === statusFilter)
-      ) || []
+      )
     }
   } : null;
 
@@ -212,9 +211,9 @@ export default function Seguimiento() {
   const { draggedItem, dragHandlers } = useDragAndDrop({
     onDrop: (draggedLoteId: string, targetZoneId: string) => {
       // Find the lote to get current stage info
-      const draggedLote = board ? Object.values(board).flat()
-        .find(stage => stage.lotes.find(l => l.id === draggedLoteId))
-        ?.lotes.find(l => l.id === draggedLoteId) : null;
+      const draggedLote = board ? Object.values(board)
+        .find(stage => stage?.lotes?.find(l => l.id === draggedLoteId))
+        ?.lotes?.find(l => l.id === draggedLoteId) : null;
 
       if (!draggedLote) return;
 
