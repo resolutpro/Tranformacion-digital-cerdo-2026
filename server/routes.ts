@@ -169,6 +169,7 @@ export function registerRoutes(app: Express): Server {
 
   // Health check endpoint for deployment readiness
   app.get("/health", (req, res) => {
+    console.log(`[HEALTH-CHECK] ${new Date().toISOString()} - Health check accessed from ${req.ip}`);
     res.status(200).json({ 
       status: "healthy", 
       timestamp: new Date().toISOString(),
@@ -177,21 +178,24 @@ export function registerRoutes(app: Express): Server {
     });
   });
 
-  // Root endpoint for basic requests and deployment readiness
-  app.get("/", (req, res) => {
-    res.status(200).json({ 
-      message: "Livestock Traceability Management System API",
-      status: "running",
-      timestamp: new Date().toISOString()
-    });
-  });
-
   // Additional health check paths that deployment services might use
   app.get("/api/health", (req, res) => {
+    console.log(`[API-HEALTH-CHECK] ${new Date().toISOString()} - API health check accessed from ${req.ip}`);
     res.status(200).json({ 
       status: "healthy", 
       api: "ready",
       timestamp: new Date().toISOString()
+    });
+  });
+
+  // Status endpoint for monitoring (not root to avoid conflicts)
+  app.get("/api/status", (req, res) => {
+    console.log(`[STATUS-CHECK] ${new Date().toISOString()} - Status check accessed from ${req.ip}`);
+    res.status(200).json({ 
+      message: "Livestock Traceability Management System API",
+      status: "running",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
     });
   });
 

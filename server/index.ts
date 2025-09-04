@@ -52,6 +52,21 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
   });
 
+  // Add middleware to log all requests for debugging deployment issues
+  app.use((req, res, next) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[REQUEST] ${timestamp} - ${req.method} ${req.url} from ${req.ip || 'unknown'}`);
+    
+    // Log specific details for root and health checks
+    if (req.url === '/' || req.url === '/health' || req.url === '/api/health') {
+      console.log(`[DEPLOYMENT-DEBUG] ${timestamp} - Critical endpoint accessed: ${req.url}`);
+      console.log(`[DEPLOYMENT-DEBUG] User-Agent: ${req.get('User-Agent') || 'unknown'}`);
+      console.log(`[DEPLOYMENT-DEBUG] Environment: ${process.env.NODE_ENV || 'development'}`);
+    }
+    
+    next();
+  });
+
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
@@ -59,8 +74,10 @@ app.use((req, res, next) => {
     process.env.NODE_ENV === "development" ||
     app.get("env") === "development"
   ) {
+    console.log(`[SETUP] Using Vite development server`);
     await setupVite(app, server);
   } else {
+    console.log(`[SETUP] Using static file serving for production`);
     serveStatic(app);
   }
 
