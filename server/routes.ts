@@ -382,7 +382,7 @@ export function registerRoutes(app: Express): Server {
 
       // Generate URL: use replit.app for deployment, replit.dev for development
       const getPublicUrl = (token: string) => {
-        if (process.env.REPLIT_DEPLOYMENT === '1') {
+        if (process.env.REPLIT_ENVIRONMENT === 'production') {
           // In deployment, use replit.app domain
           const host = req.get('host');
           if (host && host.includes('.replit.dev')) {
@@ -744,7 +744,7 @@ export function registerRoutes(app: Express): Server {
         qrToken: publicToken,
         qrUrl: (() => {
           // Generate URL: use replit.app for deployment, replit.dev for development
-          if (process.env.REPLIT_DEPLOYMENT === '1') {
+          if (process.env.REPLIT_ENVIRONMENT === 'production') {
             // In deployment, use replit.app domain
             const host = req.get('host');
             if (host && host.includes('.replit.dev')) {
