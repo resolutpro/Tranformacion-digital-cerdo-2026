@@ -60,7 +60,9 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
 
   // For sublotes, also include parent lote's history
   let stays = await storage.getStaysByLote(loteId);
-  if (lote.parentLoteId) {
+  const isSubLote = !!lote.parentLoteId;
+  
+  if (isSubLote) {
     const parentStays = await storage.getStaysByLote(lote.parentLoteId);
     logger.info("Sublote inheritance debug", {
       loteId,
@@ -121,13 +123,19 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
     // Get sensor data for each phase
     let sensorData = [];
     try {
+      // For sublotes, use the parent lote ID for sensor data in pre-secadero stages
+      // since the sensors were recording for the parent lote before division
+      const loteIdForSensorData = isSubLote && ["cria", "engorde", "matadero"].includes(stage) 
+        ? lote.parentLoteId 
+        : loteId;
+      
       sensorData = await storage.getSensorDataByLoteAndStage(
-        loteId,
+        loteIdForSensorData,
         stage,
         new Date(startTime),
         new Date(endTime),
       );
-      console.log(`Retrieved ${sensorData.length} sensor readings for lote ${loteId}, stage ${stage}`);
+      console.log(`Retrieved ${sensorData.length} sensor readings for lote ${loteIdForSensorData} (original: ${loteId}), stage ${stage}`);
     } catch (error) {
       console.error(`Error fetching sensor data for phase ${stage}:`, error);
       console.error('Error stack:', error.stack);

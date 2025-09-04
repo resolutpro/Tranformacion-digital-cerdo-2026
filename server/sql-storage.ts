@@ -999,6 +999,8 @@ export class SqlStorage implements IStorage {
     endTime: Date,
   ): Promise<any[]> {
     try {
+      console.log(`Searching sensor data for lote ${loteId}, stage ${stage}, from ${startTime.toISOString()} to ${endTime.toISOString()}`);
+      
       // First get all stays for this lote in this stage during the time period
       const staysQuery = `
         SELECT s.zone_id, s.entry_time, s.exit_time
@@ -1020,12 +1022,20 @@ export class SqlStorage implements IStorage {
         startTime.toISOString(), endTime.toISOString()
       ) as any[];
 
+      console.log(`Found ${relevantStays.length} relevant stays for lote ${loteId} in stage ${stage}`);
+
       if (relevantStays.length === 0) {
         return [];
       }
 
       // Get sensor readings for all relevant zones during the time period
-      const zoneIds = relevantStays.map(stay => stay.zone_id);
+      const zoneIds = relevantStays.map(stay => stay.zone_id).filter(Boolean);
+      
+      if (zoneIds.length === 0) {
+        console.log(`No valid zone IDs found for lote ${loteId} in stage ${stage}`);
+        return [];
+      }
+
       const placeholders = zoneIds.map(() => '?').join(',');
 
       const readingsQuery = `
@@ -1034,6 +1044,7 @@ export class SqlStorage implements IStorage {
         INNER JOIN sensors s ON sr.sensor_id = s.id
         WHERE s.zone_id IN (${placeholders})
         AND sr.timestamp >= ? AND sr.timestamp <= ?
+        AND s.is_active = 1
         ORDER BY sr.timestamp
       `;
 
@@ -1044,10 +1055,17 @@ export class SqlStorage implements IStorage {
         endTime.toISOString()
       ) as any[];
 
-      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage}`);
+      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage} across ${zoneIds.length} zones`);
       return result;
     } catch (error) {
       console.error("Error fetching sensor data by lote and stage:", error);
+      console.error("Error details:", {
+        loteId,
+        stage,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        error: error.message
+      });
       return [];
     }
   }

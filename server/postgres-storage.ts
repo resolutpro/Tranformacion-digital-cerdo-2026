@@ -673,14 +673,14 @@ export class PostgresStorage implements IStorage {
                 lte(stays.entryTime, endTime)
               ),
               and(
-                stays.exitTime ? gte(stays.exitTime, startTime) : undefined,
-                stays.exitTime ? lte(stays.exitTime, endTime) : undefined
+                stays.exitTime ? gte(stays.exitTime, startTime) : sql`${stays.exitTime} IS NOT NULL`,
+                stays.exitTime ? lte(stays.exitTime, endTime) : sql`1=0`
               ),
               and(
                 lte(stays.entryTime, startTime),
                 or(
-                  stays.exitTime ? gte(stays.exitTime, endTime) : undefined,
-                  eq(stays.exitTime, null)
+                  stays.exitTime ? gte(stays.exitTime, endTime) : sql`${stays.exitTime} IS NULL`,
+                  isNull(stays.exitTime)
                 )
               )
             )
@@ -688,11 +688,17 @@ export class PostgresStorage implements IStorage {
         );
 
       if (relevantStays.length === 0) {
+        console.log(`No relevant stays found for lote ${loteId} in stage ${stage}`);
         return [];
       }
 
       // Get sensor readings for all relevant zones during the time period
-      const zoneIds = relevantStays.map(stay => stay.zoneId);
+      const zoneIds = relevantStays.map(stay => stay.zoneId).filter(Boolean);
+
+      if (zoneIds.length === 0) {
+        console.log(`No valid zone IDs found for lote ${loteId} in stage ${stage}`);
+        return [];
+      }
 
       const result = await this.db
         .select({
@@ -712,10 +718,17 @@ export class PostgresStorage implements IStorage {
         )
         .orderBy(sensorReadings.timestamp);
 
-      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage}`);
+      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage} across ${zoneIds.length} zones`);
       return result;
     } catch (error) {
       console.error("Error fetching sensor data by lote and stage:", error);
+      console.error("Error details:", {
+        loteId,
+        stage,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        error: error.message
+      });
       return [];
     }
   }
