@@ -29,6 +29,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUsersByOrganization?(organizationId: string): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   
   // Lotes

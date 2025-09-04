@@ -601,8 +601,33 @@ export function registerRoutes(app: Express): Server {
       await storage.updateStay(currentStay.id, { exitTime: entryDate });
     }
 
-    // User de sistema para movimientos QR
-    const systemUserId = "626d9faf-69ff-44b3-b35d-387fd7919537";
+    // User de sistema para movimientos QR - crear o encontrar usuario del sistema
+    let systemUserId = "626d9faf-69ff-44b3-b35d-387fd7919537";
+    
+    // Verificar si el usuario del sistema existe, si no, crear uno o usar el primer usuario de la organización
+    try {
+      const systemUser = await storage.getUser(systemUserId);
+      if (!systemUser) {
+        // Buscar cualquier usuario de la organización para usar como fallback
+        const orgUsers = await storage.getUsersByOrganization?.(organizationId);
+        if (orgUsers && orgUsers.length > 0) {
+          systemUserId = orgUsers[0].id;
+        } else {
+          // Como último recurso, crear un usuario del sistema
+          const newSystemUser = await storage.createUser({
+            username: "sistema_qr",
+            email: "sistema@qr.local",
+            password: "sistema123", // Password temporal
+            organizationId: organizationId,
+          });
+          systemUserId = newSystemUser.id;
+        }
+      }
+    } catch (error) {
+      console.error("Error handling system user:", error);
+      // Como fallback, intentar usar NULL o el primer usuario disponible
+      systemUserId = null as any;
+    }
 
     // División en sublotes (matadero -> secadero)
     if (sublotes && Array.isArray(sublotes) && zone.stage === "secadero") {
@@ -627,7 +652,7 @@ export function registerRoutes(app: Express): Server {
           zoneId: zone.id,
           entryTime: entryDate,
           exitTime: null,
-          createdBy: systemUserId,
+          createdBy: systemUserId || "system",
         });
 
         createdSublotes.push(sublote);
@@ -654,7 +679,7 @@ export function registerRoutes(app: Express): Server {
       zoneId: zone.id,
       entryTime: entryDate,
       exitTime: null,
-      createdBy: systemUserId,
+      createdBy: systemUserId || "system",
     });
 
     // Generación de QR final (secadero -> distribucion)

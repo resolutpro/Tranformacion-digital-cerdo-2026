@@ -235,6 +235,12 @@ export class SqlStorage implements IStorage {
     return row ? this.mapUser(row) : undefined;
   }
 
+  async getUsersByOrganization(organizationId: string): Promise<User[]> {
+    const stmt = this.db.prepare('SELECT * FROM users WHERE organization_id = ?');
+    const rows = stmt.all(organizationId) as any[];
+    return rows.map(row => this.mapUser(row));
+  }
+
   async createUser(user: InsertUser): Promise<User> {
     const id = randomUUID();
     const stmt = this.db.prepare(
