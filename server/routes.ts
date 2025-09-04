@@ -167,6 +167,34 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
+  // Health check endpoint for deployment readiness
+  app.get("/health", (req, res) => {
+    res.status(200).json({ 
+      status: "healthy", 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: "1.0.0"
+    });
+  });
+
+  // Root endpoint for basic requests and deployment readiness
+  app.get("/", (req, res) => {
+    res.status(200).json({ 
+      message: "Livestock Traceability Management System API",
+      status: "running",
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Additional health check paths that deployment services might use
+  app.get("/api/health", (req, res) => {
+    res.status(200).json({ 
+      status: "healthy", 
+      api: "ready",
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // Lotes API
   app.get("/api/lotes", requireAuth, async (req: any, res) => {
     try {

@@ -23,6 +23,7 @@ Preferred communication style: Simple, everyday language.
 - **Session Storage**: Express sessions with PostgreSQL store via connect-pg-simple
 - **API Design**: RESTful endpoints with consistent error handling
 - **Development**: Hot module replacement via Vite integration
+- **Health Monitoring**: Built-in health check endpoints for deployment readiness (/health, /api/health)
 
 ## Database Design
 - **Primary Database**: PostgreSQL with Drizzle ORM

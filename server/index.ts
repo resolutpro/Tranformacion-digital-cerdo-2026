@@ -69,6 +69,15 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  
+  // Enhanced logging for deployment debugging
+  log(`Starting server configuration:`);
+  log(`  - Port: ${port}`);
+  log(`  - Host: 0.0.0.0`);
+  log(`  - Environment: ${process.env.NODE_ENV || 'development'}`);
+  log(`  - Process ID: ${process.pid}`);
+  log(`  - Memory Usage: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
+  
   server.listen(
     {
       port,
@@ -76,7 +85,36 @@ app.use((req, res, next) => {
       reusePort: true,
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`✓ Server successfully started and listening on port ${port}`);
+      log(`✓ Health check available at: http://0.0.0.0:${port}/health`);
+      log(`✓ API health check available at: http://0.0.0.0:${port}/api/health`);
+      log(`✓ Server is ready to accept connections`);
     },
   );
+
+  // Handle server startup errors
+  server.on('error', (error: any) => {
+    console.error(`[ERROR] Server failed to start:`, error);
+    if (error.code === 'EADDRINUSE') {
+      console.error(`[ERROR] Port ${port} is already in use`);
+    }
+    process.exit(1);
+  });
+
+  // Handle graceful shutdown
+  process.on('SIGTERM', () => {
+    log('Received SIGTERM, shutting down gracefully');
+    server.close(() => {
+      log('Server closed successfully');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    log('Received SIGINT, shutting down gracefully');
+    server.close(() => {
+      log('Server closed successfully');
+      process.exit(0);
+    });
+  });
 })();
