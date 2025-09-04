@@ -207,22 +207,24 @@ export function registerRoutes(app: Express): Server {
     });
   });
 
-  // Handle static assets that might cause 502 errors in production
-  // For production deployment, serve favicon from the static directory
+  // CRITICAL: Handle favicon.ico to prevent 502 errors in deployment
   app.get("/favicon.ico", (req, res) => {
-    console.log(`[FAVICON] ${new Date().toISOString()} - Favicon requested from ${req.ip}`);
+    const timestamp = new Date().toISOString();
+    console.log(`[FAVICON] ${timestamp} - Favicon requested from ${req.ip}`);
     
-    if (process.env.NODE_ENV === "production") {
-      const faviconPath = path.resolve(import.meta.dirname, "public", "favicon.ico");
-      res.sendFile(faviconPath, (err) => {
-        if (err) {
-          console.log(`[FAVICON-ERROR] Could not serve favicon from ${faviconPath}`);
-          res.status(204).end();
-        }
-      });
-    } else {
-      res.status(204).end();
-    }
+    // Always serve a proper favicon to avoid 502 errors
+    const faviconPath = path.resolve(import.meta.dirname, "public", "favicon.ico");
+    console.log(`[FAVICON-DEBUG] Attempting to serve from: ${faviconPath}`);
+    
+    res.sendFile(faviconPath, (err) => {
+      if (err) {
+        console.error(`[FAVICON-ERROR] ${timestamp} - Could not serve favicon:`, err.message);
+        // Fallback: send empty response with correct content-type
+        res.type('image/x-icon').status(200).end();
+      } else {
+        console.log(`[FAVICON-SUCCESS] ${timestamp} - Favicon served successfully`);
+      }
+    });
   });
 
   app.get("/robots.txt", (req, res) => {
