@@ -207,7 +207,7 @@ export function registerRoutes(app: Express): Server {
         status: 'active'
       };
       
-      logger.info('POST /api/lotes', { organizationId: req.organizationId, payload: loteWithStatus });
+      logger.info('POST /api/lotes', { organizationId: req.organizationId, payload: loteWithStatus, customData: loteWithStatus.customData });
       const lote = await storage.createLote(loteWithStatus);
       logger.info('Lote created', { loteId: lote.id, status: lote.status });
       res.status(201).json(lote);

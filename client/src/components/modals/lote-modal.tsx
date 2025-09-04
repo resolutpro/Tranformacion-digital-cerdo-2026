@@ -121,6 +121,10 @@ export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalPro
       foodRegime: formData.foodRegime || undefined,
       customData: customFieldsData,
     };
+    
+    console.log('[DEBUG] LoteModal submitting data:', data);
+    console.log('[DEBUG] customFieldsData state:', customFieldsData);
+    console.log('[DEBUG] template:', template);
 
     mutation.mutate(data);
   };
