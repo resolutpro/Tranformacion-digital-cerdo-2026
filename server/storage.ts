@@ -20,18 +20,18 @@ const MemoryStore = createMemoryStore(session);
 export interface IStorage {
   // Auth
   sessionStore: Store;
-  
+
   // Organizations
   getOrganization(id: string): Promise<Organization | undefined>;
   createOrganization(org: InsertOrganization): Promise<Organization>;
-  
+
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUsersByOrganization?(organizationId: string): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
-  
+
   // Lotes
   getLotesByOrganization(organizationId: string): Promise<Lote[]>;
   getSubLotes(parentLoteId: string, organizationId: string): Promise<Lote[]>;
@@ -39,11 +39,11 @@ export interface IStorage {
   createLote(lote: InsertLote): Promise<Lote>;
   updateLote(id: string, lote: Partial<InsertLote>, organizationId: string): Promise<Lote | undefined>;
   deleteLote(id: string, organizationId: string): Promise<boolean>;
-  
+
   // Lote Templates
   getLoteTemplate(organizationId: string): Promise<LoteTemplate | undefined>;
   updateLoteTemplate(template: InsertLoteTemplate): Promise<LoteTemplate>;
-  
+
   // Zones
   getZonesByOrganization(organizationId: string): Promise<Zone[]>;
   getZonesByStage(organizationId: string, stage: string): Promise<Zone[]>;
@@ -53,7 +53,7 @@ export interface IStorage {
   createZone(zone: InsertZone): Promise<Zone>;
   updateZone(id: string, zone: Partial<InsertZone>, organizationId: string): Promise<Zone | undefined>;
   deleteZone(id: string, organizationId: string): Promise<boolean>;
-  
+
   // Stays
   getStaysByLote(loteId: string): Promise<Stay[]>;
   getActiveStayByLote(loteId: string): Promise<Stay | undefined>;
@@ -61,7 +61,7 @@ export interface IStorage {
   createStay(stay: InsertStay): Promise<Stay>;
   updateStay(id: string, stay: Partial<InsertStay>): Promise<Stay | undefined>;
   closeStay(id: string, exitTime: Date): Promise<Stay | undefined>;
-  
+
   // Sensors
   getSensorsByZone(zoneId: string): Promise<Sensor[]>;
   getSensorsByOrganization(organizationId: string): Promise<Sensor[]>;
@@ -71,30 +71,32 @@ export interface IStorage {
   updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined>;
   rotateSensorCredentials(id: string): Promise<{ username: string; password: string } | undefined>;
   deleteSensor(id: string): Promise<boolean>;
-  
+
   // Sensor Readings
   getSensorReadings(sensorId: string, startTime?: Date, endTime?: Date, includeSimulated?: boolean): Promise<SensorReading[]>;
   getLatestReadingBySensor(sensorId: string): Promise<SensorReading | undefined>;
   getLatestReadingsByZone(zoneId: string, today?: Date): Promise<Array<SensorReading & { sensor: Sensor }>>;
   createSensorReading(reading: InsertSensorReading): Promise<SensorReading>;
-  
+
   // Zone QR Codes
   getZoneQr(zoneId: string): Promise<ZoneQr | undefined>;
   getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined>;
   createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr>;
-  
+
   // QR Snapshots
   getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]>;
   getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined>;
   getQrSnapshot(id: string): Promise<QrSnapshot | undefined>;
-  createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot>;
   updateQrSnapshot(id: string, data: Partial<Pick<QrSnapshot, 'publicToken' | 'scanCount' | 'isActive'>>): Promise<QrSnapshot | undefined>;
   incrementScanCount(token: string): Promise<void>;
   revokeQrSnapshot(id: string, organizationId: string): Promise<boolean>;
-  
+
   // Audit Log
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogsByEntity(entityType: string, entityId: string): Promise<AuditLog[]>;
+
+  // Sensor data for traceability
+  getSensorDataByLoteAndStage(loteId: string, stage: string, startTime: Date, endTime: Date): Promise<any[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -109,7 +111,7 @@ export class MemStorage implements IStorage {
   private zoneQrs: Map<string, ZoneQr> = new Map();
   private qrSnapshots: Map<string, QrSnapshot> = new Map();
   private auditLogs: Map<string, AuditLog> = new Map();
-  
+
   public readonly sessionStore: Store;
 
   constructor() {
@@ -193,7 +195,7 @@ export class MemStorage implements IStorage {
   async updateLote(id: string, lote: Partial<InsertLote>, organizationId: string): Promise<Lote | undefined> {
     const existing = this.lotes.get(id);
     if (!existing || existing.organizationId !== organizationId) return undefined;
-    
+
     const updated = { ...existing, ...lote };
     this.lotes.set(id, updated);
     return updated;
@@ -202,7 +204,7 @@ export class MemStorage implements IStorage {
   async deleteLote(id: string, organizationId: string): Promise<boolean> {
     const lote = this.lotes.get(id);
     if (!lote || lote.organizationId !== organizationId) return false;
-    
+
     this.lotes.delete(id);
     return true;
   }
@@ -214,7 +216,7 @@ export class MemStorage implements IStorage {
 
   async updateLoteTemplate(template: InsertLoteTemplate): Promise<LoteTemplate> {
     const existing = await this.getLoteTemplate(template.organizationId);
-    
+
     if (existing) {
       const updated = { ...existing, ...template };
       this.loteTemplates.set(existing.id, updated);
@@ -265,7 +267,7 @@ export class MemStorage implements IStorage {
   async updateZone(id: string, zone: Partial<InsertZone>, organizationId: string): Promise<Zone | undefined> {
     const existing = this.zones.get(id);
     if (!existing || existing.organizationId !== organizationId) return undefined;
-    
+
     const updated = { ...existing, ...zone };
     this.zones.set(id, updated);
     return updated;
@@ -274,13 +276,13 @@ export class MemStorage implements IStorage {
   async deleteZone(id: string, organizationId: string): Promise<boolean> {
     const zone = this.zones.get(id);
     if (!zone || zone.organizationId !== organizationId) return false;
-    
+
     // Check for active stays
     const activeStays = Array.from(this.stays.values()).filter(stay => 
       stay.zoneId === id && !stay.exitTime
     );
     if (activeStays.length > 0) return false;
-    
+
     // Mark as inactive instead of deleting
     const updated = { ...zone, isActive: false };
     this.zones.set(id, updated);
@@ -326,7 +328,7 @@ export class MemStorage implements IStorage {
   async updateStay(id: string, stay: Partial<InsertStay>): Promise<Stay | undefined> {
     const existing = this.stays.get(id);
     if (!existing) return undefined;
-    
+
     const updated = { ...existing, ...stay };
     this.stays.set(id, updated);
     return updated;
@@ -335,7 +337,7 @@ export class MemStorage implements IStorage {
   async closeStay(id: string, exitTime: Date): Promise<Stay | undefined> {
     const existing = this.stays.get(id);
     if (!existing) return undefined;
-    
+
     const updated = { ...existing, exitTime };
     this.stays.set(id, updated);
     return updated;
@@ -372,7 +374,7 @@ export class MemStorage implements IStorage {
   async updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined> {
     const existing = this.sensors.get(id);
     if (!existing) return undefined;
-    
+
     const updated = { ...existing, ...sensor };
     this.sensors.set(id, updated);
     return updated;
@@ -381,20 +383,20 @@ export class MemStorage implements IStorage {
   async rotateSensorCredentials(id: string): Promise<{ username: string; password: string } | undefined> {
     const sensor = this.sensors.get(id);
     if (!sensor) return undefined;
-    
+
     const newUsername = `sensor_${randomUUID().substring(0, 8)}`;
     const newPassword = randomUUID();
-    
+
     const updated = { ...sensor, mqttUsername: newUsername, mqttPassword: newPassword };
     this.sensors.set(id, updated);
-    
+
     return { username: newUsername, password: newPassword };
   }
 
   async deleteSensor(id: string): Promise<boolean> {
     const sensor = this.sensors.get(id);
     if (!sensor) return false;
-    
+
     // Mark as inactive
     const updated = { ...sensor, isActive: false };
     this.sensors.set(id, updated);
@@ -404,19 +406,19 @@ export class MemStorage implements IStorage {
   // Sensor Readings
   async getSensorReadings(sensorId: string, startTime?: Date, endTime?: Date, includeSimulated = true): Promise<SensorReading[]> {
     let readings = Array.from(this.sensorReadings.values()).filter(reading => reading.sensorId === sensorId);
-    
+
     if (!includeSimulated) {
       readings = readings.filter(reading => !reading.isSimulated);
     }
-    
+
     if (startTime) {
       readings = readings.filter(reading => reading.timestamp >= startTime);
     }
-    
+
     if (endTime) {
       readings = readings.filter(reading => reading.timestamp <= endTime);
     }
-    
+
     return readings.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
 
@@ -424,35 +426,35 @@ export class MemStorage implements IStorage {
     const readings = Array.from(this.sensorReadings.values())
       .filter(reading => reading.sensorId === sensorId)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    
+
     return readings[0];
   }
 
   async getLatestReadingsByZone(zoneId: string, today?: Date): Promise<Array<SensorReading & { sensor: Sensor }>>  {
     const sensors = await this.getSensorsByZone(zoneId);
     const results: Array<SensorReading & { sensor: Sensor }> = [];
-    
+
     for (const sensor of sensors) {
       let readings = Array.from(this.sensorReadings.values())
         .filter(reading => reading.sensorId === sensor.id);
-      
+
       if (today) {
         const startOfDay = new Date(today);
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(today);
         endOfDay.setHours(23, 59, 59, 999);
-        
+
         readings = readings.filter(reading => 
           reading.timestamp >= startOfDay && reading.timestamp <= endOfDay
         );
       }
-      
+
       const latest = readings.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
       if (latest) {
         results.push({ ...latest, sensor });
       }
     }
-    
+
     return results;
   }
 
@@ -491,7 +493,7 @@ export class MemStorage implements IStorage {
   async getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]> {
     const orgLotes = await this.getLotesByOrganization(organizationId);
     const loteIds = new Set(orgLotes.map(l => l.id));
-    
+
     return Array.from(this.qrSnapshots.values())
       .filter(snapshot => loteIds.has(snapshot.loteId))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -510,7 +512,7 @@ export class MemStorage implements IStorage {
   async updateQrSnapshot(id: string, data: Partial<Pick<QrSnapshot, 'publicToken' | 'scanCount' | 'isActive'>>): Promise<QrSnapshot | undefined> {
     const snapshot = this.qrSnapshots.get(id);
     if (!snapshot) return undefined;
-    
+
     const updated = { ...snapshot, ...data };
     this.qrSnapshots.set(id, updated);
     return updated;
@@ -539,10 +541,10 @@ export class MemStorage implements IStorage {
   async revokeQrSnapshot(id: string, organizationId: string): Promise<boolean> {
     const snapshot = this.qrSnapshots.get(id);
     if (!snapshot) return false;
-    
+
     const lote = this.lotes.get(snapshot.loteId);
     if (!lote || lote.organizationId !== organizationId) return false;
-    
+
     const updated = { ...snapshot, isActive: false };
     this.qrSnapshots.set(id, updated);
     return true;
@@ -551,21 +553,72 @@ export class MemStorage implements IStorage {
   // Audit Log
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const id = randomUUID();
-    const newLog: AuditLog = { 
-      ...log, 
-      id,
-      oldData: log.oldData || null,
-      newData: log.newData || null,
-      timestamp: new Date() 
-    };
-    this.auditLogs.set(id, newLog);
-    return newLog;
+    const auditEntry: AuditLog = { ...log, id, timestamp: new Date() };
+    this.auditLogs.set(id, auditEntry);
+    return auditEntry;
   }
 
   async getAuditLogsByEntity(entityType: string, entityId: string): Promise<AuditLog[]> {
     return Array.from(this.auditLogs.values())
       .filter(log => log.entityType === entityType && log.entityId === entityId)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }
+
+  async getSensorDataByLoteAndStage(
+    loteId: string,
+    stage: string,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<any[]> {
+    try {
+      // Get all stays for this lote in this stage during the time period
+      const relevantStays = Array.from(this.stays.values())
+        .filter(stay => {
+          if (stay.loteId !== loteId) return false;
+
+          const zone = this.zones.get(stay.zoneId!);
+          if (!zone || zone.stage !== stage) return false;
+
+          // Check if stay overlaps with time period
+          const stayStart = stay.entryTime.getTime();
+          const stayEnd = stay.exitTime?.getTime() || Date.now();
+          const periodStart = startTime.getTime();
+          const periodEnd = endTime.getTime();
+
+          return (stayStart <= periodEnd && stayEnd >= periodStart);
+        });
+
+      if (relevantStays.length === 0) {
+        return [];
+      }
+
+      const zoneIds = relevantStays.map(stay => stay.zoneId!);
+      const sensors = Array.from(this.sensors.values())
+        .filter(sensor => zoneIds.includes(sensor.zoneId));
+
+      const sensorIds = sensors.map(s => s.id);
+      const readings = Array.from(this.sensorReadings.values())
+        .filter(reading => 
+          sensorIds.includes(reading.sensorId) &&
+          reading.timestamp >= startTime &&
+          reading.timestamp <= endTime
+        )
+        .map(reading => {
+          const sensor = sensors.find(s => s.id === reading.sensorId);
+          return {
+            id: reading.id,
+            sensorType: sensor?.sensorType || 'unknown',
+            value: reading.value,
+            timestamp: reading.timestamp,
+          };
+        });
+
+      console.log(`Found ${readings.length} sensor readings for lote ${loteId} in stage ${stage}`);
+      return readings;
+    } catch (error) {
+      console.error("Error fetching sensor data by lote and stage:", error);
+      return [];
+    }
   }
 }
 

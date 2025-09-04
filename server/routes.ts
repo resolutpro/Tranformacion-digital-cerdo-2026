@@ -127,8 +127,10 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
         new Date(startTime),
         new Date(endTime),
       );
+      console.log(`Retrieved ${sensorData.length} sensor readings for lote ${loteId}, stage ${stage}`);
     } catch (error) {
       console.error(`Error fetching sensor data for phase ${stage}:`, error);
+      console.error('Error stack:', error.stack);
     }
 
     // Calculate metrics

@@ -990,4 +990,65 @@ export class SqlStorage implements IStorage {
 
     return this.createLote(subLote);
   }
+
+  // Get sensor data by lote and stage for traceability
+  async getSensorDataByLoteAndStage(
+    loteId: string,
+    stage: string,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<any[]> {
+    try {
+      // First get all stays for this lote in this stage during the time period
+      const staysQuery = `
+        SELECT s.zone_id, s.entry_time, s.exit_time
+        FROM stays s
+        INNER JOIN zones z ON z.id = s.zone_id
+        WHERE s.lote_id = ? AND z.stage = ?
+        AND (
+          (s.entry_time >= ? AND s.entry_time <= ?) OR
+          (s.exit_time IS NOT NULL AND s.exit_time >= ? AND s.exit_time <= ?) OR
+          (s.entry_time <= ? AND (s.exit_time IS NULL OR s.exit_time >= ?))
+        )
+      `;
+
+      const staysStmt = this.db.prepare(staysQuery);
+      const relevantStays = staysStmt.all(
+        loteId, stage,
+        startTime.toISOString(), endTime.toISOString(),
+        startTime.toISOString(), endTime.toISOString(),
+        startTime.toISOString(), endTime.toISOString()
+      ) as any[];
+
+      if (relevantStays.length === 0) {
+        return [];
+      }
+
+      // Get sensor readings for all relevant zones during the time period
+      const zoneIds = relevantStays.map(stay => stay.zone_id);
+      const placeholders = zoneIds.map(() => '?').join(',');
+
+      const readingsQuery = `
+        SELECT sr.id, s.sensor_type, sr.value, sr.timestamp
+        FROM sensor_readings sr
+        INNER JOIN sensors s ON sr.sensor_id = s.id
+        WHERE s.zone_id IN (${placeholders})
+        AND sr.timestamp >= ? AND sr.timestamp <= ?
+        ORDER BY sr.timestamp
+      `;
+
+      const readingsStmt = this.db.prepare(readingsQuery);
+      const result = readingsStmt.all(
+        ...zoneIds,
+        startTime.toISOString(),
+        endTime.toISOString()
+      ) as any[];
+
+      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage}`);
+      return result;
+    } catch (error) {
+      console.error("Error fetching sensor data by lote and stage:", error);
+      return [];
+    }
+  }
 }

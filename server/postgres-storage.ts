@@ -697,7 +697,7 @@ export class PostgresStorage implements IStorage {
       const result = await this.db
         .select({
           id: sensorReadings.id,
-          sensorType: sensorReadings.sensorType,
+          sensorType: sensors.sensorType,
           value: sensorReadings.value,
           timestamp: sensorReadings.timestamp,
         })
