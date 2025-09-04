@@ -1,276 +1,341 @@
-import { useState, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Lote } from "@shared/schema";
 
-interface CustomField {
-  name: string;
-  type: string;
-  required: boolean;
+type TemplateField =
+  | {
+      key: string;
+      label: string;
+      type: "text";
+      required?: boolean;
+      defaultValue?: string;
+    }
+  | {
+      key: string;
+      label: string;
+      type: "number";
+      required?: boolean;
+      defaultValue?: number;
+    }
+  | {
+      key: string;
+      label: string;
+      type: "select";
+      required?: boolean;
+      options: string[];
+      defaultValue?: string;
+    }
+  | {
+      key: string;
+      label: string;
+      type: "date";
+      required?: boolean;
+      defaultValue?: string;
+    };
+
+interface LoteTemplateDTO {
+  id: string;
+  organizationId: string;
+  customFields: TemplateField[]; // definición, no valores
+  defaults?: Record<string, any>;
+  updatedAt?: string;
 }
 
-interface LoteModalProps {
+interface CustomFieldValue {
+  key: string;
+  label?: string;
+  type?: TemplateField["type"];
+  value: any;
+}
+
+export function LoteModal({
+  isOpen,
+  onClose,
+  lote,
+  onLoteCreated,
+}: {
   isOpen: boolean;
   onClose: () => void;
-  lote?: Lote | null;
-  onLoteCreated?: (loteId: string) => void;
-}
-
-export function LoteModal({ isOpen, onClose, lote, onLoteCreated }: LoteModalProps) {
-  const [formData, setFormData] = useState({
-    identification: "",
-    initialAnimals: "",
-    finalAnimals: "",
-    foodRegime: "",
-  });
-  const [customFieldsData, setCustomFieldsData] = useState<Record<string, any>>({});
+  lote: Lote | null; // si viene -> edición
+  onLoteCreated?: (id: string) => void;
+}) {
   const { toast } = useToast();
-  const { user } = useAuth();
 
-  // Load lote template for custom fields
-  const { data: template, isLoading: isLoadingTemplate, error: templateError, refetch: refetchTemplate } = useQuery<{customFields: CustomField[]}>({
+  // 1) Cargar plantilla al abrir
+  const { data: template } = useQuery<LoteTemplateDTO>({
     queryKey: ["/api/lote-template"],
-    enabled: isOpen && !!user, // Only load when modal is open AND user is authenticated
-    retry: 3,
-    retryDelay: 1000,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/lote-template");
+      if (!res.ok) throw new Error("No se pudo cargar la plantilla");
+      const t = await res.json();
+      return {
+        ...t,
+        customFields: Array.isArray(t?.customFields) ? t.customFields : [],
+      };
+    },
+    enabled: isOpen,
   });
 
-  // Invalidate template when modal opens to ensure fresh data
-  useEffect(() => {
-    if (isOpen && user) {
-      queryClient.invalidateQueries({ queryKey: ["/api/lote-template"] });
-    }
-  }, [isOpen, user]);
+  // 2) Estado base del lote
+  const [identification, setIdentification] = useState(
+    lote?.identification ?? "",
+  );
+  const [initialAnimals, setInitialAnimals] = useState<number>(
+    lote?.initialAnimals ?? 0,
+  );
+  const [foodRegime, setFoodRegime] = useState<string>(lote?.foodRegime ?? "");
 
-  useEffect(() => {
-    if (lote) {
-      setFormData({
-        identification: lote.identification,
-        initialAnimals: lote.initialAnimals.toString(),
-        finalAnimals: lote.finalAnimals?.toString() || "",
-        foodRegime: lote.foodRegime || "",
-      });
-      setCustomFieldsData(lote.customData || {});
-    } else {
-      setFormData({
-        identification: "",
-        initialAnimals: "",
-        finalAnimals: "",
-        foodRegime: "",
-      });
-      setCustomFieldsData({});
-    }
-  }, [lote, isOpen]);
+  // 3) Estado dinámico
+  const initialDynamicValues = useMemo(() => {
+    // Si edito, mapear valores existentes (array → objeto)
+    const existingObj: Record<string, any> = (lote?.customFields ?? []).reduce(
+      (acc: any, it: CustomFieldValue) => {
+        acc[it.key] = it.value;
+        return acc;
+      },
+      {},
+    );
+    // Defaults de plantilla
+    const defsFromTemplate = Object.fromEntries(
+      (template?.customFields ?? []).map((f) => [
+        f.key,
+        existingObj[f.key] ??
+          ("defaultValue" in f ? (f as any).defaultValue : undefined),
+      ]),
+    );
+    return { ...defsFromTemplate, ...existingObj };
+  }, [template, lote]);
 
-  // Separate effect for template changes to initialize custom fields for new lotes
+  const [dynamicValues, setDynamicValues] = useState<Record<string, any>>({});
   useEffect(() => {
-    if (!lote && template?.customFields && template.customFields.length > 0 && isOpen) {
-      const initialCustomData: Record<string, any> = {};
-      template.customFields.forEach(field => {
-        initialCustomData[field.name] = "";
-      });
-      setCustomFieldsData(initialCustomData);
-    }
-  }, [template, lote, isOpen]);
+    setDynamicValues(initialDynamicValues);
+  }, [initialDynamicValues]);
 
-  const mutation = useMutation({
-    mutationFn: async (data: any) => {
-      const endpoint = lote ? `/api/lotes/${lote.id}` : "/api/lotes";
-      const method = lote ? "PUT" : "POST";
-      const res = await apiRequest(method, endpoint, data);
+  const setDynamicValue = (key: string, value: any) =>
+    setDynamicValues((s) => ({ ...s, [key]: value }));
+
+  // 4) Mutaciones
+  const createMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await apiRequest("POST", "/api/lotes", payload);
+      if (!res.ok)
+        throw new Error(
+          (await res.json()).message ?? "No se pudo crear el lote",
+        );
       return res.json();
     },
-    onSuccess: (createdLote) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
-      if (lote) {
-        toast({
-          title: "Lote actualizado",
-          description: "El lote ha sido actualizado correctamente",
-        });
-      } else {
-        // For new lotes, call the callback instead of showing toast here
-        onLoteCreated?.(createdLote.id);
-      }
+      toast({
+        title: "Lote creado",
+        description: "El lote se ha guardado correctamente",
+      });
+      onLoteCreated?.(data.id);
       onClose();
     },
-    onError: (error: any) => {
+    onError: (e: any) => {
       toast({
         title: "Error",
-        description: error.message || "No se pudo guardar el lote",
+        description: e?.message ?? "No se pudo crear el lote",
         variant: "destructive",
       });
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const updateMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await apiRequest("PUT", `/api/lotes/${lote!.id}`, payload);
+      if (!res.ok)
+        throw new Error(
+          (await res.json()).message ?? "No se pudo actualizar el lote",
+        );
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/lotes"] });
+      toast({
+        title: "Lote actualizado",
+        description: "Los cambios se han guardado",
+      });
+      onClose();
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Error",
+        description: e?.message ?? "No se pudo actualizar el lote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const data = {
-      identification: formData.identification,
-      initialAnimals: parseInt(formData.initialAnimals),
-      finalAnimals: formData.finalAnimals ? parseInt(formData.finalAnimals) : undefined,
-      foodRegime: formData.foodRegime || undefined,
-      customData: customFieldsData,
+
+    // 5) Construir array de valores a partir de la definición + estado
+    const defs = template?.customFields ?? [];
+    const customFields: CustomFieldValue[] = defs
+      .map((f) => {
+        const raw = dynamicValues[f.key];
+        const value =
+          f.type === "number"
+            ? raw === "" || raw === undefined
+              ? undefined
+              : Number(raw)
+            : raw;
+
+        if (f.required && (value === undefined || value === "")) {
+          throw new Error(`El campo "${f.label}" es obligatorio`);
+        }
+        if (value === undefined || value === "") return null;
+
+        return { key: f.key, label: f.label, type: f.type, value };
+      })
+      .filter(Boolean) as CustomFieldValue[];
+
+    const base = {
+      identification: identification.trim(),
+      initialAnimals: Number(initialAnimals) || 0,
+      foodRegime: foodRegime || null,
+      customFields, // <-- VALORES que irán a lotes.customFields
     };
 
-    mutation.mutate(data);
+    if (lote) updateMutation.mutate(base);
+    else createMutation.mutate(base);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[350px] max-h-[80vh]" data-testid="modal-lote">
+    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-lg">
-            {lote ? "Editar Lote" : "Nuevo Lote"}
-          </DialogTitle>
+          <DialogTitle>{lote ? "Editar lote" : "Nuevo lote"}</DialogTitle>
         </DialogHeader>
-        <div className="overflow-y-auto max-h-[calc(80vh-120px)]">
-          <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="identification" className="text-sm">Identificación *</Label>
-            <Input
-              id="identification"
-              value={formData.identification}
-              onChange={(e) => setFormData({ ...formData, identification: e.target.value })}
-              placeholder="LOTE-2024-003"
-              required
-              data-testid="input-lote-identification"
-            />
-          </div>
-          
-          <div className="space-y-1">
-            <Label htmlFor="initialAnimals" className="text-sm">Nº de animales iniciales *</Label>
-            <Input
-              id="initialAnimals"
-              type="number"
-              min="1"
-              value={formData.initialAnimals}
-              onChange={(e) => setFormData({ ...formData, initialAnimals: e.target.value })}
-              placeholder="45"
-              required
-              data-testid="input-lote-initial-animals"
-            />
-          </div>
-          
-          <div className="space-y-1">
-            <Label htmlFor="foodRegime" className="text-sm">Régimen de comida</Label>
-            <Select 
-              value={formData.foodRegime} 
-              onValueChange={(value) => setFormData({ ...formData, foodRegime: value })}
-            >
-              <SelectTrigger data-testid="select-lote-food-regime">
-                <SelectValue placeholder="Seleccionar..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bellota">Bellota</SelectItem>
-                <SelectItem value="recebo">Recebo</SelectItem>
-                <SelectItem value="cebo">Cebo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="space-y-1">
-            <Label htmlFor="finalAnimals" className="text-sm">Nº de animales finales</Label>
-            <Input
-              id="finalAnimals"
-              type="number"
-              min="1"
-              value={formData.finalAnimals}
-              onChange={(e) => setFormData({ ...formData, finalAnimals: e.target.value })}
-              placeholder="45"
-              data-testid="input-lote-final-animals"
-            />
-          </div>
-          
-          {/* Loading indicator for template */}
-          {isLoadingTemplate && (
-            <div className="border-t pt-4 space-y-4">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Cargando campos personalizados...</span>
-              </div>
-            </div>
-          )}
 
-          {/* Dynamic custom fields from template */}
-          {template?.customFields && template.customFields.length > 0 && (
-            <div className="border-t pt-4 space-y-4">
-              <h4 className="font-medium text-sm">Campos personalizados ({template.customFields.length})</h4>
-              {template.customFields.map((field, index) => (
-                <div key={index} className="space-y-2">
-                  <Label htmlFor={`custom-${field.name}`}>
-                    {field.name} {field.required && "*"}
-                  </Label>
-                  {field.type === "textarea" ? (
-                    <Textarea
-                      id={`custom-${field.name}`}
-                      value={customFieldsData[field.name] || ""}
-                      onChange={(e) => setCustomFieldsData({
-                        ...customFieldsData,
-                        [field.name]: e.target.value
-                      })}
-                      placeholder={`Ingrese ${field.name.toLowerCase()}`}
-                      required={field.required}
-                      data-testid={`input-custom-${field.name.toLowerCase().replace(/\\s+/g, '-')}`}
-                    />
-                  ) : field.type === "number" ? (
-                    <Input
-                      id={`custom-${field.name}`}
-                      type="number"
-                      value={customFieldsData[field.name] || ""}
-                      onChange={(e) => setCustomFieldsData({
-                        ...customFieldsData,
-                        [field.name]: e.target.value
-                      })}
-                      placeholder={`Ingrese ${field.name.toLowerCase()}`}
-                      required={field.required}
-                      data-testid={`input-custom-${field.name.toLowerCase().replace(/\\s+/g, '-')}`}
-                    />
-                  ) : (
-                    <Input
-                      id={`custom-${field.name}`}
-                      type="text"
-                      value={customFieldsData[field.name] || ""}
-                      onChange={(e) => setCustomFieldsData({
-                        ...customFieldsData,
-                        [field.name]: e.target.value
-                      })}
-                      placeholder={`Ingrese ${field.name.toLowerCase()}`}
-                      required={field.required}
-                      data-testid={`input-custom-${field.name.toLowerCase().replace(/\\s+/g, '-')}`}
-                    />
-                  )}
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div>
+            <Label>Identificación</Label>
+            <Input
+              value={identification}
+              onChange={(e) => setIdentification(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <Label>Animales iniciales</Label>
+            <Input
+              type="number"
+              min={0}
+              value={initialAnimals}
+              onChange={(e) =>
+                setInitialAnimals(
+                  e.target.value === "" ? 0 : Number(e.target.value),
+                )
+              }
+            />
+          </div>
+          <div>
+            <Label>Régimen alimentario</Label>
+            <Input
+              value={foodRegime}
+              onChange={(e) => setFoodRegime(e.target.value)}
+            />
+          </div>
+
+          {/* Campos dinámicos */}
+          {(template?.customFields ?? []).map((f) => {
+            const v = dynamicValues[f.key] ?? "";
+            if (f.type === "select") {
+              return (
+                <div key={f.key}>
+                  <Label>{f.label}</Label>
+                  <Select
+                    value={v ?? ""}
+                    onValueChange={(val) => setDynamicValue(f.key, val)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(f.options ?? []).map((opt) => (
+                        <SelectItem key={opt} value={opt}>
+                          {opt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              ))}
-            </div>
-          )}
-          
-            <div className="flex gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-                Cancelar
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={mutation.isPending}
-                className="flex-1"
-                data-testid="button-save-lote"
-              >
-                {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {lote ? "Actualizar" : "Guardar"}
-              </Button>
-            </div>
-          </form>
-        </div>
+              );
+            }
+            if (f.type === "number") {
+              return (
+                <div key={f.key}>
+                  <Label>{f.label}</Label>
+                  <Input
+                    type="number"
+                    value={v}
+                    onChange={(e) => setDynamicValue(f.key, e.target.value)}
+                    required={!!f.required}
+                  />
+                </div>
+              );
+            }
+            if (f.type === "date") {
+              return (
+                <div key={f.key}>
+                  <Label>{f.label}</Label>
+                  <Input
+                    type="date"
+                    value={v}
+                    onChange={(e) => setDynamicValue(f.key, e.target.value)}
+                    required={!!f.required}
+                  />
+                </div>
+              );
+            }
+            return (
+              <div key={f.key}>
+                <Label>{f.label}</Label>
+                <Input
+                  value={v}
+                  onChange={(e) => setDynamicValue(f.key, e.target.value)}
+                  required={!!f.required}
+                />
+              </div>
+            );
+          })}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || updateMutation.isPending}
+            >
+              {lote ? "Guardar cambios" : "Crear lote"}
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );
 }
+
+export default LoteModal;

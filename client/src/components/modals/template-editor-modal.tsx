@@ -1,217 +1,245 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Loader2 } from "lucide-react";
 
-interface CustomField {
-  name: string;
-  type: string;
-  required: boolean;
+type FieldType = "text" | "number" | "select" | "date";
+
+interface TemplateField {
+  key: string;
+  label: string;
+  type: FieldType;
+  required?: boolean;
+  options?: string[]; // solo para select
+  defaultValue?: any;
 }
 
-interface TemplateEditorModalProps {
+interface TemplateDTO {
+  id?: string;
+  customFields: TemplateField[];
+}
+
+export function TemplateEditorModal({
+  isOpen,
+  onClose,
+  onSaved,
+}: {
   isOpen: boolean;
   onClose: () => void;
-}
-
-export function TemplateEditorModal({ isOpen, onClose }: TemplateEditorModalProps) {
-  const [customFields, setCustomFields] = useState<CustomField[]>([]);
-  const [newField, setNewField] = useState<CustomField>({
-    name: "",
-    type: "text",
-    required: false
-  });
+  onSaved?: () => void;
+}) {
   const { toast } = useToast();
 
-  const { data: template, isLoading } = useQuery<{customFields: CustomField[]}>({
+  const { data: template } = useQuery<TemplateDTO>({
     queryKey: ["/api/lote-template"],
-    enabled: isOpen
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/lote-template");
+      if (!res.ok) throw new Error("No se pudo cargar la plantilla");
+      const t = await res.json();
+      return {
+        id: t?.id,
+        customFields: Array.isArray(t?.customFields) ? t.customFields : [],
+      };
+    },
+    enabled: isOpen,
   });
 
+  const [fields, setFields] = useState<TemplateField[]>([]);
   useEffect(() => {
-    if (isOpen) {
-      if (template?.customFields) {
-        setCustomFields(template.customFields);
-      } else {
-        setCustomFields([]);
-      }
-    }
-  }, [template, isOpen]);
+    setFields(template?.customFields ?? []);
+  }, [template]);
+
+  const addField = () =>
+    setFields((f) => [
+      ...f,
+      { key: "", label: "", type: "text", required: false },
+    ]);
+
+  const updateField = (idx: number, patch: Partial<TemplateField>) =>
+    setFields((arr) => arr.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
+
+  const removeField = (idx: number) =>
+    setFields((arr) => arr.filter((_, i) => i !== idx));
 
   const saveMutation = useMutation({
-    mutationFn: async (fields: CustomField[]) => {
+    mutationFn: async () => {
+      // limpieza básica de campos vacíos y opciones
+      const cleaned = fields
+        .map((f) => ({
+          ...f,
+          key: f.key.trim(),
+          label: f.label.trim(),
+          options:
+            f.type === "select"
+              ? (f.options ?? []).map((o) => String(o).trim()).filter(Boolean)
+              : undefined,
+        }))
+        .filter((f) => f.key && f.label);
+
       const res = await apiRequest("PUT", "/api/lote-template", {
-        customFields: fields
+        customFields: cleaned,
       });
+      if (!res.ok)
+        throw new Error(
+          (await res.json()).message ?? "No se pudo guardar la plantilla",
+        );
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/lote-template"] });
+      onSaved?.();
       toast({
-        title: "Plantilla actualizada",
-        description: "La plantilla de lotes ha sido actualizada correctamente",
+        title: "Plantilla guardada",
+        description: "Los cambios se han aplicado.",
       });
-      onClose();
     },
-    onError: (error: any) => {
+    onError: (e: any) => {
       toast({
         title: "Error",
-        description: error.message || "No se pudo actualizar la plantilla",
+        description: e?.message ?? "No se pudo guardar la plantilla",
         variant: "destructive",
       });
     },
   });
 
-
-  const removeField = (index: number) => {
-    setCustomFields(customFields.filter((_, i) => i !== index));
-  };
-
-  const handleSave = () => {
-    console.log('[DEBUG] Template handleSave called with fields:', customFields);
-    saveMutation.mutate(customFields);
-  };
-
-  const addField = () => {
-    if (!newField.name) return;
-    
-    const updatedFields = [...customFields, { ...newField }];
-    console.log('[DEBUG] Adding field - before:', customFields, 'after:', updatedFields);
-    setCustomFields(updatedFields);
-    setNewField({ name: "", type: "text", required: false });
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] max-h-[80vh]" data-testid="modal-template-editor">
+    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Editor de Plantilla de Lotes</DialogTitle>
+          <DialogTitle>Editor de plantilla de lotes</DialogTitle>
         </DialogHeader>
-        
-        <div className="space-y-6 overflow-y-auto max-h-[calc(80vh-120px)]">
-          <div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Define campos opcionales que se aplicarán a los nuevos lotes. 
-              Los campos obligatorios (identificación y número de animales) siempre están disponibles.
-            </p>
-          </div>
 
-          {/* Existing custom fields */}
-          {customFields.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Campos Personalizados</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {customFields.map((field, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 border border-border rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium">{field.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Tipo: {field.type} • {field.required ? "Obligatorio" : "Opcional"}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeField(index)}
-                      data-testid={`button-remove-field-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Add new field */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Añadir Campo</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="fieldName">Nombre del campo</Label>
+        <div className="space-y-4">
+          {fields.map((f, idx) => (
+            <div
+              key={idx}
+              className="grid grid-cols-12 gap-2 p-3 border rounded-lg"
+            >
+              <div className="col-span-3">
+                <Label>Clave</Label>
                 <Input
-                  id="fieldName"
-                  value={newField.name}
-                  onChange={(e) => setNewField({ ...newField, name: e.target.value })}
-                  placeholder="Peso inicial, Origen, etc."
-                  data-testid="input-field-name"
+                  value={f.key}
+                  onChange={(e) => updateField(idx, { key: e.target.value })}
+                  placeholder="pH, curado, ..."
                 />
               </div>
-              
-              <div>
-                <Label htmlFor="fieldType">Tipo de campo</Label>
-                <Select 
-                  value={newField.type} 
-                  onValueChange={(value) => setNewField({ ...newField, type: value })}
+              <div className="col-span-3">
+                <Label>Etiqueta</Label>
+                <Input
+                  value={f.label}
+                  onChange={(e) => updateField(idx, { label: e.target.value })}
+                  placeholder="pH del jamón"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Tipo</Label>
+                <Select
+                  value={f.type}
+                  onValueChange={(v: FieldType) =>
+                    updateField(idx, { type: v })
+                  }
                 >
-                  <SelectTrigger data-testid="select-field-type">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="text">Texto</SelectItem>
                     <SelectItem value="number">Número</SelectItem>
+                    <SelectItem value="select">Selección</SelectItem>
                     <SelectItem value="date">Fecha</SelectItem>
-                    <SelectItem value="select">Lista de opciones</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="fieldRequired"
-                  checked={newField.required}
-                  onChange={(e) => setNewField({ ...newField, required: e.target.checked })}
-                  data-testid="checkbox-field-required"
-                />
-                <Label htmlFor="fieldRequired">Campo obligatorio</Label>
+              <div className="col-span-2">
+                <Label>Obligatorio</Label>
+                <Select
+                  value={String(!!f.required)}
+                  onValueChange={(v) =>
+                    updateField(idx, { required: v === "true" })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="false">No</SelectItem>
+                    <SelectItem value="true">Sí</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+              <div className="col-span-12">
+                {f.type === "select" ? (
+                  <>
+                    <Label>Opciones (separadas por coma)</Label>
+                    <Input
+                      value={(f.options ?? []).join(", ")}
+                      onChange={(e) =>
+                        updateField(idx, {
+                          options: e.target.value
+                            .split(",")
+                            .map((s) => s.trim()),
+                        })
+                      }
+                      placeholder="ej: bellota, cebo, recebo"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Label>Valor por defecto</Label>
+                    <Input
+                      value={f.defaultValue ?? ""}
+                      onChange={(e) =>
+                        updateField(idx, { defaultValue: e.target.value })
+                      }
+                      placeholder="Opcional"
+                    />
+                  </>
+                )}
+              </div>
+              <div className="col-span-12 text-right">
+                <Button variant="outline" onClick={() => removeField(idx)}>
+                  Eliminar
+                </Button>
+              </div>
+            </div>
+          ))}
 
-              <Button
-                onClick={addField}
-                disabled={!newField.name}
-                size="sm"
-                data-testid="button-add-field"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Añadir Campo
+          <div className="flex justify-between">
+            <Button type="button" variant="outline" onClick={addField}>
+              Añadir campo
+            </Button>
+            <div className="space-x-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancelar
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={onClose} 
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-            <Button 
-              onClick={handleSave}
-              disabled={saveMutation.isPending}
-              className="flex-1"
-              data-testid="button-save-template"
-            >
-              {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Guardar Plantilla
-            </Button>
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+              >
+                Guardar
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+export default TemplateEditorModal;
