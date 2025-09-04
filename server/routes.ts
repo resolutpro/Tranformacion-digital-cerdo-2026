@@ -380,7 +380,22 @@ export function registerRoutes(app: Express): Server {
         zoneQr = await storage.createZoneQr({ zoneId: zone.id, publicToken });
       }
 
-      const publicUrl = `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${zoneQr.publicToken}`;
+      // Generate URL: use replit.app for deployment, replit.dev for development
+      const getPublicUrl = (token: string) => {
+        if (process.env.REPLIT_DEPLOYMENT === '1') {
+          // In deployment, use replit.app domain
+          const host = req.get('host');
+          if (host && host.includes('.replit.dev')) {
+            // Replace .replit.dev with .replit.app for deployed URLs
+            const deployHost = host.replace('.replit.dev', '.replit.app');
+            return `https://${deployHost}/zona-movimiento/${token}`;
+          }
+        }
+        // Development: use REPLIT_DEV_DOMAIN or fallback to request host
+        return `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${token}`;
+      };
+
+      const publicUrl = getPublicUrl(zoneQr.publicToken);
 
       const QRCode = await import("qrcode");
       const qrUrl = await QRCode.default.toDataURL(publicUrl, {
@@ -727,7 +742,20 @@ export function registerRoutes(app: Express): Server {
       res.status(201).json({
         ...zone,
         qrToken: publicToken,
-        qrUrl: `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${publicToken}`,
+        qrUrl: (() => {
+          // Generate URL: use replit.app for deployment, replit.dev for development
+          if (process.env.REPLIT_DEPLOYMENT === '1') {
+            // In deployment, use replit.app domain
+            const host = req.get('host');
+            if (host && host.includes('.replit.dev')) {
+              // Replace .replit.dev with .replit.app for deployed URLs
+              const deployHost = host.replace('.replit.dev', '.replit.app');
+              return `https://${deployHost}/zona-movimiento/${publicToken}`;
+            }
+          }
+          // Development: use REPLIT_DEV_DOMAIN or fallback to request host
+          return `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${publicToken}`;
+        })(),
       });
     }),
   );
