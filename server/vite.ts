@@ -52,7 +52,7 @@ export async function setupVite(app: Express, server: Server) {
         "index.html",
       );
 
-      // always reload the index.html file from disk incase it changes
+      // recarga el index.html (dev) para HMR
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
@@ -68,6 +68,7 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
+  // En producción servimos el build desde server/public
   const distPath = path.resolve(import.meta.dirname, "public");
 
   if (!fs.existsSync(distPath)) {
@@ -76,10 +77,18 @@ export function serveStatic(app: Express) {
     );
   }
 
+  // 1) Estáficos (con fallthrough) para que podamos poner fallback después
   app.use(express.static(distPath));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  // 2) Favicon en prod: sirve el real si existe; si no, 204
+  app.get("/favicon.ico", (_req, res) => {
+    const fav = path.join(distPath, "favicon.ico");
+    if (fs.existsSync(fav)) return res.sendFile(fav);
+    return res.status(204).end();
+  });
+
+  // 3) Fallback SPA SOLO si NO empieza por /api  (muy importante)
+  app.get(/^(?!\/api).*/, (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
