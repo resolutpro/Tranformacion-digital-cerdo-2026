@@ -382,15 +382,18 @@ export function registerRoutes(app: Express): Server {
 
       // Generate URL: use replit.app for deployment, replit.dev for development
       const getPublicUrl = (token: string) => {
-        if (process.env.REPLIT_ENVIRONMENT === 'production') {
-          // In deployment, use replit.app domain
-          const host = req.get('host');
-          if (host && host.includes('.replit.dev')) {
-            // Replace .replit.dev with .replit.app for deployed URLs
-            const deployHost = host.replace('.replit.dev', '.replit.app');
-            return `https://${deployHost}/zona-movimiento/${token}`;
-          }
+        const host = req.get('host');
+        
+        // Check if we're in deployment (production) by checking the host domain
+        if (host && host.includes('.replit.app')) {
+          // Already in deployment, use the current host
+          return `https://${host}/zona-movimiento/${token}`;
+        } else if (host && host.includes('.replit.dev') && process.env.NODE_ENV === 'production') {
+          // In deployment but still showing .dev domain, replace with .app
+          const deployHost = host.replace('.replit.dev', '.replit.app');
+          return `https://${deployHost}/zona-movimiento/${token}`;
         }
+        
         // Development: use REPLIT_DEV_DOMAIN or fallback to request host
         return `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${token}`;
       };
@@ -743,16 +746,18 @@ export function registerRoutes(app: Express): Server {
         ...zone,
         qrToken: publicToken,
         qrUrl: (() => {
-          // Generate URL: use replit.app for deployment, replit.dev for development
-          if (process.env.REPLIT_ENVIRONMENT === 'production') {
-            // In deployment, use replit.app domain
-            const host = req.get('host');
-            if (host && host.includes('.replit.dev')) {
-              // Replace .replit.dev with .replit.app for deployed URLs
-              const deployHost = host.replace('.replit.dev', '.replit.app');
-              return `https://${deployHost}/zona-movimiento/${publicToken}`;
-            }
+          const host = req.get('host');
+          
+          // Check if we're in deployment (production) by checking the host domain
+          if (host && host.includes('.replit.app')) {
+            // Already in deployment, use the current host
+            return `https://${host}/zona-movimiento/${publicToken}`;
+          } else if (host && host.includes('.replit.dev') && process.env.NODE_ENV === 'production') {
+            // In deployment but still showing .dev domain, replace with .app
+            const deployHost = host.replace('.replit.dev', '.replit.app');
+            return `https://${deployHost}/zona-movimiento/${publicToken}`;
           }
+          
           // Development: use REPLIT_DEV_DOMAIN or fallback to request host
           return `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${publicToken}`;
         })(),
