@@ -1085,58 +1085,76 @@ export function registerRoutes(app: Express): Server {
       };
 
       const activeLotes = lotes.filter((l) => l.status === "active");
-      const lotesWithoutLocation: any[] = [];
-      const activeZones = new Set();
+      const finishedLotes = lotes.filter((l) => l.status === "finished");
+      
+      // Populate lotes in their respective stages
+      for (const lote of activeLotes) {
+        const activeStay = await storage.getActiveStayByLote(lote.id);
+        if (activeStay && activeStay.zoneId) {
+          const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
+          if (zone) {
+            const extendedLote = {
+              ...lote,
+              currentZone: zone,
+              totalDays: Math.floor((Date.now() - activeStay.entryTime.getTime()) / (1000 * 60 * 60 * 24))
+            };
+            
+            if (zone.stage in board) {
+              board[zone.stage].lotes.push(extendedLote);
+            }
+          }
+        } else {
+          // Lotes without location go to sinUbicacion
+          board.sinUbicacion.lotes.push({
+            ...lote,
+            currentZone: null,
+            totalDays: 0
+          });
+        }
+      }
+
+      // Add finished lotes to finalizado stage
+      for (const lote of finishedLotes) {
+        board.finalizado.lotes.push({
+          ...lote,
+          currentZone: null,
+          totalDays: 0
+        });
+      }
+
+      // Calculate statistics for dashboard compatibility
       const loteCounts = {
-        cria: 0,
-        engorde: 0,
-        matadero: 0,
-        secadero: 0,
-        distribucion: 0,
-        unassigned: 0,
+        cria: board.cria.lotes.length,
+        engorde: board.engorde.lotes.length,
+        matadero: board.matadero.lotes.length,
+        secadero: board.secadero.lotes.length,
+        distribucion: board.distribucion.lotes.length,
+        unassigned: board.sinUbicacion.lotes.length,
       };
+      
       const animalCounts = {
-        cria: 0,
-        engorde: 0,
-        matadero: 0,
-        secadero: 0,
-        distribucion: 0,
-        unassigned: 0,
+        cria: board.cria.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
+        engorde: board.engorde.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
+        matadero: board.matadero.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
+        secadero: board.secadero.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
+        distribucion: board.distribucion.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
+        unassigned: board.sinUbicacion.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
       };
+
       let totalAnimals = 0;
       let subloteCount = 0;
-
       for (const lote of lotes) {
         if (lote.status === "finished") continue;
         if (!lote.parentLoteId) totalAnimals += lote.initialAnimals;
         else subloteCount++;
-
-        if (lote.status === "active") {
-          const activeStay = await storage.getActiveStayByLote(lote.id);
-          if (activeStay && activeStay.zoneId) {
-            const zone = await storage.getZone(
-              activeStay.zoneId,
-              req.organizationId,
-            );
-            if (zone && zone.stage in loteCounts) {
-              loteCounts[zone.stage as keyof typeof loteCounts]++;
-              animalCounts[zone.stage as keyof typeof animalCounts] +=
-                lote.initialAnimals;
-              activeZones.add(zone.id);
-            }
-          } else {
-            loteCounts.unassigned++;
-            animalCounts.unassigned += lote.initialAnimals;
-            lotesWithoutLocation.push({
-              id: lote.id,
-              identification: lote.identification,
-              initialAnimals: lote.initialAnimals,
-              createdAt: lote.createdAt,
-              pieceType: lote.pieceType,
-            });
-          }
-        }
       }
+
+      const activeZones = new Set();
+      Object.values(board).forEach((stage: any) => {
+        stage.lotes.forEach((lote: any) => {
+          if (lote.currentZone) activeZones.add(lote.currentZone.id);
+        });
+      });
 
       const today = new Date();
       const zoneActivity = [];
@@ -1153,7 +1171,9 @@ export function registerRoutes(app: Express): Server {
         });
       }
 
+      // Return the board structure that the frontend expects
       res.json({
+        ...board,
         loteCounts,
         animalCounts,
         totalAnimals,
@@ -1162,7 +1182,7 @@ export function registerRoutes(app: Express): Server {
           await storage.getQrSnapshotsByOrganization(req.organizationId)
         ).filter((s) => s.isActive).length,
         zoneActivity,
-        unassignedLotes: lotesWithoutLocation,
+        unassignedLotes: board.sinUbicacion.lotes,
       });
     }),
   );
