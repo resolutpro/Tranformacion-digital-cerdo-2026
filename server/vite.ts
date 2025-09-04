@@ -15,7 +15,6 @@ export function log(message: string, source = "express") {
     second: "2-digit",
     hour12: true,
   });
-
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
@@ -43,7 +42,6 @@ export async function setupVite(app: Express, server: Server) {
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
-
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
@@ -51,8 +49,6 @@ export async function setupVite(app: Express, server: Server) {
         "client",
         "index.html",
       );
-
-      // recarga el index.html (dev) para HMR
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
@@ -68,26 +64,24 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  // En producción servimos el build desde server/public
   const distPath = path.resolve(import.meta.dirname, "public");
-
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
     );
   }
 
-  // 1) Estáficos (con fallthrough) para que podamos poner fallback después
+  // 1) estáticos
   app.use(express.static(distPath));
 
-  // 2) Favicon en prod: sirve el real si existe; si no, 204
+  // 2) favicon: sirve si existe; si no, 204
   app.get("/favicon.ico", (_req, res) => {
     const fav = path.join(distPath, "favicon.ico");
     if (fs.existsSync(fav)) return res.sendFile(fav);
     return res.status(204).end();
   });
 
-  // 3) Fallback SPA SOLO si NO empieza por /api  (muy importante)
+  // 3) fallback SPA sólo para rutas que NO son /api/*
   app.get(/^(?!\/api).*/, (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
