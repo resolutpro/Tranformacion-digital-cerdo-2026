@@ -307,7 +307,7 @@ export default function Seguimiento() {
                 </Button>
               </div>
               <div className="text-xs text-muted-foreground md:ml-auto">
-                Resultados: {board ? Object.values(board).reduce((total, stage) => total + stage.lotes.length, 0) : 0}
+                Resultados: {board ? Object.values(board).reduce((total, stage) => total + (stage.lotes?.length || 0), 0) : 0}
               </div>
             </div>
           </Card>
@@ -328,7 +328,7 @@ export default function Seguimiento() {
                       {config.title}
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      {stageData.lotes.length} lotes
+                      {stageData.lotes?.length || 0} lotes
                     </p>
                   </CardHeader>
                   <CardContent className="p-3 space-y-3">
@@ -344,7 +344,7 @@ export default function Seguimiento() {
                           data-testid="input-search-sin-ubicacion"
                         />
                       </div>
-                      {stageData.lotes.map((lote) => (
+                      {stageData.lotes?.map((lote) => (
                         <div
                           key={lote.id}
                           className={`batch-card bg-background border border-orange-200 rounded-md p-3 cursor-move transition-all hover:shadow-md border-l-4 border-l-orange-400 ${
@@ -394,8 +394,8 @@ export default function Seguimiento() {
                   ) : (
                     <>
                       {/* Zonas normales */}
-                      {stageData.zones.map((zone) => {
-                        const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
+                      {stageData.zones?.map((zone) => {
+                        const zoneLotes = stageData.lotes?.filter(l => l.currentZone?.id === zone.id) || [];
                         
                         return (
                           <div 
@@ -516,9 +516,9 @@ export default function Seguimiento() {
                         )}
                       </div>
                       <Badge variant="outline" className="text-xs">
-                        {stageData.lotes.length} lotes
+                        {stageData.lotes?.length || 0} lotes
                         {stage !== 'sinUbicacion' && stage !== 'finalizado' && (
-                          <span className="ml-1 text-muted-foreground">• {stageData.zones.length} zonas</span>
+                          <span className="ml-1 text-muted-foreground">• {stageData.zones?.length || 0} zonas</span>
                         )}
                       </Badge>
                     </CardTitle>
@@ -527,7 +527,7 @@ export default function Seguimiento() {
                     <CardContent className="p-3">
                       <div className="grid grid-cols-1 gap-3">
                       {stage === 'sinUbicacion' ? (
-                        stageData.lotes.map((lote) => (
+                        stageData.lotes?.map((lote) => (
                           <div
                             key={lote.id}
                             className={`bg-background border border-orange-200 rounded-md p-3 border-l-4 border-l-orange-400 ${
@@ -593,8 +593,8 @@ export default function Seguimiento() {
                           ))}
                         </div>
                       ) : (
-                        stageData.zones.map((zone) => {
-                          const zoneLotes = stageData.lotes.filter(l => l.currentZone?.id === zone.id);
+                        stageData.zones?.map((zone) => {
+                          const zoneLotes = stageData.lotes?.filter(l => l.currentZone?.id === zone.id) || [];
                           
                           return (
                             <div key={zone.id} className="space-y-2">
