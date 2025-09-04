@@ -53,8 +53,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// evita ruido de 502 en favicon si el server aún no está listo
-app.get("/favicon.ico", (_req, res) => res.status(204).end());
 
 (async () => {
   const server = await registerRoutes(app);
