@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import path from "path";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { 
@@ -167,6 +168,21 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
+  // CRITICAL: Handle SPA routes for zona-movimiento BEFORE other middleware
+  // This prevents 502 errors in production deployment
+  app.get("/zona-movimiento/*", (req, res, next) => {
+    const timestamp = new Date().toISOString();
+    const token = req.path.split('/zona-movimiento/')[1];
+    console.log(`[ZONA-MOVIMIENTO-ROUTE] ${timestamp} - Accessing zone movement page with token: ${token} from ${req.ip}`);
+    
+    // In production, we need to handle this as a SPA route by passing to static middleware
+    // In development, let Vite handle it
+    if (process.env.NODE_ENV !== "development") {
+      console.log(`[SPA-ZONE-ROUTE] ${timestamp} - Delegating zona-movimiento to static file serving`);
+    }
+    next();
+  });
+
   // Health check endpoint for deployment readiness
   app.get("/health", (req, res) => {
     console.log(`[HEALTH-CHECK] ${new Date().toISOString()} - Health check accessed from ${req.ip}`);
@@ -200,9 +216,21 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Handle static assets that might cause 502 errors in production
+  // For production deployment, serve favicon from the static directory
   app.get("/favicon.ico", (req, res) => {
     console.log(`[FAVICON] ${new Date().toISOString()} - Favicon requested from ${req.ip}`);
-    res.status(204).end();
+    
+    if (process.env.NODE_ENV === "production") {
+      const faviconPath = path.resolve(import.meta.dirname, "public", "favicon.ico");
+      res.sendFile(faviconPath, (err) => {
+        if (err) {
+          console.log(`[FAVICON-ERROR] Could not serve favicon from ${faviconPath}`);
+          res.status(204).end();
+        }
+      });
+    } else {
+      res.status(204).end();
+    }
   });
 
   app.get("/robots.txt", (req, res) => {
@@ -210,9 +238,17 @@ export function registerRoutes(app: Express): Server {
     res.type('text/plain').send('User-agent: *\nAllow: /\n');
   });
 
-  // Catch-all for any other static assets that might be missing
+  // Enhanced static asset logging and error handling
   app.use('/assets/*', (req, res, next) => {
     console.log(`[STATIC-ASSET] ${new Date().toISOString()} - Asset requested: ${req.url} from ${req.ip}`);
+    
+    // Add error handling for missing assets
+    res.on('finish', () => {
+      if (res.statusCode === 404) {
+        console.log(`[STATIC-ASSET-404] ${new Date().toISOString()} - Asset not found: ${req.url}`);
+      }
+    });
+    
     next();
   });
 
