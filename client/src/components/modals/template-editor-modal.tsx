@@ -75,7 +75,6 @@ export function TemplateEditorModal({ isOpen, onClose }: TemplateEditorModalProp
   };
 
   const handleSave = () => {
-    console.log('[DEBUG] Template handleSave called with fields:', customFields);
     saveMutation.mutate(customFields);
   };
 
@@ -83,7 +82,6 @@ export function TemplateEditorModal({ isOpen, onClose }: TemplateEditorModalProp
     if (!newField.name) return;
     
     const updatedFields = [...customFields, { ...newField }];
-    console.log('[DEBUG] Adding field - before:', customFields, 'after:', updatedFields);
     setCustomFields(updatedFields);
     setNewField({ name: "", type: "text", required: false });
   };

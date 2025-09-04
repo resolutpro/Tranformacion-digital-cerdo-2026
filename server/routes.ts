@@ -70,7 +70,8 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
   // Group stays by stage
   const stageGroups = new Map();
   for (const stay of stays) {
-    const zone = await storage.getZone(stay.zoneId, lote.organizationId!);
+    if (!stay.zoneId) continue;
+    const zone = await storage.getZone(stay.zoneId, organizationId);
     if (!zone) continue;
     
     if (!stageGroups.has(zone.stage)) {
@@ -207,7 +208,7 @@ export function registerRoutes(app: Express): Server {
         status: 'active'
       };
       
-      logger.info('POST /api/lotes', { organizationId: req.organizationId, payload: loteWithStatus, customData: loteWithStatus.customData });
+      logger.info('POST /api/lotes', { organizationId: req.organizationId, payload: loteWithStatus });
       const lote = await storage.createLote(loteWithStatus);
       logger.info('Lote created', { loteId: lote.id, status: lote.status });
       res.status(201).json(lote);
@@ -310,7 +311,7 @@ export function registerRoutes(app: Express): Server {
       
       const zone = await storage.getZone(req.params.zoneId, req.organizationId);
       if (!zone) {
-        logger.warn('Zone not found', { zoneId: req.params.zoneId, organizationId: req.organizationId });
+        logger.error('Zone not found', { zoneId: req.params.zoneId, organizationId: req.organizationId });
         return res.status(404).json({ message: "Zona no encontrada" });
       }
 
@@ -412,7 +413,7 @@ export function registerRoutes(app: Express): Server {
               availableLotes.push({
                 id: lote.id,
                 identification: lote.identification,
-                quantity: lote.currentAnimals,
+                quantity: lote.initialAnimals,
                 currentZone: prevZone.name,
                 stayId: stay.id
               });
@@ -522,11 +523,11 @@ export function registerRoutes(app: Express): Server {
           const sublote = await storage.createLote({
             identification: subloteData.identification,
             initialAnimals: subloteData.quantity,
-            currentAnimals: subloteData.quantity,
+            finalAnimals: subloteData.quantity,
             status: 'active',
             organizationId,
             parentLoteId: loteId,
-            templateData: lote.templateData
+            customData: lote.customData
           });
           
           // Create stay for sublote - Use system user for QR moves
@@ -543,10 +544,7 @@ export function registerRoutes(app: Express): Server {
         }
         
         // Update parent lote status
-        await storage.updateLote(loteId, { 
-          status: 'completed',
-          currentAnimals: 0
-        });
+        await storage.updateLote(loteId, { status: 'completed' }, organizationId);
         
         return res.json({
           message: `Lote dividido en ${sublotes.length} sublotes y movido a ${zone.name}`,
@@ -570,7 +568,6 @@ export function registerRoutes(app: Express): Server {
           loteId,
           publicToken: randomUUID(),
           snapshotData: await generateSnapshotData(lote.id, organizationId),
-          organizationId,
           createdBy: systemUserId
         });
         
@@ -975,8 +972,8 @@ export function registerRoutes(app: Express): Server {
       
       for (const lote of activeLotes) {
         const activeStay = await storage.getActiveStayByLote(lote.id);
-        if (activeStay) {
-          const zone = await storage.getZone(activeStay.zoneId, req.organizationId!);
+        if (activeStay && activeStay.zoneId) {
+          const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
           if (zone) {
             const stays = await storage.getStaysByLote(lote.id);
             const totalDays = stays.reduce((total, stay) => {
@@ -1581,8 +1578,8 @@ export function registerRoutes(app: Express): Server {
         
         if (lote.status === 'active') {
           const activeStay = await storage.getActiveStayByLote(lote.id);
-          if (activeStay) {
-            const zone = await storage.getZone(activeStay.zoneId, req.organizationId!);
+          if (activeStay && activeStay.zoneId) {
+            const zone = await storage.getZone(activeStay.zoneId, req.organizationId);
             if (zone && zone.stage in loteCounts) {
               loteCounts[zone.stage as keyof typeof loteCounts]++;
               animalCounts[zone.stage as keyof typeof animalCounts] += lote.initialAnimals;
