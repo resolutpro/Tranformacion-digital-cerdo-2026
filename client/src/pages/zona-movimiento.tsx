@@ -185,7 +185,14 @@ export default function ZoneMovementPage() {
   };
 
   const addSublote = () => {
-    setSublotes([...sublotes, { identification: "", quantity: 1 }]);
+    const selectedLote = availableLotes.find(
+      (lote: any) => String(lote.id) === String(selectedLoteId),
+    );
+    const loteId = selectedLote?.identification || "LOTE";
+    const subloteNumber = sublotes.length + 1;
+    const newSubloteId = `${loteId}-${subloteNumber}`;
+    
+    setSublotes([...sublotes, { identification: newSubloteId, quantity: 1 }]);
   };
 
   const removeSublote = (index: number) => {
@@ -314,7 +321,17 @@ export default function ZoneMovementPage() {
                   <Label htmlFor="lote">Lote disponible *</Label>
                   <Select
                     value={selectedLoteId}
-                    onValueChange={setSelectedLoteId}
+                    onValueChange={(value) => {
+                      setSelectedLoteId(value);
+                      // Reset sublotes with correct naming when lote changes
+                      if (value) {
+                        const selectedLote = availableLotes.find(
+                          (lote: any) => String(lote.id) === String(value),
+                        );
+                        const loteId = selectedLote?.identification || "LOTE";
+                        setSublotes([{ identification: `${loteId}-1`, quantity: 1 }]);
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona un lote..." />

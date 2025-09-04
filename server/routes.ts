@@ -117,49 +117,61 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
     const duration = Math.floor((endTime - startTime) / (1000 * 60 * 60 * 24)); // days
 
     const zones = Array.from(new Set(stayZones.map((sz: any) => sz.zone.name)));
+    
+    // Get sensor data for each phase
+    let sensorData = [];
+    try {
+      sensorData = await storage.getSensorDataByLoteAndStage(
+        loteId,
+        stage,
+        new Date(startTime),
+        new Date(endTime),
+      );
+    } catch (error) {
+      console.error(`Error fetching sensor data for phase ${stage}:`, error);
+    }
+
+    // Calculate metrics
     const metrics: Record<string, any> = {};
+    if (sensorData && sensorData.length > 0) {
+      // Group by sensor type
+      const sensorGroups = sensorData.reduce((acc, reading) => {
+        const type = reading.sensorType || 'unknown';
+        if (!acc[type]) acc[type] = [];
+        if (reading.value != null && !isNaN(Number(reading.value))) {
+          acc[type].push(Number(reading.value));
+        }
+        return acc;
+      }, {} as Record<string, number[]>);
 
-    // Aggregate sensor data for this phase
-    for (const { stay, zone } of stayZones) {
-      const sensors = await storage.getSensorsByZone(zone.id);
-      for (const sensor of sensors.filter((s) => s.isPublic)) {
-        const readings = await storage.getSensorReadings(
-          sensor.id,
-          stay.entryTime,
-          stay.exitTime || new Date(),
-          false, // exclude simulated
-        );
-
-        if (readings.length > 0) {
-          const values = readings.map((r) => parseFloat(r.value));
+      // Calculate statistics for each sensor type
+      Object.entries(sensorGroups).forEach(([type, values]) => {
+        if (values.length > 0) {
           const avg = values.reduce((a, b) => a + b, 0) / values.length;
           const min = Math.min(...values);
           const max = Math.max(...values);
 
+          // Calculate percentage in target range (example ranges)
+          const targetRanges = {
+            temperature: { min: 2, max: 8 },
+            humidity: { min: 75, max: 85 },
+          };
+
+          const target = targetRanges[type as keyof typeof targetRanges];
           let pctInTarget;
-          if (sensor.sensorType === "temperature" && zone.temperatureTarget) {
-            const inTarget = values.filter(
-              (v) =>
-                v >= zone.temperatureTarget!.min &&
-                v <= zone.temperatureTarget!.max,
-            ).length;
-            pctInTarget = Math.round((inTarget / values.length) * 100);
-          } else if (sensor.sensorType === "humidity" && zone.humidityTarget) {
-            const inTarget = values.filter(
-              (v) =>
-                v >= zone.humidityTarget!.min && v <= zone.humidityTarget!.max,
-            ).length;
+          if (target) {
+            const inTarget = values.filter(v => v >= target.min && v <= target.max).length;
             pctInTarget = Math.round((inTarget / values.length) * 100);
           }
 
-          metrics[sensor.sensorType] = {
-            avg: Math.round(avg * 10) / 10,
-            min: Math.round(min * 10) / 10,
-            max: Math.round(max * 10) / 10,
-            ...(pctInTarget !== undefined && { pctInTarget }),
+          metrics[type] = {
+            avg: Number(avg.toFixed(1)),
+            min: Number(min.toFixed(1)),
+            max: Number(max.toFixed(1)),
+            ...(pctInTarget !== undefined ? { pctInTarget } : {}),
           };
         }
-      }
+      });
     }
 
     phases.push({
@@ -383,7 +395,7 @@ export function registerRoutes(app: Express): Server {
       // Generate URL: use replit.app for deployment, replit.dev for development
       const getPublicUrl = (token: string) => {
         const host = req.get('host');
-        
+
         // Check if we're in deployment (production) by checking the host domain
         if (host && host.includes('.replit.app')) {
           // Already in deployment, use the current host
@@ -393,7 +405,7 @@ export function registerRoutes(app: Express): Server {
           const deployHost = host.replace('.replit.dev', '.replit.app');
           return `https://${deployHost}/zona-movimiento/${token}`;
         }
-        
+
         // Development: use REPLIT_DEV_DOMAIN or fallback to request host
         return `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${token}`;
       };
@@ -603,7 +615,7 @@ export function registerRoutes(app: Express): Server {
 
     // User de sistema para movimientos QR - crear o encontrar usuario del sistema
     let systemUserId = "626d9faf-69ff-44b3-b35d-387fd7919537";
-    
+
     // Verificar si el usuario del sistema existe, si no, crear uno o usar el primer usuario de la organización
     try {
       const systemUser = await storage.getUser(systemUserId);
@@ -638,7 +650,7 @@ export function registerRoutes(app: Express): Server {
         if (!ident || qty <= 0) continue;
 
         const sublote = await storage.createLote({
-          identification: ident,
+          identification: ident, // Use provided identification for sublote
           initialAnimals: qty,
           finalAnimals: qty,
           status: "active",
@@ -772,7 +784,7 @@ export function registerRoutes(app: Express): Server {
         qrToken: publicToken,
         qrUrl: (() => {
           const host = req.get('host');
-          
+
           // Check if we're in deployment (production) by checking the host domain
           if (host && host.includes('.replit.app')) {
             // Already in deployment, use the current host
@@ -782,7 +794,7 @@ export function registerRoutes(app: Express): Server {
             const deployHost = host.replace('.replit.dev', '.replit.app');
             return `https://${deployHost}/zona-movimiento/${publicToken}`;
           }
-          
+
           // Development: use REPLIT_DEV_DOMAIN or fallback to request host
           return `${process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : `${req.protocol}://${req.get("host")}`}/zona-movimiento/${publicToken}`;
         })(),
@@ -1116,7 +1128,7 @@ export function registerRoutes(app: Express): Server {
 
       const activeLotes = lotes.filter((l) => l.status === "active");
       const finishedLotes = lotes.filter((l) => l.status === "finished");
-      
+
       // Populate lotes in their respective stages
       for (const lote of activeLotes) {
         const activeStay = await storage.getActiveStayByLote(lote.id);
@@ -1128,7 +1140,7 @@ export function registerRoutes(app: Express): Server {
               currentZone: zone,
               totalDays: Math.floor((Date.now() - activeStay.entryTime.getTime()) / (1000 * 60 * 60 * 24))
             };
-            
+
             if (zone.stage in board) {
               board[zone.stage].lotes.push(extendedLote);
             }
@@ -1161,7 +1173,7 @@ export function registerRoutes(app: Express): Server {
         distribucion: board.distribucion.lotes.length,
         unassigned: board.sinUbicacion.lotes.length,
       };
-      
+
       const animalCounts = {
         cria: board.cria.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
         engorde: board.engorde.lotes.reduce((sum: number, l: any) => sum + l.initialAnimals, 0),
@@ -1311,7 +1323,7 @@ export function registerRoutes(app: Express): Server {
           if (!subloteData.name || !subloteData.pieces) continue;
           const sublote = await storage.createLote({
             organizationId: req.organizationId,
-            identification: `${lote.identification}-${subloteData.name}`,
+            identification: `${lote.identification}-${subloteData.name}`, // Correctly name the sublote
             initialAnimals: subloteData.pieces,
             finalAnimals: subloteData.pieces,
             foodRegime: lote.foodRegime,

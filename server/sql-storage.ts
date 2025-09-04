@@ -16,6 +16,8 @@ import {
   type AuditLog, type InsertAuditLog
 } from "@shared/schema";
 import type { IStorage } from "./storage";
+import { eq, gte, lte, and, or, inArray, isNull } from "drizzle-orm";
+import { sensorReadings, sensors, zones, stays } from "@shared/schema/drizzle/schema";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -25,13 +27,13 @@ export class SqlStorage implements IStorage {
 
   constructor(dbPath?: string) {
     this.db = new Database(dbPath || 'livestock.db');
-    
+
     // Configure SQLite for better performance and integrity
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
-    
+
     this.initializeTables();
-    
+
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
     });
@@ -42,7 +44,7 @@ export class SqlStorage implements IStorage {
     const transaction = this.db.transaction(() => {
       // We'll handle the async operations manually
     });
-    
+
     try {
       this.db.exec('BEGIN');
       const result = await callback();
@@ -207,11 +209,11 @@ export class SqlStorage implements IStorage {
       'INSERT INTO organizations (id, name) VALUES (?, ?)'
     );
     stmt.run(id, org.name);
-    
-    const created: Organization = { 
-      ...org, 
-      id, 
-      createdAt: new Date() 
+
+    const created: Organization = {
+      ...org,
+      id,
+      createdAt: new Date()
     };
     return created;
   }
@@ -247,11 +249,11 @@ export class SqlStorage implements IStorage {
       'INSERT INTO users (id, organization_id, username, email, password) VALUES (?, ?, ?, ?, ?)'
     );
     stmt.run(id, user.organizationId, user.username, user.email, user.password);
-    
-    const created: User = { 
-      ...user, 
-      id, 
-      createdAt: new Date() 
+
+    const created: User = {
+      ...user,
+      id,
+      createdAt: new Date()
     };
     return created;
   }
@@ -272,11 +274,11 @@ export class SqlStorage implements IStorage {
   async createLote(lote: InsertLote): Promise<Lote> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO lotes (id, organization_id, identification, initial_animals, final_animals, 
-                        food_regime, custom_data, status, parent_lote_id, piece_type) 
+      INSERT INTO lotes (id, organization_id, identification, initial_animals, final_animals,
+                        food_regime, custom_data, status, parent_lote_id, piece_type)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     stmt.run(
       id,
       lote.organizationId,
@@ -289,8 +291,8 @@ export class SqlStorage implements IStorage {
       lote.parentLoteId || null,
       lote.pieceType || null
     );
-    
-    const created: Lote = { 
+
+    const created: Lote = {
       ...lote,
       id,
       finalAnimals: lote.finalAnimals || null,
@@ -299,7 +301,7 @@ export class SqlStorage implements IStorage {
       status: lote.status || 'activo',
       parentLoteId: lote.parentLoteId || null,
       pieceType: lote.pieceType || null,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     return created;
   }
@@ -307,10 +309,10 @@ export class SqlStorage implements IStorage {
   async updateLote(id: string, lote: Partial<InsertLote>, organizationId: string): Promise<Lote | undefined> {
     const existing = await this.getLote(id, organizationId);
     if (!existing) return undefined;
-    
+
     const updates = [];
     const values = [];
-    
+
     if (lote.identification !== undefined) {
       updates.push('identification = ?');
       values.push(lote.identification);
@@ -335,15 +337,15 @@ export class SqlStorage implements IStorage {
       updates.push('status = ?');
       values.push(lote.status);
     }
-    
+
     if (updates.length === 0) return existing;
-    
+
     values.push(id, organizationId);
     const stmt = this.db.prepare(
       `UPDATE lotes SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`
     );
     stmt.run(...values);
-    
+
     return this.getLote(id, organizationId);
   }
 
@@ -362,7 +364,7 @@ export class SqlStorage implements IStorage {
 
   async updateLoteTemplate(template: InsertLoteTemplate): Promise<LoteTemplate> {
     const existing = await this.getLoteTemplate(template.organizationId);
-    
+
     if (existing) {
       const stmt = this.db.prepare(
         'UPDATE lote_templates SET custom_fields = ? WHERE organization_id = ?'
@@ -375,7 +377,7 @@ export class SqlStorage implements IStorage {
       );
       stmt.run(id, template.organizationId, JSON.stringify(template.customFields));
     }
-    
+
     const result = await this.getLoteTemplate(template.organizationId);
     return result!;
   }
@@ -402,10 +404,10 @@ export class SqlStorage implements IStorage {
   async createZone(zone: InsertZone): Promise<Zone> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO zones (id, organization_id, name, stage, fixed_info, temperature_target, humidity_target, is_active) 
+      INSERT INTO zones (id, organization_id, name, stage, fixed_info, temperature_target, humidity_target, is_active)
       VALUES (?, ?, ?, ?, ?, ?, ?, 1)
     `);
-    
+
     stmt.run(
       id,
       zone.organizationId,
@@ -415,15 +417,15 @@ export class SqlStorage implements IStorage {
       zone.temperatureTarget ? JSON.stringify(zone.temperatureTarget) : null,
       zone.humidityTarget ? JSON.stringify(zone.humidityTarget) : null
     );
-    
-    const created: Zone = { 
+
+    const created: Zone = {
       ...zone,
       id,
       fixedInfo: zone.fixedInfo || null,
       temperatureTarget: zone.temperatureTarget || null,
       humidityTarget: zone.humidityTarget || null,
       isActive: true,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     return created;
   }
@@ -431,10 +433,10 @@ export class SqlStorage implements IStorage {
   async updateZone(id: string, zone: Partial<InsertZone>, organizationId: string): Promise<Zone | undefined> {
     const existing = await this.getZone(id, organizationId);
     if (!existing) return undefined;
-    
+
     const updates = [];
     const values = [];
-    
+
     if (zone.name !== undefined) {
       updates.push('name = ?');
       values.push(zone.name);
@@ -455,15 +457,15 @@ export class SqlStorage implements IStorage {
       updates.push('humidity_target = ?');
       values.push(zone.humidityTarget ? JSON.stringify(zone.humidityTarget) : null);
     }
-    
+
     if (updates.length === 0) return existing;
-    
+
     values.push(id, organizationId);
     const stmt = this.db.prepare(
       `UPDATE zones SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`
     );
     stmt.run(...values);
-    
+
     return this.getZone(id, organizationId);
   }
 
@@ -558,10 +560,10 @@ export class SqlStorage implements IStorage {
   async createStay(stay: InsertStay): Promise<Stay> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO stays (id, lote_id, zone_id, entry_time, exit_time, created_by) 
+      INSERT INTO stays (id, lote_id, zone_id, entry_time, exit_time, created_by)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
-    
+
     stmt.run(
       id,
       stay.loteId,
@@ -570,12 +572,12 @@ export class SqlStorage implements IStorage {
       stay.exitTime ? stay.exitTime.toISOString() : null,
       stay.createdBy
     );
-    
-    const created: Stay = { 
+
+    const created: Stay = {
       ...stay,
       id,
       exitTime: stay.exitTime || null,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     return created;
   }
@@ -583,24 +585,24 @@ export class SqlStorage implements IStorage {
   async updateStay(id: string, stay: Partial<InsertStay>): Promise<Stay | undefined> {
     const updates = [];
     const values = [];
-    
+
     if (stay.exitTime !== undefined) {
       updates.push('exit_time = ?');
       values.push(stay.exitTime ? stay.exitTime.toISOString() : null);
     }
-    
+
     if (updates.length === 0) {
       const stmt = this.db.prepare('SELECT * FROM stays WHERE id = ?');
       const row = stmt.get(id) as any;
       return row ? this.mapStay(row) : undefined;
     }
-    
+
     values.push(id);
     const stmt = this.db.prepare(
       `UPDATE stays SET ${updates.join(', ')} WHERE id = ?`
     );
     stmt.run(...values);
-    
+
     const updatedStmt = this.db.prepare('SELECT * FROM stays WHERE id = ?');
     const row = updatedStmt.get(id) as any;
     return row ? this.mapStay(row) : undefined;
@@ -638,12 +640,12 @@ export class SqlStorage implements IStorage {
   async createSensor(sensor: InsertSensor & { deviceId: string; mqttTopic: string; mqttUsername: string; mqttPassword: string }): Promise<Sensor> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO sensors (id, organization_id, zone_id, name, device_id, sensor_type, unit, 
-                          mqtt_topic, mqtt_username, mqtt_password, validation_min, validation_max, 
-                          is_active, is_public) 
+      INSERT INTO sensors (id, organization_id, zone_id, name, device_id, sensor_type, unit,
+                          mqtt_topic, mqtt_username, mqtt_password, validation_min, validation_max,
+                          is_active, is_public)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
     `);
-    
+
     stmt.run(
       id,
       sensor.organizationId,
@@ -658,8 +660,8 @@ export class SqlStorage implements IStorage {
       sensor.validationMin ? parseFloat(sensor.validationMin.toString()) : null,
       sensor.validationMax ? parseFloat(sensor.validationMax.toString()) : null
     );
-    
-    const created: Sensor = { 
+
+    const created: Sensor = {
       ...sensor,
       id,
       unit: sensor.unit || null,
@@ -667,7 +669,7 @@ export class SqlStorage implements IStorage {
       validationMax: sensor.validationMax || null,
       isActive: true,
       isPublic: true,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     return created;
   }
@@ -675,7 +677,7 @@ export class SqlStorage implements IStorage {
   async updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined> {
     const updates = [];
     const values = [];
-    
+
     if (sensor.name !== undefined) {
       updates.push('name = ?');
       values.push(sensor.name);
@@ -688,32 +690,32 @@ export class SqlStorage implements IStorage {
       updates.push('unit = ?');
       values.push(sensor.unit);
     }
-    
+
     if (updates.length === 0) {
       return this.getSensor(id);
     }
-    
+
     values.push(id);
     const stmt = this.db.prepare(
       `UPDATE sensors SET ${updates.join(', ')} WHERE id = ?`
     );
     stmt.run(...values);
-    
+
     return this.getSensor(id);
   }
 
   async rotateSensorCredentials(id: string): Promise<{ username: string; password: string } | undefined> {
     const sensor = await this.getSensor(id);
     if (!sensor) return undefined;
-    
+
     const newUsername = `sensor_${randomUUID().substring(0, 8)}`;
     const newPassword = randomUUID();
-    
+
     const stmt = this.db.prepare(
       'UPDATE sensors SET mqtt_username = ?, mqtt_password = ? WHERE id = ?'
     );
     stmt.run(newUsername, newPassword, id);
-    
+
     return { username: newUsername, password: newPassword };
   }
 
@@ -727,7 +729,7 @@ export class SqlStorage implements IStorage {
   async getSensorReadings(sensorId: string, startTime?: Date, endTime?: Date, includeSimulated?: boolean): Promise<SensorReading[]> {
     let query = 'SELECT * FROM sensor_readings WHERE sensor_id = ?';
     const params = [sensorId];
-    
+
     if (startTime) {
       query += ' AND timestamp >= ?';
       params.push(startTime.toISOString());
@@ -739,9 +741,9 @@ export class SqlStorage implements IStorage {
     if (includeSimulated === false) {
       query += ' AND is_simulated = 0';
     }
-    
+
     query += ' ORDER BY timestamp DESC';
-    
+
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as any[];
     return rows.map(row => this.mapSensorReading(row));
@@ -755,22 +757,22 @@ export class SqlStorage implements IStorage {
 
   async getLatestReadingsByZone(zoneId: string, today?: Date): Promise<Array<SensorReading & { sensor: Sensor }>> {
     let query = `
-      SELECT sr.*, s.* FROM sensor_readings sr 
-      JOIN sensors s ON sr.sensor_id = s.id 
+      SELECT sr.*, s.* FROM sensor_readings sr
+      JOIN sensors s ON sr.sensor_id = s.id
       WHERE s.zone_id = ? AND s.is_active = 1
     `;
     const params = [zoneId];
-    
+
     if (today) {
       query += ' AND DATE(sr.timestamp) = DATE(?)';
       params.push(today.toISOString());
     }
-    
+
     query += ' ORDER BY sr.timestamp DESC';
-    
+
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as any[];
-    
+
     return rows.map(row => ({
       ...this.mapSensorReading(row),
       sensor: this.mapSensor(row)
@@ -780,10 +782,10 @@ export class SqlStorage implements IStorage {
   async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO sensor_readings (id, sensor_id, value, timestamp, is_simulated) 
+      INSERT INTO sensor_readings (id, sensor_id, value, timestamp, is_simulated)
       VALUES (?, ?, ?, ?, ?)
     `);
-    
+
     stmt.run(
       id,
       reading.sensorId,
@@ -791,12 +793,12 @@ export class SqlStorage implements IStorage {
       reading.timestamp.toISOString(),
       reading.isSimulated ? 1 : 0
     );
-    
-    const created: SensorReading = { 
+
+    const created: SensorReading = {
       ...reading,
       id,
       isSimulated: reading.isSimulated || null,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     return created;
   }
@@ -804,9 +806,9 @@ export class SqlStorage implements IStorage {
   // QR Snapshots
   async getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]> {
     const stmt = this.db.prepare(`
-      SELECT qs.* FROM qr_snapshots qs 
-      JOIN lotes l ON qs.lote_id = l.id 
-      WHERE l.organization_id = ? AND qs.is_active = 1 
+      SELECT qs.* FROM qr_snapshots qs
+      JOIN lotes l ON qs.lote_id = l.id
+      WHERE l.organization_id = ? AND qs.is_active = 1
       ORDER BY qs.created_at DESC
     `);
     const rows = stmt.all(organizationId) as any[];
@@ -822,10 +824,10 @@ export class SqlStorage implements IStorage {
   async createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO qr_snapshots (id, lote_id, public_token, snapshot_data, is_active, scan_count, created_by) 
+      INSERT INTO qr_snapshots (id, lote_id, public_token, snapshot_data, is_active, scan_count, created_by)
       VALUES (?, ?, ?, ?, 1, 0, ?)
     `);
-    
+
     stmt.run(
       id,
       snapshot.loteId,
@@ -833,13 +835,13 @@ export class SqlStorage implements IStorage {
       JSON.stringify(snapshot.snapshotData),
       snapshot.createdBy
     );
-    
-    const created: QrSnapshot = { 
+
+    const created: QrSnapshot = {
       ...snapshot,
       id,
       isActive: true,
       scanCount: 0,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     return created;
   }
@@ -851,7 +853,7 @@ export class SqlStorage implements IStorage {
 
   async revokeQrSnapshot(id: string, organizationId: string): Promise<boolean> {
     const stmt = this.db.prepare(`
-      UPDATE qr_snapshots SET is_active = 0 
+      UPDATE qr_snapshots SET is_active = 0
       WHERE id = ? AND lote_id IN (
         SELECT id FROM lotes WHERE organization_id = ?
       )
@@ -864,10 +866,10 @@ export class SqlStorage implements IStorage {
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
-      INSERT INTO audit_log (id, organization_id, user_id, entity_type, entity_id, action, old_data, new_data) 
+      INSERT INTO audit_log (id, organization_id, user_id, entity_type, entity_id, action, old_data, new_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
+
     stmt.run(
       id,
       log.organizationId,
@@ -878,13 +880,13 @@ export class SqlStorage implements IStorage {
       log.oldData ? JSON.stringify(log.oldData) : null,
       log.newData ? JSON.stringify(log.newData) : null
     );
-    
-    const created: AuditLog = { 
+
+    const created: AuditLog = {
       ...log,
       id,
       oldData: log.oldData || null,
       newData: log.newData || null,
-      timestamp: new Date() 
+      timestamp: new Date()
     };
     return created;
   }
@@ -964,5 +966,28 @@ export class SqlStorage implements IStorage {
       newData: row.new_data ? JSON.parse(row.new_data) : null,
       timestamp: new Date(row.timestamp)
     };
+  }
+
+  // New function to handle sub-lot naming convention
+  async createSubLote(loteId: string, organizationId: string, identification: string): Promise<Lote> {
+    const parentLote = await this.getLote(loteId, organizationId);
+    if (!parentLote) {
+      throw new Error(`Parent lote with id ${loteId} not found.`);
+    }
+
+    const subLoteIdentification = `${identification}-${loteId}`; // Following the convention: ID del lote guión id del sublote
+
+    const subLote: InsertLote = {
+      organizationId: organizationId,
+      identification: subLoteIdentification,
+      initialAnimals: 0, // Assuming 0 initially, or adjust as needed
+      status: 'active',
+      parentLoteId: loteId,
+      pieceType: parentLote.pieceType, // Inherit piece type if applicable
+      foodRegime: parentLote.foodRegime, // Inherit food regime if applicable
+      customData: parentLote.customData, // Inherit custom data if applicable
+    };
+
+    return this.createLote(subLote);
   }
 }

@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { randomUUID } from "crypto";
 import type { Store } from "express-session";
-import { eq, and, desc, gte, lte, sql, isNull } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, isNull, or, inArray } from "drizzle-orm";
 import {
   type User,
   type InsertUser,
@@ -643,5 +643,80 @@ export class PostgresStorage implements IStorage {
       )
       .returning();
     return result.length > 0;
+  }
+
+  // Added missing function from IStorage interface
+  async getSensorDataByLoteAndStage(
+    loteId: string,
+    stage: string,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<any[]> {
+    try {
+      // First get all stays for this lote in this stage during the time period
+      const relevantStays = await this.db
+        .select({
+          zoneId: stays.zoneId,
+          entryTime: stays.entryTime,
+          exitTime: stays.exitTime,
+        })
+        .from(stays)
+        .innerJoin(zones, eq(zones.id, stays.zoneId))
+        .where(
+          and(
+            eq(stays.loteId, loteId),
+            eq(zones.stage, stage),
+            // Stay overlaps with the time period
+            or(
+              and(
+                gte(stays.entryTime, startTime),
+                lte(stays.entryTime, endTime)
+              ),
+              and(
+                stays.exitTime ? gte(stays.exitTime, startTime) : undefined,
+                stays.exitTime ? lte(stays.exitTime, endTime) : undefined
+              ),
+              and(
+                lte(stays.entryTime, startTime),
+                or(
+                  stays.exitTime ? gte(stays.exitTime, endTime) : undefined,
+                  eq(stays.exitTime, null)
+                )
+              )
+            )
+          )
+        );
+
+      if (relevantStays.length === 0) {
+        return [];
+      }
+
+      // Get sensor readings for all relevant zones during the time period
+      const zoneIds = relevantStays.map(stay => stay.zoneId);
+
+      const result = await this.db
+        .select({
+          id: sensorReadings.id,
+          sensorType: sensorReadings.sensorType,
+          value: sensorReadings.value,
+          timestamp: sensorReadings.timestamp,
+        })
+        .from(sensorReadings)
+        .innerJoin(sensors, eq(sensors.id, sensorReadings.sensorId))
+        .where(
+          and(
+            inArray(sensors.zoneId, zoneIds),
+            gte(sensorReadings.timestamp, startTime),
+            lte(sensorReadings.timestamp, endTime),
+          )
+        )
+        .orderBy(sensorReadings.timestamp);
+
+      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage}`);
+      return result;
+    } catch (error) {
+      console.error("Error fetching sensor data by lote and stage:", error);
+      return [];
+    }
   }
 }
