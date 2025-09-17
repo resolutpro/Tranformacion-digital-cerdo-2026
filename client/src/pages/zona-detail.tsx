@@ -56,16 +56,21 @@ export default function ZoneDetail() {
       const promises = sensors.map(async (sensor) => {
         try {
           const res = await apiRequest("GET", `/api/sensors/${sensor.id}/readings/latest`);
-          const reading = await res.json();
-          return { sensorId: sensor.id, reading };
+          if (res.ok) {
+            const reading = await res.json();
+            return { sensorId: sensor.id, reading };
+          } else {
+            return { sensorId: sensor.id, reading: null };
+          }
         } catch (error) {
+          console.error(`Error fetching latest reading for sensor ${sensor.id}:`, error);
           return { sensorId: sensor.id, reading: null };
         }
       });
       return Promise.all(promises);
     },
     enabled: sensors.length > 0,
-    refetchInterval: 2000, // Refresh every 2 seconds for faster MQTT updates
+    refetchInterval: 3000, // Refresh every 3 seconds to capture MQTT updates
     refetchIntervalInBackground: true, // Keep refetching in background
     staleTime: 0, // Always consider data stale to force updates
   });
@@ -269,7 +274,7 @@ export default function ZoneDetail() {
                     <div className="text-xs md:text-sm text-muted-foreground" data-testid={`sensor-last-reading-${sensor.id}`}>
                       {latestReading 
                         ? `Actualizado ${formatDistanceToNow(new Date(latestReading.timestamp), { addSuffix: true, locale: es })}`
-                        : "Sin lecturas recientes"
+                        : "Sin lecturas disponibles"
                       }
                     </div>
                   </div>

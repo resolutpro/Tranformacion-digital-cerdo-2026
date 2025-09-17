@@ -1137,6 +1137,22 @@ export function registerRoutes(app: Express): Server {
     }),
   );
 
+  app.get(
+    "/api/sensors/:id/readings/latest",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const sensor = await storage.getSensor(req.params.id);
+      if (!sensor)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      const zone = await storage.getZone(sensor.zoneId, req.organizationId);
+      if (!zone)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+
+      const latestReading = await storage.getLatestReadingBySensor(req.params.id);
+      res.json(latestReading || null);
+    }),
+  );
+
   app.post(
     "/api/sensors/:id/simulate",
     requireAuth,
