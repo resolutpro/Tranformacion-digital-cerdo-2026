@@ -145,46 +145,116 @@ class MqttService {
 
     // Set up event handlers
     client.on('connect', () => {
-      logger.info("MQTT connected", { connectionKey });
+      logger.info("🟢 MQTT CONNECTED SUCCESSFULLY", { 
+        connectionKey,
+        host: firstSensor.mqttHost,
+        port: firstSensor.mqttPort,
+        username: firstSensor.mqttUsername,
+        sensorsToSubscribe: sensors.length
+      });
       connection.lastConnected = new Date();
       connection.reconnectCount = 0;
 
       // Subscribe to all topics for this connection
       for (const sensor of sensors) {
         if (sensor.ttnTopic) {
+          logger.info("📡 ATTEMPTING SUBSCRIPTION", { 
+            sensorId: sensor.id,
+            sensorName: sensor.name,
+            topic: sensor.ttnTopic,
+            connectionKey
+          });
+
           client.subscribe(sensor.ttnTopic, (err) => {
             if (err) {
-              logger.error(`Failed to subscribe to topic ${sensor.ttnTopic}`, err);
+              logger.error("❌ SUBSCRIPTION FAILED", { 
+                topic: sensor.ttnTopic,
+                sensorId: sensor.id,
+                sensorName: sensor.name,
+                error: err.message,
+                connectionKey
+              });
             } else {
-              logger.info(`Subscribed to topic: ${sensor.ttnTopic}`, { sensorId: sensor.id });
+              logger.info("✅ SUBSCRIPTION SUCCESS", { 
+                topic: sensor.ttnTopic,
+                sensorId: sensor.id,
+                sensorName: sensor.name,
+                connectionKey
+              });
             }
+          });
+        } else {
+          logger.warn("⚠️ SENSOR HAS NO TTN TOPIC", { 
+            sensorId: sensor.id,
+            sensorName: sensor.name,
+            connectionKey
           });
         }
       }
     });
 
     client.on('message', async (topic, message) => {
+      logger.info("📨 MQTT MESSAGE EVENT TRIGGERED", { 
+        topic,
+        messageSize: message.length,
+        connectionKey,
+        timestamp: new Date().toISOString()
+      });
+
       try {
         await this.handleMqttMessage(topic, message, sensors);
       } catch (error) {
-        logger.error("Error handling MQTT message", { topic, error });
+        logger.error("💥 ERROR in message handler", { topic, error: error.message, stack: error.stack });
       }
     });
 
     client.on('error', (error) => {
-      logger.error("MQTT connection error", { connectionKey, error: error.message });
+      logger.error("🔴 MQTT CONNECTION ERROR", { 
+        connectionKey, 
+        error: error.message, 
+        errorCode: error.code,
+        errorStack: error.stack,
+        host: firstSensor.mqttHost,
+        port: firstSensor.mqttPort
+      });
     });
 
     client.on('offline', () => {
-      logger.warn("MQTT connection offline", { connectionKey });
+      logger.warn("🟡 MQTT CONNECTION OFFLINE", { 
+        connectionKey,
+        lastConnected: connection.lastConnected,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    client.on('close', () => {
+      logger.warn("🔵 MQTT CONNECTION CLOSED", { 
+        connectionKey,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    client.on('disconnect', () => {
+      logger.warn("🟠 MQTT DISCONNECTED", { 
+        connectionKey,
+        timestamp: new Date().toISOString()
+      });
     });
 
     client.on('reconnect', () => {
       connection.reconnectCount++;
-      logger.info("MQTT reconnecting", { connectionKey, attempt: connection.reconnectCount });
+      logger.info("🔄 MQTT RECONNECTING", { 
+        connectionKey, 
+        attempt: connection.reconnectCount,
+        maxAttempts: this.maxReconnectAttempts,
+        timestamp: new Date().toISOString()
+      });
       
       if (connection.reconnectCount > this.maxReconnectAttempts) {
-        logger.error("Max reconnect attempts reached", { connectionKey });
+        logger.error("❌ MAX RECONNECT ATTEMPTS REACHED", { 
+          connectionKey,
+          finalAttempt: connection.reconnectCount
+        });
         client.end();
       }
     });
@@ -192,37 +262,107 @@ class MqttService {
 
   private async handleMqttMessage(topic: string, message: Buffer, sensors: Sensor[]): Promise<void> {
     try {
+      logger.info("🔔 RAW MQTT MESSAGE RECEIVED", { 
+        topic, 
+        messageLength: message.length,
+        availableSensors: sensors.length,
+        sensorTopics: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic }))
+      });
+
       const messageStr = message.toString();
+      logger.info("📄 MESSAGE STRING", { 
+        topic, 
+        messageStr: messageStr.substring(0, 500), // Show more characters
+        fullLength: messageStr.length 
+      });
+
       let messageData: any;
       
       try {
         messageData = JSON.parse(messageStr);
+        logger.info("✅ JSON PARSE SUCCESS", { 
+          topic, 
+          parsedDataKeys: Object.keys(messageData),
+          parsedData: messageData 
+        });
       } catch (parseError) {
-        logger.warn("Failed to parse MQTT message as JSON", { topic, message: messageStr });
+        logger.error("❌ JSON PARSE FAILED", { 
+          topic, 
+          message: messageStr,
+          parseError: parseError.message,
+          messageType: typeof messageStr 
+        });
         return;
       }
 
-      logger.info("Received MQTT message", { topic, messagePreview: messageStr.substring(0, 200) });
-
       // Find sensors that match this topic
       const matchingSensors = sensors.filter(s => s.ttnTopic === topic);
+      logger.info("🎯 TOPIC MATCHING RESULTS", { 
+        topic, 
+        matchingSensorsCount: matchingSensors.length,
+        matchingSensors: matchingSensors.map(s => ({ 
+          id: s.id, 
+          name: s.name, 
+          expectedTopic: s.ttnTopic,
+          jsonFields: s.jsonFields 
+        })),
+        allSensorTopics: sensors.map(s => s.ttnTopic)
+      });
       
+      if (matchingSensors.length === 0) {
+        logger.warn("⚠️ NO MATCHING SENSORS FOUND", { 
+          receivedTopic: topic,
+          availableTopics: sensors.map(s => s.ttnTopic),
+          topicComparison: sensors.map(s => ({
+            sensorTopic: s.ttnTopic,
+            matches: s.ttnTopic === topic,
+            exactMatch: s.ttnTopic?.trim() === topic?.trim()
+          }))
+        });
+        return;
+      }
+
       for (const sensor of matchingSensors) {
+        logger.info(`🔄 PROCESSING SENSOR: ${sensor.name}`, { 
+          sensorId: sensor.id, 
+          sensorName: sensor.name,
+          sensorTopic: sensor.ttnTopic,
+          jsonFields: sensor.jsonFields
+        });
         await this.processSensorMessage(sensor, messageData);
       }
 
     } catch (error) {
-      logger.error("Error handling MQTT message", { topic, error });
+      logger.error("💥 CRITICAL ERROR in handleMqttMessage", { topic, error: error.message, stack: error.stack });
     }
   }
 
   private async processSensorMessage(sensor: Sensor, messageData: any): Promise<void> {
     try {
+      logger.info(`🚀 STARTING SENSOR MESSAGE PROCESSING`, { 
+        sensorId: sensor.id, 
+        sensorName: sensor.name,
+        jsonFields: sensor.jsonFields,
+        messageDataKeys: Object.keys(messageData),
+        fullMessageData: messageData
+      });
+
       // Extract the specified JSON fields
       const fieldsToRead = sensor.jsonFields ? sensor.jsonFields.split(',').map(f => f.trim()) : [];
       
+      logger.info("📋 FIELDS TO EXTRACT", { 
+        sensorId: sensor.id,
+        rawJsonFields: sensor.jsonFields,
+        parsedFields: fieldsToRead,
+        fieldsCount: fieldsToRead.length
+      });
+
       if (fieldsToRead.length === 0) {
-        logger.warn("No JSON fields specified for sensor", { sensorId: sensor.id });
+        logger.error("❌ NO JSON FIELDS SPECIFIED", { 
+          sensorId: sensor.id, 
+          sensorName: sensor.name,
+          jsonFieldsValue: sensor.jsonFields 
+        });
         return;
       }
 
@@ -230,17 +370,44 @@ class MqttService {
       const extractedValues: Record<string, any> = {};
       
       for (const field of fieldsToRead) {
+        logger.info(`🔍 EXTRACTING FIELD: ${field}`, { 
+          sensorId: sensor.id,
+          field,
+          messageDataStructure: this.getDataStructure(messageData)
+        });
+
         const value = this.extractNestedValue(messageData, field);
+        
+        logger.info(`📊 FIELD EXTRACTION RESULT`, { 
+          sensorId: sensor.id,
+          field,
+          extractedValue: value,
+          valueType: typeof value,
+          isUndefined: value === undefined
+        });
+
         if (value !== undefined) {
           extractedValues[field] = value;
         }
       }
 
+      logger.info("🎯 EXTRACTION SUMMARY", { 
+        sensorId: sensor.id,
+        requestedFields: fieldsToRead,
+        extractedFields: Object.keys(extractedValues),
+        extractedValues,
+        availableTopLevelFields: Object.keys(messageData),
+        messageDataSample: JSON.stringify(messageData).substring(0, 300)
+      });
+
       if (Object.keys(extractedValues).length === 0) {
-        logger.warn("No matching fields found in message", { 
+        logger.error("❌ NO MATCHING FIELDS FOUND", { 
           sensorId: sensor.id, 
+          sensorName: sensor.name,
           requestedFields: fieldsToRead,
-          availableFields: Object.keys(messageData)
+          availableFields: Object.keys(messageData),
+          messageStructure: this.getDataStructure(messageData, 3), // Show nested structure
+          fullMessage: messageData
         });
         return;
       }
@@ -248,39 +415,125 @@ class MqttService {
       // Create sensor reading with extracted values
       const readingValue = JSON.stringify(extractedValues);
       
-      await storage.createSensorReading({
+      logger.info("💾 SAVING SENSOR READING", { 
+        sensorId: sensor.id,
+        sensorName: sensor.name,
+        readingValue,
+        timestamp: new Date().toISOString()
+      });
+
+      const savedReading = await storage.createSensorReading({
         sensorId: sensor.id,
         value: readingValue,
         timestamp: new Date(),
         isSimulated: false,
       });
 
-      logger.info("Created sensor reading from MQTT", { 
+      logger.info("✅ SENSOR READING SAVED SUCCESSFULLY", { 
         sensorId: sensor.id,
         sensorName: sensor.name,
+        readingId: savedReading.id,
         extractedFields: Object.keys(extractedValues),
-        value: readingValue
+        value: readingValue,
+        timestamp: savedReading.timestamp
       });
 
     } catch (error) {
-      logger.error("Error processing sensor message", { sensorId: sensor.id, error });
+      logger.error("💥 CRITICAL ERROR in processSensorMessage", { 
+        sensorId: sensor.id, 
+        sensorName: sensor.name,
+        error: error.message, 
+        stack: error.stack,
+        messageData 
+      });
     }
   }
 
   private extractNestedValue(obj: any, path: string): any {
-    return path.split('.').reduce((current, key) => {
+    logger.info(`🔍 EXTRACTING NESTED VALUE`, { 
+      path, 
+      startingObject: typeof obj === 'object' ? Object.keys(obj) : obj,
+      pathSegments: path.split('.')
+    });
+
+    const result = path.split('.').reduce((current, key, index) => {
+      logger.info(`📍 PATH STEP ${index + 1}`, { 
+        currentKey: key,
+        currentObjectType: typeof current,
+        currentObjectKeys: current && typeof current === 'object' ? Object.keys(current) : 'not-object',
+        hasKey: current && current[key] !== undefined,
+        keyValue: current && current[key]
+      });
+
       return current && current[key] !== undefined ? current[key] : undefined;
     }, obj);
+
+    logger.info(`🎯 EXTRACTION COMPLETE`, { 
+      path, 
+      finalResult: result, 
+      resultType: typeof result,
+      wasSuccessful: result !== undefined
+    });
+
+    return result;
+  }
+
+  private getDataStructure(obj: any, maxDepth: number = 2, currentDepth: number = 0): any {
+    if (currentDepth >= maxDepth || obj === null || typeof obj !== 'object') {
+      return typeof obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return `Array[${obj.length}]`;
+    }
+
+    const structure: any = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        structure[key] = this.getDataStructure(obj[key], maxDepth, currentDepth + 1);
+      }
+    }
+    return structure;
   }
 
   // Public method to connect a specific sensor to MQTT
   async connectSensor(sensor: Sensor): Promise<void> {
+    logger.info("🚀 CONNECT SENSOR REQUEST", { 
+      sensorId: sensor.id,
+      sensorName: sensor.name,
+      mqttEnabled: sensor.mqttEnabled,
+      mqttHost: sensor.mqttHost,
+      mqttPort: sensor.mqttPort,
+      ttnTopic: sensor.ttnTopic,
+      jsonFields: sensor.jsonFields,
+      hasUsername: !!sensor.mqttUsername,
+      hasPassword: !!sensor.mqttPassword
+    });
+
     if (!sensor.mqttEnabled || !sensor.mqttHost || !sensor.mqttPort || !sensor.ttnTopic) {
-      logger.warn("Sensor missing required MQTT configuration", { sensorId: sensor.id });
+      logger.error("❌ SENSOR MISSING REQUIRED MQTT CONFIGURATION", { 
+        sensorId: sensor.id,
+        sensorName: sensor.name,
+        mqttEnabled: sensor.mqttEnabled,
+        mqttHost: sensor.mqttHost,
+        mqttPort: sensor.mqttPort,
+        ttnTopic: sensor.ttnTopic,
+        missingFields: [
+          !sensor.mqttEnabled && 'mqttEnabled',
+          !sensor.mqttHost && 'mqttHost',
+          !sensor.mqttPort && 'mqttPort',
+          !sensor.ttnTopic && 'ttnTopic'
+        ].filter(Boolean)
+      });
       return;
     }
 
     const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
+    logger.info("🔑 CONNECTION KEY GENERATED", { 
+      connectionKey,
+      sensorId: sensor.id
+    });
+
     await this.ensureConnection(connectionKey, [sensor]);
   }
 
