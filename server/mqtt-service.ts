@@ -313,15 +313,22 @@ class MqttService {
           messageToParsePreview: messageStr.substring(0, 200)
         });
         
-        messageData = JSON.parse(messageStr);
+        const fullMessageData = JSON.parse(messageStr);
+        
+        // Extraer uplink_message.decoded_payload si existe
+        messageData = fullMessageData.uplink_message?.decoded_payload || fullMessageData;
         
         logger.info("✅✅✅ JSON PARSE SUCCESS - DATA EXTRACTED", { 
           topic, 
-          parsedDataKeys: Object.keys(messageData),
-          parsedData: messageData,
+          fullMessageKeys: Object.keys(fullMessageData),
+          hasUplinkMessage: !!fullMessageData.uplink_message,
+          hasDecodedPayload: !!fullMessageData.uplink_message?.decoded_payload,
+          extractedDataKeys: Object.keys(messageData),
+          extractedData: messageData,
           dataType: typeof messageData,
           isObject: typeof messageData === 'object',
-          hasKeys: Object.keys(messageData).length > 0
+          hasKeys: Object.keys(messageData).length > 0,
+          dataSource: fullMessageData.uplink_message?.decoded_payload ? 'uplink_message.decoded_payload' : 'root'
         });
       } catch (parseError) {
         logger.error("❌❌❌ JSON PARSE FAILED - CRITICAL ERROR", { 
