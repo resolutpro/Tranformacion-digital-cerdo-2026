@@ -578,14 +578,35 @@ class MqttService {
         return;
       }
 
-      // Create sensor reading with extracted values
-      const readingValue = JSON.stringify(extractedValues);
+      // Get the first extracted value (assuming single sensor reading)
+      const firstFieldName = Object.keys(extractedValues)[0];
+      const firstValue = extractedValues[firstFieldName];
+      
+      // Ensure we have a numeric value for the database
+      let numericValue: number;
+      if (typeof firstValue === 'number') {
+        numericValue = firstValue;
+      } else if (typeof firstValue === 'string' && !isNaN(parseFloat(firstValue))) {
+        numericValue = parseFloat(firstValue);
+      } else {
+        logger.error("❌❌❌ EXTRACTED VALUE IS NOT NUMERIC - CANNOT SAVE", {
+          sensorId: sensor.id,
+          firstFieldName,
+          firstValue,
+          valueType: typeof firstValue
+        });
+        return;
+      }
+
+      const readingValue = numericValue.toString();
       
       logger.info("💾💾💾 PREPARING TO SAVE SENSOR READING", { 
         sensorId: sensor.id,
         sensorName: sensor.name,
+        extractedField: firstFieldName,
+        extractedRawValue: firstValue,
+        numericValue,
         readingValue,
-        readingValueLength: readingValue.length,
         extractedFieldsCount: Object.keys(extractedValues).length,
         timestamp: new Date().toISOString(),
         isSimulated: false,
