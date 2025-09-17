@@ -1,0 +1,80 @@
+[MQTT-SERVICE] 2025-09-17T10:56:13.966Z - 📊📊📊 FIELD EXTRACTION RESULT - DETAILED {
+  "sensorId": "a54cbe12-b223-4365-8784-6b95d8479ba1",
+  "field": "temp",
+  "extractedValue": 26.8,
+  "valueType": "number",
+  "isUndefined": false,
+  "isNull": false,
+  "isNumber": true,
+  "isString": false,
+  "isObject": false,
+  "valueStringified": "26.8",
+  "extractionSuccessful": true
+}
+[MQTT-SERVICE] 2025-09-17T10:56:13.966Z - ✅✅✅ FIELD EXTRACTED SUCCESSFULLY: "temp" {
+  "sensorId": "a54cbe12-b223-4365-8784-6b95d8479ba1",
+  "field": "temp",
+  "value": 26.8,
+  "extractedValueCount": 1
+}
+[MQTT-SERVICE] 2025-09-17T10:56:13.966Z - 🎯🎯🎯 EXTRACTION SUMMARY - COMPREHENSIVE {
+  "sensorId": "a54cbe12-b223-4365-8784-6b95d8479ba1",
+  "sensorName": "Temperatura 1",
+  "requestedFields": [
+    "temp"
+  ],
+  "requestedFieldsCount": 1,
+  "extractedFields": [
+    "temp"
+  ],
+  "extractedFieldsCount": 1,
+  "extractedValues": {
+    "temp": 26.8
+  },
+  "extractionSuccessRate": "1/1",
+  "availableTopLevelFields": [
+    "hum",
+    "temp",
+    "timestamp"
+  ],
+  "messageDataSample": "{\"hum\":69.5,\"temp\":26.8,\"timestamp\":\"2025-09-17T08:42:24.000Z\"}",
+  "fullMessageStructure": {
+    "hum": "number",
+    "temp": "number",
+    "timestamp": "string"
+  }
+}
+[MQTT-SERVICE] 2025-09-17T10:56:13.966Z - 💾💾💾 PREPARING TO SAVE SENSOR READING {
+  "sensorId": "a54cbe12-b223-4365-8784-6b95d8479ba1",
+  "sensorName": "Temperatura 1",
+  "readingValue": "{\"temp\":26.8}",
+  "readingValueLength": 13,
+  "extractedFieldsCount": 1,
+  "timestamp": "2025-09-17T10:56:13.966Z",
+  "isSimulated": false,
+  "databaseCallStartTime": "2025-09-17T10:56:13.966Z"
+}
+[MQTT-SERVICE] 2025-09-17T10:56:13.966Z - 🔄🔄🔄 CALLING STORAGE.createSensorReading {
+  "sensorId": "a54cbe12-b223-4365-8784-6b95d8479ba1",
+  "parameters": {
+    "sensorId": "a54cbe12-b223-4365-8784-6b95d8479ba1",
+    "value": "{\"temp\":26.8}",
+    "timestamp": "2025-09-17T10:56:13.966Z",
+    "isSimulated": false
+  }
+}
+[MQTT-SERVICE] 2025-09-17T10:56:14.112Z - 💥💥💥 DATABASE SAVE FAILED - CRITICAL ERROR {
+  sensorId: 'a54cbe12-b223-4365-8784-6b95d8479ba1',
+  sensorName: 'Temperatura 1',
+  readingValue: '{"temp":26.8}',
+  saveError: 'invalid input syntax for type numeric: "{"temp":26.8}"',
+  saveErrorStack: 'PostgresError: invalid input syntax for type numeric: "{"temp":26.8}"\n' +
+    '    at ErrorResponse (file:///home/runner/workspace/node_modules/postgres/src/connection.js:794:26)\n' +
+    '    at handle (file:///home/runner/workspace/node_modules/postgres/src/connection.js:480:6)\n' +
+    '    at TLSSocket.data (file:///home/runner/workspace/node_modules/postgres/src/connection.js:315:9)\n' +
+    '    at TLSSocket.emit (node:events:524:28)\n' +
+    '    at addChunk (node:internal/streams/readable:561:12)\n' +
+    '    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n' +
+    '    at Readable.push (node:internal/streams/readable:392:5)\n' +
+    '    at TLSWrap.onStreamRead (node:internal/stream_base_commons:191:23)',
+  saveErrorType: 'PostgresError'
