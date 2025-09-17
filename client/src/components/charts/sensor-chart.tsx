@@ -125,11 +125,10 @@ export function SensorChart({ sensors }: SensorChartProps) {
 
   // Transform data for chart
   const chartData = readingsData.reduce((acc: any[], reading) => {
-    // Ensure timestamp is handled correctly, assuming reading.timestamp is already the correct value from MQTT
-    // Timezone conversion to Europe/Madrid (UTC+2) should ideally happen during data ingestion or at the backend.
-    // For display, we use the provided timestamp and format it.
+    // Data is stored in UTC and converted to Madrid timezone for display
+    // The formatMadridTime utility handles the timezone conversion
     const readingDate = new Date(reading.timestamp); 
-    const timestamp = readingDate.getTime(); // Using the timestamp from the data
+    const timestamp = readingDate.getTime(); // Using the UTC timestamp from the data
 
     let existing = acc.find(point => Math.abs(point.timestamp - timestamp) < 60000); // Group readings within 1 minute
 

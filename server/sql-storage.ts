@@ -873,8 +873,8 @@ export class SqlStorage implements IStorage {
 
   async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
     const id = randomUUID();
-    // Use Madrid timezone (UTC+2) for created_at
-    const madridTime = new Date(Date.now() + (2 * 60 * 60 * 1000));
+    // Store everything in UTC - conversion to Madrid time happens at display
+    const utcTime = new Date();
 
     const stmt = this.db.prepare(`
       INSERT INTO sensor_readings (id, sensor_id, value, timestamp, is_simulated, created_at)
@@ -887,7 +887,7 @@ export class SqlStorage implements IStorage {
       reading.value,
       reading.timestamp.toISOString(),
       reading.isSimulated ? 1 : 0,
-      madridTime.toISOString()
+      utcTime.toISOString()
     );
 
     return this.getLatestReadingBySensor(reading.sensorId)!;

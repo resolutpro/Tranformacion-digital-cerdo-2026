@@ -687,8 +687,8 @@ class MqttService {
       const actualValue = extractedValues[firstField];
       const readingValue = actualValue.toString();
 
-      // Extract timestamp from the message data, convert from UTC to Madrid timezone (UTC+2)
-      let messageTimestamp = new Date(); // fallback to current time
+      // Extract timestamp from the message data, keep in UTC
+      let messageTimestamp = new Date(); // fallback to current time in UTC
       
       if (messageData.timestamp) {
         try {
@@ -699,30 +699,29 @@ class MqttService {
             timestampType: typeof timestampValue,
           });
           
-          // Parse the timestamp from the message
+          // Parse the timestamp from the message and keep it in UTC
           const parsedTime = new Date(timestampValue);
           
           if (!isNaN(parsedTime.getTime())) {
-            // Convert from UTC to Madrid timezone (UTC+2) for storage
-            // Add 2 hours to convert UTC time to Madrid time
-            messageTimestamp = new Date(parsedTime.getTime() + (2 * 60 * 60 * 1000));
+            // Keep timestamp in UTC for storage
+            messageTimestamp = parsedTime;
             
-            logger.info("✅✅✅ TIMESTAMP CONVERTED FROM UTC TO MADRID", {
+            logger.info("✅✅✅ TIMESTAMP PARSED AND KEPT IN UTC", {
               sensorId: sensor.id,
               originalTimestamp: timestampValue,
               parsedUTCTime: parsedTime.toISOString(),
-              convertedMadridTime: messageTimestamp.toISOString(),
-              timezoneOffset: "UTC -> UTC+2",
+              storedUTCTime: messageTimestamp.toISOString(),
+              timezoneNote: "Stored in UTC, conversion to Madrid time happens at display",
             });
           } else {
-            logger.warn("⚠️⚠️⚠️ INVALID TIMESTAMP IN MESSAGE - USING CURRENT TIME", {
+            logger.warn("⚠️⚠️⚠️ INVALID TIMESTAMP IN MESSAGE - USING CURRENT UTC TIME", {
               sensorId: sensor.id,
               invalidTimestamp: timestampValue,
               fallbackTime: messageTimestamp.toISOString(),
             });
           }
         } catch (timestampError) {
-          logger.error("❌❌❌ ERROR PARSING TIMESTAMP - USING CURRENT TIME", {
+          logger.error("❌❌❌ ERROR PARSING TIMESTAMP - USING CURRENT UTC TIME", {
             sensorId: sensor.id,
             timestampError: timestampError.message,
             rawTimestamp: messageData.timestamp,
@@ -730,9 +729,9 @@ class MqttService {
           });
         }
       } else {
-        // Use current time converted to Madrid timezone
-        messageTimestamp = new Date(Date.now() + (2 * 60 * 60 * 1000));
-        logger.warn("⚠️⚠️⚠️ NO TIMESTAMP IN MESSAGE - USING CURRENT MADRID TIME", {
+        // Use current UTC time
+        messageTimestamp = new Date();
+        logger.warn("⚠️⚠️⚠️ NO TIMESTAMP IN MESSAGE - USING CURRENT UTC TIME", {
           sensorId: sensor.id,
           availableFields: Object.keys(messageData || {}),
           fallbackTime: messageTimestamp.toISOString(),
@@ -768,7 +767,7 @@ class MqttService {
         const savedReading = await storage.createSensorReading({
           sensorId: sensor.id,
           value: readingValue,
-          timestamp: messageTimestamp, // Use timestamp from message
+          timestamp: messageTimestamp, // UTC timestamp for storage
           isSimulated: false,
         });
 
