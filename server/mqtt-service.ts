@@ -579,13 +579,104 @@ class MqttService {
       }
 
       // Create sensor reading with extracted values
-      const readingValue = JSON.stringify(extractedValues);
+      // If only one field is extracted, use the numeric value directly
+      // If multiple fields, we need to decide how to handle it
+      const extractedFields = Object.keys(extractedValues);
+      let readingValue: string | number;
+      
+      if (extractedFields.length === 1) {
+        // Single field: validate and use the numeric value directly
+        const rawValue = extractedValues[extractedFields[0]];
+        
+        // Strict numeric validation
+        if (typeof rawValue === 'number' && !isNaN(rawValue)) {
+          readingValue = rawValue;
+          logger.info("📊📊📊 USING SINGLE NUMERIC VALUE", {
+            sensorId: sensor.id,
+            fieldName: extractedFields[0],
+            numericValue: readingValue,
+            valueType: typeof readingValue,
+            validationPassed: true
+          });
+        } else if (typeof rawValue === 'string' && /^-?\d+(\.\d+)?$/.test(rawValue)) {
+          readingValue = parseFloat(rawValue);
+          logger.info("📊📊📊 USING CONVERTED NUMERIC VALUE", {
+            sensorId: sensor.id,
+            fieldName: extractedFields[0],
+            originalValue: rawValue,
+            convertedValue: readingValue,
+            valueType: typeof readingValue,
+            validationPassed: true
+          });
+        } else {
+          logger.error("❌❌❌ INVALID NUMERIC VALUE - ABORTING SAVE", {
+            sensorId: sensor.id,
+            fieldName: extractedFields[0],
+            invalidValue: rawValue,
+            valueType: typeof rawValue,
+            reason: "Value is not a valid number"
+          });
+          return;
+        }
+      } else {
+        // Multiple fields: Create separate readings for each numeric field
+        logger.warn("⚠️⚠️⚠️ MULTIPLE FIELDS DETECTED - CREATING SEPARATE READINGS", {
+          sensorId: sensor.id,
+          fieldsCount: extractedFields.length,
+          fields: extractedFields,
+          note: "Creating individual sensor reading for each valid numeric field"
+        });
+        
+        for (const fieldName of extractedFields) {
+          const fieldValue = extractedValues[fieldName];
+          let numericValue: number;
+          
+          if (typeof fieldValue === 'number' && !isNaN(fieldValue)) {
+            numericValue = fieldValue;
+          } else if (typeof fieldValue === 'string' && /^-?\d+(\.\d+)?$/.test(fieldValue)) {
+            numericValue = parseFloat(fieldValue);
+          } else {
+            logger.warn("⚠️⚠️⚠️ SKIPPING NON-NUMERIC FIELD", {
+              sensorId: sensor.id,
+              fieldName,
+              invalidValue: fieldValue,
+              valueType: typeof fieldValue
+            });
+            continue;
+          }
+          
+          try {
+            const savedReading = await storage.createSensorReading({
+              sensorId: sensor.id,
+              value: numericValue.toString(),
+              timestamp: new Date(),
+              isSimulated: false,
+            });
+            
+            logger.info("✅✅✅ INDIVIDUAL FIELD READING SAVED", {
+              sensorId: sensor.id,
+              fieldName,
+              value: numericValue,
+              readingId: savedReading.id
+            });
+          } catch (fieldSaveError) {
+            logger.error("💥💥💥 FAILED TO SAVE INDIVIDUAL FIELD", {
+              sensorId: sensor.id,
+              fieldName,
+              value: numericValue,
+              error: fieldSaveError instanceof Error ? fieldSaveError.message : String(fieldSaveError)
+            });
+          }
+        }
+        return; // Exit early since we handled multiple fields separately
+      }
       
       logger.info("💾💾💾 PREPARING TO SAVE SENSOR READING", { 
         sensorId: sensor.id,
         sensorName: sensor.name,
         readingValue,
-        readingValueLength: readingValue.length,
+        readingValueLength: typeof readingValue === 'string' ? readingValue.length : 'numeric-value',
+        readingValueType: typeof readingValue,
         extractedFieldsCount: Object.keys(extractedValues).length,
         timestamp: new Date().toISOString(),
         isSimulated: false,
@@ -605,7 +696,7 @@ class MqttService {
 
         const savedReading = await storage.createSensorReading({
           sensorId: sensor.id,
-          value: readingValue,
+          value: readingValue.toString(),
           timestamp: new Date(),
           isSimulated: false,
         });
