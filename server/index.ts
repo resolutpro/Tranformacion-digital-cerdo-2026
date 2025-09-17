@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { mqttService } from "./mqtt-service";
 
 const app = express();
 app.use(express.json());
@@ -85,8 +86,30 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
+  // Initialize MQTT service
+  try {
+    console.log("[STARTUP] Initializing MQTT Service...");
+    await mqttService.initialize();
+    console.log("[STARTUP] MQTT Service initialized successfully");
+  } catch (error) {
+    console.error("[STARTUP] Failed to initialize MQTT Service:", error);
+  }
+
   const port = parseInt(process.env.PORT || "5000", 10);
   server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
     log(`serving on port ${port} in ${isDev ? 'development' : 'production'} mode`);
+  });
+
+  // Graceful shutdown
+  process.on('SIGINT', async () => {
+    console.log('[SHUTDOWN] Received SIGINT, shutting down gracefully...');
+    await mqttService.shutdown();
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', async () => {
+    console.log('[SHUTDOWN] Received SIGTERM, shutting down gracefully...');
+    await mqttService.shutdown();
+    process.exit(0);
   });
 })();

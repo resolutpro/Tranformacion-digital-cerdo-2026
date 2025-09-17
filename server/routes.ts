@@ -15,6 +15,7 @@ import {
   sensorMqttConfigSchema,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import { mqttService } from "./mqtt-service";
 
 // Simple logger for diagnostics
 const logger = {
@@ -981,6 +982,20 @@ export function registerRoutes(app: Express): Server {
       const updatedSensor = await storage.updateSensorMqttConfig(req.params.id, mqttConfig);
       if (!updatedSensor) {
         return res.status(404).json({ message: "Sensor no encontrado" });
+      }
+
+      // Connect or disconnect sensor from MQTT based on configuration
+      try {
+        if (mqttConfig.mqttEnabled && mqttConfig.mqttHost && mqttConfig.mqttPort && mqttConfig.ttnTopic) {
+          logger.info("Connecting sensor to MQTT", { sensorId: req.params.id });
+          await mqttService.connectSensor(updatedSensor);
+        } else {
+          logger.info("Disconnecting sensor from MQTT", { sensorId: req.params.id });
+          await mqttService.disconnectSensor(req.params.id);
+        }
+      } catch (mqttError) {
+        logger.error("MQTT connection error during config update", mqttError);
+        // Don't fail the entire request if MQTT connection fails
       }
 
       await storage.createAuditLog({
