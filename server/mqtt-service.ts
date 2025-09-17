@@ -632,12 +632,18 @@ class MqttService {
         return;
       }
 
-      // Create sensor reading with extracted values
-      const readingValue = JSON.stringify(extractedValues);
+      // Extract the actual numeric value from the first field
+      // For single field sensors, use the first extracted value
+      // For multiple field sensors, we could extend this logic
+      const firstField = fieldsToRead[0];
+      const actualValue = extractedValues[firstField];
+      const readingValue = actualValue.toString();
 
       logger.info("💾💾💾 PREPARING TO SAVE SENSOR READING", {
         sensorId: sensor.id,
         sensorName: sensor.name,
+        extractedField: firstField,
+        actualValue,
         readingValue,
         readingValueLength: readingValue.length,
         extractedFieldsCount: Object.keys(extractedValues).length,
@@ -654,6 +660,8 @@ class MqttService {
             value: readingValue,
             timestamp: new Date(),
             isSimulated: false,
+            extractedFrom: firstField,
+            originalExtractedValues: extractedValues,
           },
         });
 
@@ -670,20 +678,26 @@ class MqttService {
             sensorId: sensor.id,
             sensorName: sensor.name,
             readingId: savedReading.id,
+            extractedField: firstField,
             extractedFields: Object.keys(extractedValues),
+            actualValue,
             value: readingValue,
             timestamp: savedReading.timestamp,
             createdAt: savedReading.createdAt,
             isSimulated: savedReading.isSimulated,
             databaseSaveTime: new Date().toISOString(),
             savedReadingObject: savedReading,
+            allExtractedValues: extractedValues,
           },
         );
       } catch (saveError) {
         logger.error("💥💥💥 DATABASE SAVE FAILED - CRITICAL ERROR", {
           sensorId: sensor.id,
           sensorName: sensor.name,
+          extractedField: firstField,
+          actualValue,
           readingValue,
+          allExtractedValues: extractedValues,
           saveError: saveError.message,
           saveErrorStack: saveError.stack,
           saveErrorType: saveError.constructor.name,
