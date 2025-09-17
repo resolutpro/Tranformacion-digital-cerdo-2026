@@ -260,7 +260,7 @@ class MqttService {
     this.connections.set(connectionKey, connection);
 
     // Set up event handlers
-    client.on("connect", () => {
+    client.on("connect", async () => {
       logger.info("🟢 MQTT CONNECTED SUCCESSFULLY", {
         connectionKey,
         host: firstSensor.mqttHost,
