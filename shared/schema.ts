@@ -78,6 +78,12 @@ export const sensors = pgTable("sensors", {
   mqttTopic: text("mqtt_topic").notNull().unique(),
   mqttUsername: text("mqtt_username").notNull(),
   mqttPassword: text("mqtt_password").notNull(),
+  // TTN MQTT Configuration
+  mqttHost: text("mqtt_host").default("eu1.cloud.thethings.network"),
+  mqttPort: integer("mqtt_port").default(8883),
+  ttnTopic: text("ttn_topic"), // e.g., v3/mi-app@ttn/devices/<device-id>/up
+  jsonFields: text("json_fields"), // comma-separated fields like "temperature,humidity,co2"
+  mqttEnabled: boolean("mqtt_enabled").default(false),
   validationMin: decimal("validation_min", { precision: 10, scale: 2 }),
   validationMax: decimal("validation_max", { precision: 10, scale: 2 }),
   isActive: boolean("is_active").default(true),
@@ -192,6 +198,25 @@ export const insertSensorSchema = createInsertSchema(sensors).omit({
   mqttPassword: true,
 });
 
+// Schema for MQTT configuration form
+export const sensorMqttConfigSchema = createInsertSchema(sensors).pick({
+  mqttHost: true,
+  mqttPort: true,
+  mqttUsername: true,
+  mqttPassword: true,
+  ttnTopic: true,
+  jsonFields: true,
+  mqttEnabled: true,
+}).extend({
+  mqttHost: z.string().min(1, "Host es requerido"),
+  mqttPort: z.number().min(1, "Puerto debe ser mayor a 0").max(65535, "Puerto debe ser menor a 65536"),
+  mqttUsername: z.string().min(1, "Usuario es requerido"),
+  mqttPassword: z.string().min(1, "Contraseña es requerida"),
+  ttnTopic: z.string().min(1, "Topic es requerido"),
+  jsonFields: z.string().optional(),
+  mqttEnabled: z.boolean().optional(),
+});
+
 export const insertSensorReadingSchema = createInsertSchema(sensorReadings).omit({
   id: true,
   createdAt: true,
@@ -235,6 +260,7 @@ export type InsertLote = z.infer<typeof insertLoteSchema>;
 export type InsertZone = z.infer<typeof insertZoneSchema>;
 export type InsertStay = z.infer<typeof insertStaySchema>;
 export type InsertSensor = z.infer<typeof insertSensorSchema>;
+export type SensorMqttConfig = z.infer<typeof sensorMqttConfigSchema>;
 export type InsertSensorReading = z.infer<typeof insertSensorReadingSchema>;
 export type InsertZoneQr = z.infer<typeof insertZoneQrSchema>;
 export type InsertQrSnapshot = z.infer<typeof insertQrSnapshotSchema>;
