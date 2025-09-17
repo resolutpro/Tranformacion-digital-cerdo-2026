@@ -194,17 +194,39 @@ class MqttService {
     });
 
     client.on('message', async (topic, message) => {
-      logger.info("📨 MQTT MESSAGE EVENT TRIGGERED", { 
+      logger.info("📨📨📨 MQTT MESSAGE EVENT TRIGGERED - RAW EVENT", { 
         topic,
+        topicLength: topic?.length,
         messageSize: message.length,
+        messagePreview: message.toString().substring(0, 100),
         connectionKey,
-        timestamp: new Date().toISOString()
+        sensorsInConnection: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic })),
+        timestamp: new Date().toISOString(),
+        eventType: 'mqtt-message-received'
       });
 
       try {
+        logger.info("🔄🔄🔄 CALLING handleMqttMessage FROM MESSAGE EVENT", {
+          topic,
+          messageLength: message.length,
+          sensorsCount: sensors.length,
+          callStartTime: new Date().toISOString()
+        });
+        
         await this.handleMqttMessage(topic, message, sensors);
+        
+        logger.info("✅✅✅ handleMqttMessage COMPLETED SUCCESSFULLY", {
+          topic,
+          callEndTime: new Date().toISOString()
+        });
       } catch (error) {
-        logger.error("💥 ERROR in message handler", { topic, error: error.message, stack: error.stack });
+        logger.error("💥💥💥 ERROR in message handler - HANDLER FAILED", { 
+          topic, 
+          error: error.message, 
+          stack: error.stack,
+          errorType: error.constructor.name,
+          handlerFailedAt: new Date().toISOString()
+        });
       }
     });
 
@@ -262,106 +284,202 @@ class MqttService {
 
   private async handleMqttMessage(topic: string, message: Buffer, sensors: Sensor[]): Promise<void> {
     try {
-      logger.info("🔔 RAW MQTT MESSAGE RECEIVED", { 
+      logger.info("🔔🔔🔔 MQTT MESSAGE RECEIVED - STARTING PROCESSING", { 
         topic, 
         messageLength: message.length,
+        bufferPreview: message.toString().substring(0, 100),
         availableSensors: sensors.length,
-        sensorTopics: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic }))
+        sensorTopics: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic })),
+        timestamp: new Date().toISOString(),
+        threadId: process.pid
       });
 
       const messageStr = message.toString();
-      logger.info("📄 MESSAGE STRING", { 
+      logger.info("📄📄📄 MESSAGE STRING CONVERSION", { 
         topic, 
-        messageStr: messageStr.substring(0, 500), // Show more characters
-        fullLength: messageStr.length 
+        messageStr: messageStr.substring(0, 1000), // Show even more characters
+        fullLength: messageStr.length,
+        encoding: 'utf8',
+        firstChars: messageStr.substring(0, 50),
+        lastChars: messageStr.substring(Math.max(0, messageStr.length - 50))
       });
 
       let messageData: any;
       
       try {
+        logger.info("🔍🔍🔍 ATTEMPTING JSON PARSE", { 
+          topic,
+          messageToParseLength: messageStr.length,
+          messageToParsePreview: messageStr.substring(0, 200)
+        });
+        
         messageData = JSON.parse(messageStr);
-        logger.info("✅ JSON PARSE SUCCESS", { 
+        
+        logger.info("✅✅✅ JSON PARSE SUCCESS - DATA EXTRACTED", { 
           topic, 
           parsedDataKeys: Object.keys(messageData),
-          parsedData: messageData 
+          parsedData: messageData,
+          dataType: typeof messageData,
+          isObject: typeof messageData === 'object',
+          hasKeys: Object.keys(messageData).length > 0
         });
       } catch (parseError) {
-        logger.error("❌ JSON PARSE FAILED", { 
+        logger.error("❌❌❌ JSON PARSE FAILED - CRITICAL ERROR", { 
           topic, 
           message: messageStr,
           parseError: parseError.message,
-          messageType: typeof messageStr 
+          parseErrorStack: parseError.stack,
+          messageType: typeof messageStr,
+          isValidString: typeof messageStr === 'string',
+          stringLength: messageStr.length
         });
         return;
       }
 
       // Find sensors that match this topic
+      logger.info("🔍🔍🔍 SEARCHING FOR MATCHING SENSORS", {
+        receivedTopic: topic,
+        availableSensorsCount: sensors.length,
+        allSensorData: sensors.map(s => ({
+          id: s.id,
+          name: s.name,
+          ttnTopic: s.ttnTopic,
+          topicMatches: s.ttnTopic === topic,
+          topicTrimMatches: s.ttnTopic?.trim() === topic?.trim()
+        }))
+      });
+      
       const matchingSensors = sensors.filter(s => s.ttnTopic === topic);
-      logger.info("🎯 TOPIC MATCHING RESULTS", { 
+      
+      logger.info("🎯🎯🎯 TOPIC MATCHING RESULTS - DETAILED", { 
         topic, 
         matchingSensorsCount: matchingSensors.length,
         matchingSensors: matchingSensors.map(s => ({ 
           id: s.id, 
           name: s.name, 
           expectedTopic: s.ttnTopic,
-          jsonFields: s.jsonFields 
+          jsonFields: s.jsonFields,
+          mqttEnabled: s.mqttEnabled,
+          isActive: s.isActive
         })),
-        allSensorTopics: sensors.map(s => s.ttnTopic)
+        allSensorTopics: sensors.map(s => ({ topic: s.ttnTopic, sensorId: s.id, name: s.name })),
+        exactTopicComparison: sensors.map(s => ({
+          sensorId: s.id,
+          sensorName: s.name,
+          sensorTopic: `"${s.ttnTopic}"`,
+          receivedTopic: `"${topic}"`,
+          matches: s.ttnTopic === topic,
+          exactMatch: s.ttnTopic?.trim() === topic?.trim(),
+          lengthMatch: s.ttnTopic?.length === topic?.length
+        }))
       });
       
       if (matchingSensors.length === 0) {
-        logger.warn("⚠️ NO MATCHING SENSORS FOUND", { 
+        logger.warn("⚠️⚠️⚠️ NO MATCHING SENSORS FOUND - WILL NOT PROCESS", { 
           receivedTopic: topic,
+          receivedTopicLength: topic.length,
           availableTopics: sensors.map(s => s.ttnTopic),
-          topicComparison: sensors.map(s => ({
+          detailedComparison: sensors.map(s => ({
+            sensorId: s.id,
+            sensorName: s.name,
             sensorTopic: s.ttnTopic,
+            sensorTopicLength: s.ttnTopic?.length,
             matches: s.ttnTopic === topic,
-            exactMatch: s.ttnTopic?.trim() === topic?.trim()
+            exactMatch: s.ttnTopic?.trim() === topic?.trim(),
+            charByCharComparison: topic.split('').map((char, idx) => ({
+              index: idx,
+              received: char,
+              expected: s.ttnTopic?.[idx] || 'undefined',
+              match: char === s.ttnTopic?.[idx]
+            })).slice(0, 20) // First 20 chars
           }))
         });
         return;
       }
 
+      logger.info("🚀🚀🚀 STARTING SENSOR PROCESSING LOOP", {
+        matchingSensorsCount: matchingSensors.length,
+        sensorsToProcess: matchingSensors.map(s => ({ id: s.id, name: s.name }))
+      });
+
       for (const sensor of matchingSensors) {
-        logger.info(`🔄 PROCESSING SENSOR: ${sensor.name}`, { 
+        logger.info(`🔄🔄🔄 PROCESSING INDIVIDUAL SENSOR: ${sensor.name}`, { 
           sensorId: sensor.id, 
           sensorName: sensor.name,
           sensorTopic: sensor.ttnTopic,
-          jsonFields: sensor.jsonFields
+          jsonFields: sensor.jsonFields,
+          sensorType: sensor.sensorType,
+          isActive: sensor.isActive,
+          processingStartTime: new Date().toISOString()
         });
-        await this.processSensorMessage(sensor, messageData);
+        
+        try {
+          await this.processSensorMessage(sensor, messageData);
+          logger.info(`✅✅✅ SENSOR PROCESSING COMPLETED: ${sensor.name}`, {
+            sensorId: sensor.id,
+            processingEndTime: new Date().toISOString()
+          });
+        } catch (processingError) {
+          logger.error(`❌❌❌ SENSOR PROCESSING FAILED: ${sensor.name}`, {
+            sensorId: sensor.id,
+            error: processingError.message,
+            stack: processingError.stack
+          });
+        }
       }
 
+      logger.info("🏁🏁🏁 MQTT MESSAGE PROCESSING COMPLETED", {
+        topic,
+        processedSensors: matchingSensors.length,
+        totalProcessingTime: new Date().toISOString()
+      });
+
     } catch (error) {
-      logger.error("💥 CRITICAL ERROR in handleMqttMessage", { topic, error: error.message, stack: error.stack });
+      logger.error("💥💥💥 CRITICAL ERROR in handleMqttMessage - TOTAL FAILURE", { 
+        topic, 
+        error: error.message, 
+        stack: error.stack,
+        errorType: error.constructor.name,
+        timestamp: new Date().toISOString()
+      });
     }
   }
 
   private async processSensorMessage(sensor: Sensor, messageData: any): Promise<void> {
     try {
-      logger.info(`🚀 STARTING SENSOR MESSAGE PROCESSING`, { 
+      logger.info(`🚀🚀🚀 STARTING SENSOR MESSAGE PROCESSING - DETAILED`, { 
         sensorId: sensor.id, 
         sensorName: sensor.name,
+        sensorType: sensor.sensorType,
+        zoneId: sensor.zoneId,
         jsonFields: sensor.jsonFields,
         messageDataKeys: Object.keys(messageData),
-        fullMessageData: messageData
+        messageDataType: typeof messageData,
+        fullMessageData: messageData,
+        processingStartTime: new Date().toISOString()
       });
 
       // Extract the specified JSON fields
       const fieldsToRead = sensor.jsonFields ? sensor.jsonFields.split(',').map(f => f.trim()) : [];
       
-      logger.info("📋 FIELDS TO EXTRACT", { 
+      logger.info("📋📋📋 FIELDS TO EXTRACT - DETAILED ANALYSIS", { 
         sensorId: sensor.id,
         rawJsonFields: sensor.jsonFields,
+        rawJsonFieldsType: typeof sensor.jsonFields,
+        rawJsonFieldsLength: sensor.jsonFields?.length,
         parsedFields: fieldsToRead,
-        fieldsCount: fieldsToRead.length
+        fieldsCount: fieldsToRead.length,
+        fieldsArray: fieldsToRead.map((f, idx) => ({ index: idx, field: f, fieldLength: f.length }))
       });
 
       if (fieldsToRead.length === 0) {
-        logger.error("❌ NO JSON FIELDS SPECIFIED", { 
+        logger.error("❌❌❌ NO JSON FIELDS SPECIFIED - CANNOT PROCEED", { 
           sensorId: sensor.id, 
           sensorName: sensor.name,
-          jsonFieldsValue: sensor.jsonFields 
+          jsonFieldsValue: sensor.jsonFields,
+          jsonFieldsIsNull: sensor.jsonFields === null,
+          jsonFieldsIsUndefined: sensor.jsonFields === undefined,
+          jsonFieldsIsEmptyString: sensor.jsonFields === ''
         });
         return;
       }
@@ -369,45 +487,86 @@ class MqttService {
       // Extract values from message data
       const extractedValues: Record<string, any> = {};
       
+      logger.info("🔍🔍🔍 STARTING FIELD EXTRACTION LOOP", {
+        sensorId: sensor.id,
+        fieldsToProcess: fieldsToRead,
+        messageDataAvailable: !!messageData,
+        messageDataKeys: Object.keys(messageData || {})
+      });
+      
       for (const field of fieldsToRead) {
-        logger.info(`🔍 EXTRACTING FIELD: ${field}`, { 
+        logger.info(`🔍🔍🔍 EXTRACTING FIELD: "${field}" - DETAILED`, { 
           sensorId: sensor.id,
           field,
-          messageDataStructure: this.getDataStructure(messageData)
+          fieldIndex: fieldsToRead.indexOf(field),
+          fieldLength: field.length,
+          messageDataStructure: this.getDataStructure(messageData),
+          availableTopLevelKeys: Object.keys(messageData || {})
         });
 
         const value = this.extractNestedValue(messageData, field);
         
-        logger.info(`📊 FIELD EXTRACTION RESULT`, { 
+        logger.info(`📊📊📊 FIELD EXTRACTION RESULT - DETAILED`, { 
           sensorId: sensor.id,
           field,
           extractedValue: value,
           valueType: typeof value,
-          isUndefined: value === undefined
+          isUndefined: value === undefined,
+          isNull: value === null,
+          isNumber: typeof value === 'number',
+          isString: typeof value === 'string',
+          isObject: typeof value === 'object',
+          valueStringified: JSON.stringify(value),
+          extractionSuccessful: value !== undefined
         });
 
         if (value !== undefined) {
           extractedValues[field] = value;
+          logger.info(`✅✅✅ FIELD EXTRACTED SUCCESSFULLY: "${field}"`, {
+            sensorId: sensor.id,
+            field,
+            value,
+            extractedValueCount: Object.keys(extractedValues).length
+          });
+        } else {
+          logger.warn(`⚠️⚠️⚠️ FIELD NOT FOUND: "${field}"`, {
+            sensorId: sensor.id,
+            field,
+            availableFields: Object.keys(messageData || {}),
+            messageDataSample: JSON.stringify(messageData).substring(0, 200)
+          });
         }
       }
 
-      logger.info("🎯 EXTRACTION SUMMARY", { 
+      logger.info("🎯🎯🎯 EXTRACTION SUMMARY - COMPREHENSIVE", { 
         sensorId: sensor.id,
+        sensorName: sensor.name,
         requestedFields: fieldsToRead,
+        requestedFieldsCount: fieldsToRead.length,
         extractedFields: Object.keys(extractedValues),
+        extractedFieldsCount: Object.keys(extractedValues).length,
         extractedValues,
-        availableTopLevelFields: Object.keys(messageData),
-        messageDataSample: JSON.stringify(messageData).substring(0, 300)
+        extractionSuccessRate: `${Object.keys(extractedValues).length}/${fieldsToRead.length}`,
+        availableTopLevelFields: Object.keys(messageData || {}),
+        messageDataSample: JSON.stringify(messageData).substring(0, 500),
+        fullMessageStructure: this.getDataStructure(messageData, 5)
       });
 
       if (Object.keys(extractedValues).length === 0) {
-        logger.error("❌ NO MATCHING FIELDS FOUND", { 
+        logger.error("❌❌❌ NO MATCHING FIELDS FOUND - ABORTING SAVE", { 
           sensorId: sensor.id, 
           sensorName: sensor.name,
           requestedFields: fieldsToRead,
-          availableFields: Object.keys(messageData),
-          messageStructure: this.getDataStructure(messageData, 3), // Show nested structure
-          fullMessage: messageData
+          requestedFieldsDetailed: fieldsToRead.map(f => ({ field: f, searched: true, found: false })),
+          availableFields: Object.keys(messageData || {}),
+          messageStructure: this.getDataStructure(messageData, 5),
+          fullMessage: messageData,
+          possibleReasons: [
+            'Field names do not match exactly',
+            'Data is nested deeper than expected',
+            'Message format has changed',
+            'Sensor jsonFields configuration is incorrect'
+          ]
         });
         return;
       }
@@ -415,67 +574,144 @@ class MqttService {
       // Create sensor reading with extracted values
       const readingValue = JSON.stringify(extractedValues);
       
-      logger.info("💾 SAVING SENSOR READING", { 
+      logger.info("💾💾💾 PREPARING TO SAVE SENSOR READING", { 
         sensorId: sensor.id,
         sensorName: sensor.name,
         readingValue,
-        timestamp: new Date().toISOString()
-      });
-
-      const savedReading = await storage.createSensorReading({
-        sensorId: sensor.id,
-        value: readingValue,
-        timestamp: new Date(),
+        readingValueLength: readingValue.length,
+        extractedFieldsCount: Object.keys(extractedValues).length,
+        timestamp: new Date().toISOString(),
         isSimulated: false,
+        databaseCallStartTime: new Date().toISOString()
       });
 
-      logger.info("✅ SENSOR READING SAVED SUCCESSFULLY", { 
-        sensorId: sensor.id,
-        sensorName: sensor.name,
-        readingId: savedReading.id,
-        extractedFields: Object.keys(extractedValues),
-        value: readingValue,
-        timestamp: savedReading.timestamp
-      });
+      try {
+        logger.info("🔄🔄🔄 CALLING STORAGE.createSensorReading", {
+          sensorId: sensor.id,
+          parameters: {
+            sensorId: sensor.id,
+            value: readingValue,
+            timestamp: new Date(),
+            isSimulated: false
+          }
+        });
+
+        const savedReading = await storage.createSensorReading({
+          sensorId: sensor.id,
+          value: readingValue,
+          timestamp: new Date(),
+          isSimulated: false,
+        });
+
+        logger.info("✅✅✅ SENSOR READING SAVED SUCCESSFULLY - DATABASE CONFIRMED", { 
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          readingId: savedReading.id,
+          extractedFields: Object.keys(extractedValues),
+          value: readingValue,
+          timestamp: savedReading.timestamp,
+          createdAt: savedReading.createdAt,
+          isSimulated: savedReading.isSimulated,
+          databaseSaveTime: new Date().toISOString(),
+          savedReadingObject: savedReading
+        });
+
+      } catch (saveError) {
+        logger.error("💥💥💥 DATABASE SAVE FAILED - CRITICAL ERROR", {
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          readingValue,
+          saveError: saveError.message,
+          saveErrorStack: saveError.stack,
+          saveErrorType: saveError.constructor.name
+        });
+        throw saveError;
+      }
 
     } catch (error) {
-      logger.error("💥 CRITICAL ERROR in processSensorMessage", { 
+      logger.error("💥💥💥 CRITICAL ERROR in processSensorMessage - COMPLETE FAILURE", { 
         sensorId: sensor.id, 
         sensorName: sensor.name,
         error: error.message, 
         stack: error.stack,
-        messageData 
+        errorType: error.constructor.name,
+        messageData,
+        processingFailedAt: new Date().toISOString()
       });
     }
   }
 
   private extractNestedValue(obj: any, path: string): any {
-    logger.info(`🔍 EXTRACTING NESTED VALUE`, { 
+    logger.info(`🔍🔍🔍 EXTRACTING NESTED VALUE - START`, { 
       path, 
+      pathType: typeof path,
+      pathLength: path?.length,
       startingObject: typeof obj === 'object' ? Object.keys(obj) : obj,
-      pathSegments: path.split('.')
+      startingObjectType: typeof obj,
+      pathSegments: path.split('.'),
+      segmentsCount: path.split('.').length
     });
 
-    const result = path.split('.').reduce((current, key, index) => {
-      logger.info(`📍 PATH STEP ${index + 1}`, { 
+    const pathSegments = path.split('.');
+    let current = obj;
+
+    for (let index = 0; index < pathSegments.length; index++) {
+      const key = pathSegments[index];
+      
+      logger.info(`📍📍📍 PATH STEP ${index + 1}/${pathSegments.length}`, { 
         currentKey: key,
+        keyIndex: index,
+        keyType: typeof key,
+        keyLength: key?.length,
         currentObjectType: typeof current,
+        currentObjectIsNull: current === null,
+        currentObjectIsUndefined: current === undefined,
         currentObjectKeys: current && typeof current === 'object' ? Object.keys(current) : 'not-object',
+        currentObjectKeysCount: current && typeof current === 'object' ? Object.keys(current).length : 0,
         hasKey: current && current[key] !== undefined,
-        keyValue: current && current[key]
+        keyValue: current && current[key],
+        keyValueType: current && current[key] ? typeof current[key] : 'undefined',
+        exactKeyMatch: current && typeof current === 'object' && key in current,
+        allKeysInCurrent: current && typeof current === 'object' ? Object.keys(current) : [],
+        keyComparison: current && typeof current === 'object' ? Object.keys(current).map(k => ({
+          availableKey: k,
+          searchingFor: key,
+          exactMatch: k === key,
+          caseInsensitiveMatch: k.toLowerCase() === key.toLowerCase()
+        })) : []
       });
 
-      return current && current[key] !== undefined ? current[key] : undefined;
-    }, obj);
+      if (current && current[key] !== undefined) {
+        current = current[key];
+        logger.info(`✅✅✅ KEY FOUND - MOVING DEEPER`, {
+          key,
+          newCurrent: current,
+          newCurrentType: typeof current,
+          remainingSteps: pathSegments.length - index - 1
+        });
+      } else {
+        logger.warn(`❌❌❌ KEY NOT FOUND - EXTRACTION FAILED`, {
+          key,
+          pathSoFar: pathSegments.slice(0, index + 1).join('.'),
+          remainingPath: pathSegments.slice(index + 1).join('.'),
+          currentWas: current,
+          availableKeysWere: current && typeof current === 'object' ? Object.keys(current) : 'not-an-object'
+        });
+        return undefined;
+      }
+    }
 
-    logger.info(`🎯 EXTRACTION COMPLETE`, { 
+    logger.info(`🎯🎯🎯 EXTRACTION COMPLETE - FINAL RESULT`, { 
       path, 
-      finalResult: result, 
-      resultType: typeof result,
-      wasSuccessful: result !== undefined
+      finalResult: current, 
+      resultType: typeof current,
+      resultIsNull: current === null,
+      resultIsUndefined: current === undefined,
+      wasSuccessful: current !== undefined,
+      resultStringified: JSON.stringify(current)
     });
 
-    return result;
+    return current;
   }
 
   private getDataStructure(obj: any, maxDepth: number = 2, currentDepth: number = 0): any {
