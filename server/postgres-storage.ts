@@ -441,6 +441,21 @@ export class PostgresStorage implements IStorage {
     return undefined;
   }
 
+  async updateSensorMqttConfig(
+    id: string,
+    config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>,
+  ): Promise<Sensor | undefined> {
+    const cleanConfig = cleanUndefined(config);
+    
+    const result = await this.db
+      .update(sensors)
+      .set(cleanConfig)
+      .where(eq(sensors.id, id))
+      .returning();
+
+    return result[0];
+  }
+
   async deleteSensor(id: string): Promise<boolean> {
     const result = await this.db
       .delete(sensors)

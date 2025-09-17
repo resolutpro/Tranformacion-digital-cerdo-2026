@@ -12,6 +12,7 @@ import {
   insertQrSnapshotSchema,
   insertZoneQrSchema,
   insertLoteTemplateSchema,
+  sensorMqttConfigSchema,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -952,6 +953,134 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Sensor no encontrado" });
       const credentials = await storage.rotateSensorCredentials(req.params.id);
       res.json(credentials);
+    }),
+  );
+
+  // MQTT Configuration endpoint
+  app.put(
+    "/api/sensors/:id/mqtt-config",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const sensor = await storage.getSensor(req.params.id);
+      if (!sensor)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      const zone = await storage.getZone(sensor.zoneId, req.organizationId);
+      if (!zone)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      
+      // Validate the MQTT configuration data
+      const mqttConfig = sensorMqttConfigSchema.parse(req.body);
+      
+      logger.info("PUT /api/sensors/:id/mqtt-config", {
+        organizationId: req.organizationId,
+        sensorId: req.params.id,
+        config: { ...mqttConfig, mqttPassword: "***" }, // Hide password in logs
+      });
+
+      // Update the sensor's MQTT configuration
+      const updatedSensor = await storage.updateSensorMqttConfig(req.params.id, mqttConfig);
+      if (!updatedSensor) {
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      }
+
+      await storage.createAuditLog({
+        organizationId: req.organizationId,
+        userId: req.user.id,
+        entityType: "sensor",
+        entityId: sensor.id,
+        action: "mqtt-config-update",
+        oldData: {
+          mqttHost: sensor.mqttHost,
+          mqttPort: sensor.mqttPort,
+          mqttEnabled: sensor.mqttEnabled,
+        },
+        newData: {
+          mqttHost: mqttConfig.mqttHost,
+          mqttPort: mqttConfig.mqttPort,
+          mqttEnabled: mqttConfig.mqttEnabled,
+        },
+      });
+
+      res.json({ 
+        message: "Configuración MQTT actualizada correctamente",
+        sensor: updatedSensor 
+      });
+    }),
+  );
+
+  // Test MQTT connection endpoint
+  app.post(
+    "/api/sensors/:id/test-mqtt",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const sensor = await storage.getSensor(req.params.id);
+      if (!sensor)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      const zone = await storage.getZone(sensor.zoneId, req.organizationId);
+      if (!zone)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+      
+      // Validate the MQTT configuration data
+      const mqttConfig = sensorMqttConfigSchema.parse(req.body);
+      
+      logger.info("POST /api/sensors/:id/test-mqtt", {
+        organizationId: req.organizationId,
+        sensorId: req.params.id,
+        host: mqttConfig.mqttHost,
+        port: mqttConfig.mqttPort,
+      });
+
+      try {
+        // Import MQTT client dynamically
+        const mqtt = await import("mqtt");
+        
+        // Create connection options
+        const connectOptions = {
+          host: mqttConfig.mqttHost,
+          port: mqttConfig.mqttPort,
+          username: mqttConfig.mqttUsername,
+          password: mqttConfig.mqttPassword,
+          protocol: 'mqtts' as 'mqtts', // Use secure MQTT for TTN
+          connectTimeout: 10000, // 10 second timeout
+        };
+
+        // Test connection
+        const client = mqtt.connect(connectOptions);
+        
+        const testPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            client.end();
+            reject(new Error("Timeout de conexión - no se pudo conectar en 10 segundos"));
+          }, 10000);
+
+          client.on('connect', () => {
+            clearTimeout(timeout);
+            logger.info("MQTT connection test successful", {
+              sensorId: req.params.id,
+              host: mqttConfig.mqttHost,
+              port: mqttConfig.mqttPort,
+            });
+            client.end();
+            resolve({ success: true, message: "Conexión MQTT exitosa" });
+          });
+
+          client.on('error', (error) => {
+            clearTimeout(timeout);
+            logger.error("MQTT connection test failed", error);
+            client.end();
+            reject(new Error(`Error de conexión MQTT: ${error.message}`));
+          });
+        });
+
+        const result = await testPromise;
+        res.json(result);
+      } catch (error: any) {
+        logger.error("MQTT test connection error", error);
+        res.status(400).json({ 
+          message: "Error al probar conexión MQTT", 
+          error: error.message 
+        });
+      }
     }),
   );
 
