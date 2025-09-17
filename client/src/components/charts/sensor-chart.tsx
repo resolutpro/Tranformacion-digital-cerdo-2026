@@ -11,9 +11,48 @@ import { es } from "date-fns/locale";
 import { Loader2 } from "lucide-react";
 import type { Sensor, SensorReading } from "@shared/schema";
 
+// Assume apiRequest is defined elsewhere, e.g.:
+// import { apiRequest } from "@/lib/api"; 
+
+// Assume getDateRanges is defined elsewhere, e.g.:
+// const getDateRanges = () => { /* ... */ };
+
 interface SensorChartProps {
   sensors: Sensor[];
 }
+
+// Mock implementation for apiRequest and getDateRanges for context
+const apiRequest = async (method: string, url: string, body?: any) => {
+  // Mock API request - replace with actual implementation
+  console.log(`Mock API Request: ${method} ${url}`, body);
+  if (url.includes('/api/sensors/')) {
+    // Simulate fetching readings
+    const mockReadings: SensorReading[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `reading-${i}`,
+      sensorId: url.split('/')[3],
+      timestamp: new Date(Date.now() - (10 - i) * 60000).toISOString(), // Last 10 minutes
+      value: (Math.random() * 30).toFixed(2),
+      isSimulated: Math.random() > 0.5,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+    return {
+      ok: true,
+      json: async () => mockReadings,
+    };
+  }
+  return { ok: false, json: async () => ({}) };
+};
+
+const getDateRanges = () => {
+  const now = new Date();
+  return {
+    today: { start: startOfDay(now), end: endOfDay(now) },
+    "7days": { start: startOfDay(subDays(now, 6)), end: endOfDay(now) },
+    "30days": { start: startOfDay(subDays(now, 29)), end: endOfDay(now) },
+  };
+};
+
 
 export function SensorChart({ sensors }: SensorChartProps) {
   const [selectedSensorId, setSelectedSensorId] = useState<string>("all");
@@ -49,21 +88,21 @@ export function SensorChart({ sensors }: SensorChartProps) {
     ],
     queryFn: async () => {
       if (sensorsToQuery.length === 0) return [];
-      
+
       const allReadings: Array<SensorReading & { sensor: Sensor }> = [];
-      
+
       for (const sensor of sensorsToQuery) {
         const response = await fetch(
           `/api/sensors/${sensor.id}/readings?startTime=${start.toISOString()}&endTime=${end.toISOString()}&includeSimulated=${includeSimulated}`,
           { credentials: "include" }
         );
-        
+
         if (response.ok) {
           const readings: SensorReading[] = await response.json();
           allReadings.push(...readings.map(r => ({ ...r, sensor })));
         }
       }
-      
+
       return allReadings;
     },
     refetchInterval: isLive ? 30000 : false, // Refetch every 30 seconds if live
@@ -71,11 +110,15 @@ export function SensorChart({ sensors }: SensorChartProps) {
 
   // Transform data for chart
   const chartData = readingsData.reduce((acc: any[], reading) => {
-    const timestamp = new Date(reading.timestamp).getTime();
+    // Ensure timestamp is handled correctly, assuming reading.timestamp is already the correct value from MQTT
+    // Timezone conversion to Europe/Madrid (UTC+2) should ideally happen during data ingestion or at the backend.
+    // For display, we use the provided timestamp and format it.
+    const readingDate = new Date(reading.timestamp); 
+    const timestamp = readingDate.getTime(); // Using the timestamp from the data
+
     let existing = acc.find(point => Math.abs(point.timestamp - timestamp) < 60000); // Group readings within 1 minute
-    
+
     if (!existing) {
-      const readingDate = new Date(reading.timestamp);
       existing = {
         timestamp,
         time: format(readingDate, 'HH:mm', { locale: es }),
@@ -88,11 +131,11 @@ export function SensorChart({ sensors }: SensorChartProps) {
       };
       acc.push(existing);
     }
-    
+
     const sensorKey = reading.sensor.name.replace(/\s+/g, '_');
     existing[sensorKey] = parseFloat(reading.value);
     existing[`${sensorKey}_simulated`] = reading.isSimulated;
-    
+
     return acc;
   }, []).sort((a, b) => a.timestamp - b.timestamp);
 
@@ -108,6 +151,17 @@ export function SensorChart({ sensors }: SensorChartProps) {
     );
   }
 
+  // Get the latest reading for each sensor to display in the card summary
+  const latestReadings = sensors.reduce((acc: Record<string, SensorReading & { sensor: Sensor }>, sensor) => {
+    const latestForSensor = readingsData
+      .filter(r => r.sensor.id === sensor.id)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    if (latestForSensor) {
+      acc[sensor.id] = latestForSensor;
+    }
+    return acc;
+  }, {});
+
   return (
     <div className="space-y-4">
       {/* Controls */}
@@ -115,7 +169,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
         <div className="flex items-center gap-4">
           <Select value={selectedSensorId} onValueChange={setSelectedSensorId}>
             <SelectTrigger className="w-48" data-testid="select-chart-sensor">
-              <SelectValue />
+              <SelectValue placeholder="Seleccionar sensor..." />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los sensores</SelectItem>
@@ -126,7 +180,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
               ))}
             </SelectContent>
           </Select>
-          
+
           <div className="flex border border-input rounded-md">
             <Button 
               size="sm" 
@@ -157,7 +211,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
             </Button>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <div className="flex items-center space-x-2">
             <Switch
@@ -170,7 +224,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
               Incluir datos simulados
             </Label>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <Switch
               id="live-mode"
@@ -185,10 +239,52 @@ export function SensorChart({ sensors }: SensorChartProps) {
         </div>
       </div>
 
+      {/* Sensor Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {sensors.map((sensor) => {
+          const latestReading = latestReadings[sensor.id];
+          const sensorKey = sensor.name.replace(/\s+/g, '_');
+          const isSimulated = latestReading ? latestReading[`${sensorKey}_simulated`] : false;
+
+          return (
+            <Card key={sensor.id}>
+              <CardContent className="p-4 flex flex-col justify-between h-full">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">{sensor.name}</h3>
+                  <p className="text-muted-foreground text-sm mb-2">
+                    {sensor.description || 'Sin descripción'}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between mt-4">
+                  <div className="flex items-baseline gap-2">
+                    {latestReading ? (
+                      <>
+                        <span className="text-3xl font-bold">
+                          {parseFloat(latestReading.value).toFixed(1)}
+                        </span>
+                        <span className="text-sm text-muted-foreground">{sensor.unit || ''}</span>
+                        {isSimulated && <span className="text-xs text-yellow-600">(Simulado)</span>}
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Cargando...</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Placeholder for the "Sin lecturas recientes" message, if needed */}
+                  {/* {!latestReading && <p className="text-sm text-red-500">Sin lecturas recientes</p>} */}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
       {/* Chart */}
       <Card>
         <CardContent className="p-6">
-          {isLoading ? (
+          {isLoading && sensorsToQuery.length > 0 ? ( // Only show loader if there are sensors to query
             <div className="h-64 bg-muted/10 rounded-lg border-2 border-dashed border-muted flex items-center justify-center">
               <div className="text-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-2" />

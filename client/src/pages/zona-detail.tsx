@@ -65,7 +65,7 @@ export default function ZoneDetail() {
       return Promise.all(promises);
     },
     enabled: sensors.length > 0,
-    refetchInterval: 30000, // Refresh every 30 seconds for real-time data
+    refetchInterval: 5000, // Refresh every 5 seconds for faster MQTT updates
   });
 
   // All mutations must be defined before any early returns
