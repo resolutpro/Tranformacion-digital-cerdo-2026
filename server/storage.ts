@@ -69,6 +69,7 @@ export interface IStorage {
   getSensorByDeviceId(deviceId: string): Promise<Sensor | undefined>;
   createSensor(sensor: InsertSensor & { deviceId: string; mqttTopic: string; mqttUsername: string; mqttPassword: string }): Promise<Sensor>;
   updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined>;
+  updateSensorMqttConfig(id: string, config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>): Promise<Sensor | undefined>;
   rotateSensorCredentials(id: string): Promise<{ username: string; password: string } | undefined>;
   deleteSensor(id: string): Promise<boolean>;
 
@@ -376,6 +377,15 @@ export class MemStorage implements IStorage {
     if (!existing) return undefined;
 
     const updated = { ...existing, ...sensor };
+    this.sensors.set(id, updated);
+    return updated;
+  }
+
+  async updateSensorMqttConfig(id: string, config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>): Promise<Sensor | undefined> {
+    const existing = this.sensors.get(id);
+    if (!existing) return undefined;
+
+    const updated = { ...existing, ...config };
     this.sensors.set(id, updated);
     return updated;
   }
