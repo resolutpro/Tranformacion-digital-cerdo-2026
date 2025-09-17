@@ -66,6 +66,8 @@ export default function ZoneDetail() {
     },
     enabled: sensors.length > 0,
     refetchInterval: 5000, // Refresh every 5 seconds for faster MQTT updates
+    refetchIntervalInBackground: true, // Keep refetching in background
+    staleTime: 0, // Always consider data stale to force updates
   });
 
   // All mutations must be defined before any early returns
@@ -139,40 +141,47 @@ export default function ZoneDetail() {
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground mb-2" data-testid="zone-title">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground mb-2" data-testid="zone-title">
               {zone.name}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm md:text-base text-muted-foreground">
               Gestión de sensores y condiciones ambientales - {zone.stage.charAt(0).toUpperCase() + zone.stage.slice(1)}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button 
               onClick={() => setIsSensorModalOpen(true)}
               data-testid="button-add-sensor"
+              size="sm"
+              className="flex-1 sm:flex-none"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Añadir Sensor
+              <span className="hidden sm:inline">Añadir Sensor</span>
+              <span className="sm:hidden">Sensor</span>
             </Button>
             <Button 
               variant="outline" 
               onClick={() => setIsHttpSimulatorModalOpen(true)}
               data-testid="button-http-simulator"
+              size="sm"
+              className="flex-1 sm:flex-none"
             >
               <Zap className="h-4 w-4 mr-2" />
-              Simulador HTTP
+              <span className="hidden sm:inline">Simulador HTTP</span>
+              <span className="sm:hidden">HTTP</span>
             </Button>
-            <Button variant="outline" data-testid="button-fixed-info">
+            <Button variant="outline" data-testid="button-fixed-info" size="sm" className="flex-1 sm:flex-none">
               <Info className="h-4 w-4 mr-2" />
-              Info Fija
+              <span className="hidden sm:inline">Info Fija</span>
+              <span className="sm:hidden">Info</span>
             </Button>
           </div>
         </div>
 
         {/* Sensors Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {sensors.map((sensor) => {
             const Icon = getSensorIcon(sensor.sensorType);
             const colorClass = getSensorColor(sensor.sensorType);
@@ -180,22 +189,22 @@ export default function ZoneDetail() {
             
             return (
               <Card key={sensor.id} data-testid={`sensor-card-${sensor.id}`}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass}`}>
-                        <Icon className="h-5 w-5" />
+                <CardContent className="p-4 md:p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center ${colorClass} flex-shrink-0`}>
+                        <Icon className="h-4 w-4 md:h-5 md:w-5" />
                       </div>
-                      <div>
-                        <h3 className="font-medium text-foreground" data-testid={`sensor-name-${sensor.id}`}>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-medium text-foreground text-sm md:text-base truncate" data-testid={`sensor-name-${sensor.id}`}>
                           {sensor.name}
                         </h3>
-                        <p className="text-xs text-muted-foreground" data-testid={`sensor-id-${sensor.id}`}>
+                        <p className="text-xs text-muted-foreground truncate" data-testid={`sensor-id-${sensor.id}`}>
                           {sensor.deviceId}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {latestReading && (
                         <div className={`w-2 h-2 rounded-full ${latestReading.isSimulated ? 'bg-orange-400' : 'bg-green-400'}`} 
                              title={latestReading.isSimulated ? 'Datos simulados' : 'Datos reales'} />
@@ -206,31 +215,32 @@ export default function ZoneDetail() {
                         onClick={() => handleDeleteSensor(sensor)}
                         disabled={deleteSensorMutation.isPending}
                         data-testid={`button-delete-sensor-${sensor.id}`}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3 w-3 md:h-4 md:w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleShowMqttConfig(sensor)}
                         data-testid={`button-sensor-info-${sensor.id}`}
+                        className="h-8 w-8 p-0"
                       >
-                        <Info className="h-4 w-4" />
+                        <Info className="h-3 w-3 md:h-4 md:w-4" />
                       </Button>
                     </div>
                   </div>
                   
                   <div className="mb-4">
                     {sensor.sensorType === 'location' && latestReading ? (
-                      <div className="text-lg font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
+                      <div className="text-base md:text-lg font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
                         {(() => {
                           try {
                             const coords = JSON.parse(latestReading.value);
                             return (
                               <div className="space-y-1">
-                                <div>Lat: {Number(coords.lat || coords.latitude || 0).toFixed(6)}°</div>
-                                <div>Lon: {Number(coords.lon || coords.longitude || 0).toFixed(6)}°</div>
+                                <div className="text-sm md:text-base">Lat: {Number(coords.lat || coords.latitude || 0).toFixed(6)}°</div>
+                                <div className="text-sm md:text-base">Lon: {Number(coords.lon || coords.longitude || 0).toFixed(6)}°</div>
                               </div>
                             );
                           } catch {
@@ -239,8 +249,8 @@ export default function ZoneDetail() {
                             if (parts.length === 2) {
                               return (
                                 <div className="space-y-1">
-                                  <div>Lat: {Number(parts[0]).toFixed(6)}°</div>
-                                  <div>Lon: {Number(parts[1]).toFixed(6)}°</div>
+                                  <div className="text-sm md:text-base">Lat: {Number(parts[0]).toFixed(6)}°</div>
+                                  <div className="text-sm md:text-base">Lon: {Number(parts[1]).toFixed(6)}°</div>
                                 </div>
                               );
                             }
@@ -249,14 +259,14 @@ export default function ZoneDetail() {
                         })()}
                       </div>
                     ) : (
-                      <div className="text-2xl font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
+                      <div className="text-xl md:text-2xl font-bold text-foreground mb-2" data-testid={`sensor-value-${sensor.id}`}>
                         {latestReading ? Number(latestReading.value).toFixed(1) : '--'}
                         <span className="text-sm font-normal ml-1">
                           {sensor.unit || (sensor.sensorType === 'temperature' ? '°C' : sensor.sensorType === 'humidity' ? '%' : '')}
                         </span>
                       </div>
                     )}
-                    <div className="text-sm text-muted-foreground" data-testid={`sensor-last-reading-${sensor.id}`}>
+                    <div className="text-xs md:text-sm text-muted-foreground" data-testid={`sensor-last-reading-${sensor.id}`}>
                       {latestReading 
                         ? `Actualizado ${formatDistanceToNow(new Date(latestReading.timestamp), { addSuffix: true, locale: es })}`
                         : "Sin lecturas recientes"
@@ -264,7 +274,7 @@ export default function ZoneDetail() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Badge variant="outline" className="text-xs">
                       {sensor.sensorType}
                     </Badge>
@@ -277,7 +287,7 @@ export default function ZoneDetail() {
                       size="sm"
                       variant="outline"
                       onClick={() => handleSimulate(sensor)}
-                      className="text-xs"
+                      className="text-xs flex-shrink-0"
                       data-testid={`button-simulate-${sensor.id}`}
                     >
                       <Activity className="h-3 w-3 mr-1" />

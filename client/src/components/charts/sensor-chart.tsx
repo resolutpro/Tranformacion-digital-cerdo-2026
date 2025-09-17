@@ -92,20 +92,34 @@ export function SensorChart({ sensors }: SensorChartProps) {
       const allReadings: Array<SensorReading & { sensor: Sensor }> = [];
 
       for (const sensor of sensorsToQuery) {
-        const response = await fetch(
-          `/api/sensors/${sensor.id}/readings?startTime=${start.toISOString()}&endTime=${end.toISOString()}&includeSimulated=${includeSimulated}`,
-          { credentials: "include" }
-        );
+        try {
+          const response = await fetch(
+            `/api/sensors/${sensor.id}/readings?startTime=${encodeURIComponent(start.toISOString())}&endTime=${encodeURIComponent(end.toISOString())}&includeSimulated=${includeSimulated}`,
+            { 
+              credentials: "include",
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            }
+          );
 
-        if (response.ok) {
-          const readings: SensorReading[] = await response.json();
-          allReadings.push(...readings.map(r => ({ ...r, sensor })));
+          if (response.ok) {
+            const readings: SensorReading[] = await response.json();
+            allReadings.push(...readings.map(r => ({ ...r, sensor })));
+          } else {
+            console.error(`Failed to fetch readings for sensor ${sensor.id}:`, response.status, response.statusText);
+          }
+        } catch (error) {
+          console.error(`Error fetching readings for sensor ${sensor.id}:`, error);
         }
       }
 
       return allReadings;
     },
+    enabled: sensorsToQuery.length > 0,
     refetchInterval: isLive ? 30000 : false, // Refetch every 30 seconds if live
+    retry: 3,
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Transform data for chart
@@ -165,10 +179,10 @@ export function SensorChart({ sensors }: SensorChartProps) {
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <Select value={selectedSensorId} onValueChange={setSelectedSensorId}>
-            <SelectTrigger className="w-48" data-testid="select-chart-sensor">
+            <SelectTrigger className="w-full sm:w-48" data-testid="select-chart-sensor">
               <SelectValue placeholder="Seleccionar sensor..." />
             </SelectTrigger>
             <SelectContent>
@@ -185,7 +199,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
             <Button 
               size="sm" 
               variant={timeRange === "today" ? "default" : "ghost"}
-              className="rounded-r-none"
+              className="rounded-r-none flex-1 sm:flex-none"
               onClick={() => setTimeRange("today")}
               data-testid="button-range-today"
             >
@@ -194,7 +208,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
             <Button 
               size="sm" 
               variant={timeRange === "7days" ? "default" : "ghost"}
-              className="rounded-none"
+              className="rounded-none flex-1 sm:flex-none"
               onClick={() => setTimeRange("7days")}
               data-testid="button-range-7days"
             >
@@ -203,7 +217,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
             <Button 
               size="sm" 
               variant={timeRange === "30days" ? "default" : "ghost"}
-              className="rounded-l-none"
+              className="rounded-l-none flex-1 sm:flex-none"
               onClick={() => setTimeRange("30days")}
               data-testid="button-range-30days"
             >
@@ -212,7 +226,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex items-center space-x-2">
             <Switch
               id="include-simulated"
@@ -240,7 +254,7 @@ export function SensorChart({ sensors }: SensorChartProps) {
       </div>
 
       {/* Sensor Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {sensors.map((sensor) => {
           const latestReading = latestReadings[sensor.id];
           const sensorKey = sensor.name.replace(/\s+/g, '_');
@@ -248,10 +262,10 @@ export function SensorChart({ sensors }: SensorChartProps) {
 
           return (
             <Card key={sensor.id}>
-              <CardContent className="p-4 flex flex-col justify-between h-full">
+              <CardContent className="p-3 md:p-4 flex flex-col justify-between h-full">
                 <div>
-                  <h3 className="text-lg font-semibold mb-2">{sensor.name}</h3>
-                  <p className="text-muted-foreground text-sm mb-2">
+                  <h3 className="text-base md:text-lg font-semibold mb-2 truncate">{sensor.name}</h3>
+                  <p className="text-muted-foreground text-xs md:text-sm mb-2 line-clamp-2">
                     {sensor.description || 'Sin descripción'}
                   </p>
                 </div>
@@ -259,21 +273,19 @@ export function SensorChart({ sensors }: SensorChartProps) {
                   <div className="flex items-baseline gap-2">
                     {latestReading ? (
                       <>
-                        <span className="text-3xl font-bold">
+                        <span className="text-2xl md:text-3xl font-bold">
                           {parseFloat(latestReading.value).toFixed(1)}
                         </span>
-                        <span className="text-sm text-muted-foreground">{sensor.unit || ''}</span>
+                        <span className="text-xs md:text-sm text-muted-foreground">{sensor.unit || ''}</span>
                         {isSimulated && <span className="text-xs text-yellow-600">(Simulado)</span>}
                       </>
                     ) : (
                       <div className="flex items-center gap-2 text-muted-foreground">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <span>Cargando...</span>
+                        <Loader2 className="h-4 w-4 md:h-5 md:w-5 animate-spin" />
+                        <span className="text-sm">Cargando...</span>
                       </div>
                     )}
                   </div>
-                  {/* Placeholder for the "Sin lecturas recientes" message, if needed */}
-                  {/* {!latestReading && <p className="text-sm text-red-500">Sin lecturas recientes</p>} */}
                 </div>
               </CardContent>
             </Card>
@@ -301,20 +313,21 @@ export function SensorChart({ sensors }: SensorChartProps) {
               </div>
             </div>
           ) : (
-            <div className="h-64">
+            <div className="h-64 md:h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="fullLabel" 
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: window.innerWidth < 768 ? 10 : 12 }}
                     domain={['dataMin', 'dataMax']}
                     type="category"
                     angle={timeRange !== 'today' ? -45 : 0}
                     textAnchor={timeRange !== 'today' ? 'end' : 'middle'}
                     height={timeRange !== 'today' ? 80 : 60}
+                    interval="preserveStartEnd"
                   />
-                  <YAxis tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: window.innerWidth < 768 ? 10 : 12 }} />
                   <Tooltip 
                     labelFormatter={(value) => `Hora: ${value}`}
                     formatter={(value: any, name: string) => {
@@ -322,8 +335,15 @@ export function SensorChart({ sensors }: SensorChartProps) {
                         (name.includes('temperatura') ? '°C' : name.includes('humedad') ? '%' : '');
                       return [`${value}${unit}`, name];
                     }}
+                    contentStyle={{
+                      fontSize: window.innerWidth < 768 ? '12px' : '14px',
+                    }}
                   />
-                  <Legend />
+                  <Legend 
+                    wrapperStyle={{
+                      fontSize: window.innerWidth < 768 ? '12px' : '14px',
+                    }}
+                  />
                   {sensorsToQuery.map((sensor, index) => {
                     const sensorKey = sensor.name.replace(/\s+/g, '_');
                     return (
@@ -332,8 +352,8 @@ export function SensorChart({ sensors }: SensorChartProps) {
                         type="monotone"
                         dataKey={sensorKey}
                         stroke={sensorColors[index % sensorColors.length]}
-                        strokeWidth={2}
-                        dot={{ r: 2 }}
+                        strokeWidth={window.innerWidth < 768 ? 1 : 2}
+                        dot={{ r: window.innerWidth < 768 ? 1 : 2 }}
                         strokeDasharray={
                           chartData.some(d => d[`${sensorKey}_simulated`]) ? "5 5" : undefined
                         }
