@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SensorModal } from "@/components/modals/sensor-modal";
 import { SimulatorModal } from "@/components/modals/simulator-modal";
-import { SensorInfoModal } from "@/components/modals/sensor-info-modal";
+import { SensorMqttConfigModal } from "@/components/modals/sensor-mqtt-config-modal";
 import { HttpSimulatorModal } from "@/components/modals/http-simulator-modal";
 import { SensorChart } from "@/components/charts/sensor-chart";
 import { formatDistanceToNow } from "date-fns";
@@ -34,7 +34,7 @@ export default function ZoneDetail() {
   const { toast } = useToast();
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
   const [isSimulatorModalOpen, setIsSimulatorModalOpen] = useState(false);
-  const [isSensorInfoModalOpen, setIsSensorInfoModalOpen] = useState(false);
+  const [isMqttConfigModalOpen, setIsMqttConfigModalOpen] = useState(false);
   const [isHttpSimulatorModalOpen, setIsHttpSimulatorModalOpen] = useState(false);
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
 
@@ -114,9 +114,9 @@ export default function ZoneDetail() {
     setIsSimulatorModalOpen(true);
   };
 
-  const handleShowInfo = (sensor: Sensor) => {
+  const handleShowMqttConfig = (sensor: Sensor) => {
     setSelectedSensor(sensor);
-    setIsSensorInfoModalOpen(true);
+    setIsMqttConfigModalOpen(true);
   };
 
   const handleDeleteSensor = (sensor: Sensor) => {
@@ -213,7 +213,7 @@ export default function ZoneDetail() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleShowInfo(sensor)}
+                        onClick={() => handleShowMqttConfig(sensor)}
                         data-testid={`button-sensor-info-${sensor.id}`}
                       >
                         <Info className="h-4 w-4" />
@@ -334,11 +334,10 @@ export default function ZoneDetail() {
           zoneSensors={sensors}
         />
 
-        <SensorInfoModal 
-          isOpen={isSensorInfoModalOpen}
-          onClose={() => setIsSensorInfoModalOpen(false)}
+        <SensorMqttConfigModal 
+          isOpen={isMqttConfigModalOpen}
+          onClose={() => setIsMqttConfigModalOpen(false)}
           sensor={selectedSensor}
-          latestReading={latestReadings.find(lr => lr.sensorId === selectedSensor?.id)?.reading}
         />
 
         <HttpSimulatorModal 
