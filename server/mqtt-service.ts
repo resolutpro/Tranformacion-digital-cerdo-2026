@@ -77,21 +77,54 @@ class MqttService {
       
       try {
         const mqttEnabledSensors = await storage.getAllMqttEnabledSensors();
-        logger.info("Found MQTT-enabled sensors", {
-          count: mqttEnabledSensors.length,
-          sensors: mqttEnabledSensors.map(s => ({
+        logger.info("🔍🔍🔍 DETAILED MQTT SENSORS ANALYSIS", {
+          totalSensorsFound: mqttEnabledSensors.length,
+          sensorsDetail: mqttEnabledSensors.map(s => ({
             id: s.id,
             name: s.name,
+            mqttEnabled: s.mqttEnabled,
+            isActive: s.isActive,
             mqttHost: s.mqttHost,
             mqttPort: s.mqttPort,
             ttnTopic: s.ttnTopic,
+            jsonFields: s.jsonFields,
+            mqttUsername: s.mqttUsername ? `${s.mqttUsername.substring(0, 8)}...` : 'MISSING',
+            hasPassword: !!s.mqttPassword,
+            shouldConnect: !!(s.mqttEnabled && s.isActive && s.mqttHost && s.mqttPort && s.ttnTopic && s.mqttUsername && s.mqttPassword)
           })),
+        });
+
+        // Filter out sensors that don't have complete configuration
+        const validSensors = mqttEnabledSensors.filter(sensor => {
+          const isValid = !!(sensor.mqttEnabled && sensor.isActive && sensor.mqttHost && sensor.mqttPort && sensor.ttnTopic && sensor.mqttUsername && sensor.mqttPassword);
+          
+          if (!isValid) {
+            logger.warn("⚠️⚠️⚠️ SENSOR WITH INCOMPLETE MQTT CONFIG", {
+              sensorId: sensor.id,
+              name: sensor.name,
+              mqttEnabled: sensor.mqttEnabled,
+              isActive: sensor.isActive,
+              hasHost: !!sensor.mqttHost,
+              hasPort: !!sensor.mqttPort,
+              hasTopic: !!sensor.ttnTopic,
+              hasUsername: !!sensor.mqttUsername,
+              hasPassword: !!sensor.mqttPassword,
+            });
+          }
+          
+          return isValid;
+        });
+
+        logger.info("✅✅✅ VALID SENSORS FOR MQTT CONNECTION", {
+          validSensorsCount: validSensors.length,
+          totalSensorsCount: mqttEnabledSensors.length,
+          invalidSensorsCount: mqttEnabledSensors.length - validSensors.length,
         });
 
         // Group sensors by connection key (host:port:username)
         const sensorsByConnection = new Map<string, Sensor[]>();
         
-        for (const sensor of mqttEnabledSensors) {
+        for (const sensor of validSensors) {
           const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
           if (!sensorsByConnection.has(connectionKey)) {
             sensorsByConnection.set(connectionKey, []);
@@ -99,26 +132,47 @@ class MqttService {
           sensorsByConnection.get(connectionKey)!.push(sensor);
         }
 
+        logger.info("🗂️🗂️🗂️ SENSOR GROUPS BY CONNECTION", {
+          connectionGroups: Array.from(sensorsByConnection.entries()).map(([key, sensors]) => ({
+            connectionKey: key,
+            sensorsCount: sensors.length,
+            sensors: sensors.map(s => ({
+              id: s.id,
+              name: s.name,
+              topic: s.ttnTopic,
+              jsonFields: s.jsonFields,
+            })),
+          })),
+        });
+
         // Connect each group of sensors
         for (const [connectionKey, sensors] of sensorsByConnection.entries()) {
-          logger.info("Connecting sensor group", {
+          logger.info("🚀🚀🚀 CONNECTING SENSOR GROUP", {
             connectionKey,
             sensorsCount: sensors.length,
-            sensors: sensors.map(s => ({ id: s.id, name: s.name })),
+            sensors: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic })),
           });
           
           try {
             await this.ensureConnection(connectionKey, sensors);
-            logger.info("Successfully connected sensor group", { connectionKey });
-          } catch (connectionError) {
-            logger.error("Failed to connect sensor group", {
+            logger.info("✅✅✅ SENSOR GROUP CONNECTION SUCCESS", { 
               connectionKey,
+              sensorsConnected: sensors.length,
+            });
+          } catch (connectionError) {
+            logger.error("❌❌❌ SENSOR GROUP CONNECTION FAILED", {
+              connectionKey,
+              sensorsCount: sensors.length,
               error: connectionError.message,
+              errorStack: connectionError.stack,
             });
           }
         }
       } catch (storageError) {
-        logger.error("Error loading MQTT-enabled sensors from storage", storageError);
+        logger.error("💥💥💥 ERROR LOADING MQTT SENSORS FROM STORAGE", {
+          error: storageError.message,
+          errorStack: storageError.stack,
+        });
       }
       
       logger.info("MQTT connections refresh completed");
@@ -218,40 +272,75 @@ class MqttService {
       connection.reconnectCount = 0;
 
       // Subscribe to all topics for this connection
+      const subscriptionPromises: Promise<void>[] = [];
+      
       for (const sensor of sensors) {
         if (sensor.ttnTopic) {
-          logger.info("📡 ATTEMPTING SUBSCRIPTION", {
+          logger.info("📡📡📡 ATTEMPTING TOPIC SUBSCRIPTION", {
             sensorId: sensor.id,
             sensorName: sensor.name,
             topic: sensor.ttnTopic,
+            jsonFields: sensor.jsonFields,
             connectionKey,
+            subscriptionAttempt: sensors.indexOf(sensor) + 1,
+            totalSensors: sensors.length,
           });
 
-          client.subscribe(sensor.ttnTopic, (err) => {
-            if (err) {
-              logger.error("❌ SUBSCRIPTION FAILED", {
-                topic: sensor.ttnTopic,
-                sensorId: sensor.id,
-                sensorName: sensor.name,
-                error: err.message,
-                connectionKey,
-              });
-            } else {
-              logger.info("✅ SUBSCRIPTION SUCCESS", {
-                topic: sensor.ttnTopic,
-                sensorId: sensor.id,
-                sensorName: sensor.name,
-                connectionKey,
-              });
-            }
+          const subscriptionPromise = new Promise<void>((resolve, reject) => {
+            client.subscribe(sensor.ttnTopic!, { qos: 0 }, (err, granted) => {
+              if (err) {
+                logger.error("❌❌❌ SUBSCRIPTION FAILED", {
+                  topic: sensor.ttnTopic,
+                  sensorId: sensor.id,
+                  sensorName: sensor.name,
+                  error: err.message,
+                  errorCode: err.name,
+                  connectionKey,
+                });
+                reject(err);
+              } else {
+                logger.info("✅✅✅ SUBSCRIPTION SUCCESS", {
+                  topic: sensor.ttnTopic,
+                  sensorId: sensor.id,
+                  sensorName: sensor.name,
+                  granted: granted,
+                  qos: granted?.[0]?.qos,
+                  connectionKey,
+                });
+                resolve();
+              }
+            });
           });
+          
+          subscriptionPromises.push(subscriptionPromise);
         } else {
-          logger.warn("⚠️ SENSOR HAS NO TTN TOPIC", {
+          logger.warn("⚠️⚠️⚠️ SENSOR MISSING TTN TOPIC", {
             sensorId: sensor.id,
             sensorName: sensor.name,
             connectionKey,
+            sensorConfig: {
+              mqttHost: sensor.mqttHost,
+              mqttPort: sensor.mqttPort,
+              ttnTopic: sensor.ttnTopic,
+              jsonFields: sensor.jsonFields,
+            },
           });
         }
+      }
+
+      // Wait for all subscriptions to complete
+      try {
+        await Promise.all(subscriptionPromises);
+        logger.info("🎉🎉🎉 ALL SUBSCRIPTIONS COMPLETED", {
+          connectionKey,
+          totalSubscriptions: subscriptionPromises.length,
+          sensorsWithTopics: sensors.filter(s => s.ttnTopic).length,
+        });
+      } catch (subscriptionError) {
+        logger.error("💥💥💥 SOME SUBSCRIPTIONS FAILED", {
+          connectionKey,
+          error: subscriptionError.message,
+        });
       }
     });
 
@@ -421,19 +510,41 @@ class MqttService {
       }
 
       // Find sensors that match this topic
-      logger.info("🔍🔍🔍 SEARCHING FOR MATCHING SENSORS", {
+      logger.info("🔍🔍🔍 SEARCHING FOR MATCHING SENSORS - COMPREHENSIVE", {
         receivedTopic: topic,
+        receivedTopicLength: topic?.length,
+        receivedTopicType: typeof topic,
         availableSensorsCount: sensors.length,
         allSensorData: sensors.map((s) => ({
           id: s.id,
           name: s.name,
           ttnTopic: s.ttnTopic,
-          topicMatches: s.ttnTopic === topic,
-          topicTrimMatches: s.ttnTopic?.trim() === topic?.trim(),
+          ttnTopicLength: s.ttnTopic?.length,
+          ttnTopicType: typeof s.ttnTopic,
+          exactMatch: s.ttnTopic === topic,
+          trimmedMatch: s.ttnTopic?.trim() === topic?.trim(),
+          bothExist: !!(s.ttnTopic && topic),
+          jsonFields: s.jsonFields,
+          mqttEnabled: s.mqttEnabled,
+          isActive: s.isActive,
         })),
       });
 
-      const matchingSensors = sensors.filter((s) => s.ttnTopic === topic);
+      const matchingSensors = sensors.filter((s) => {
+        const matches = s.ttnTopic === topic;
+        
+        if (matches) {
+          logger.info("🎯🎯🎯 SENSOR MATCHED FOR TOPIC", {
+            sensorId: s.id,
+            sensorName: s.name,
+            sensorTopic: s.ttnTopic,
+            receivedTopic: topic,
+            jsonFields: s.jsonFields,
+          });
+        }
+        
+        return matches;
+      });
 
       logger.info("🎯🎯🎯 TOPIC MATCHING RESULTS - DETAILED", {
         topic,

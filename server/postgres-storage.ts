@@ -379,7 +379,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async getAllMqttEnabledSensors(): Promise<Sensor[]> {
-    return await this.db
+    const result = await this.db
       .select()
       .from(sensors)
       .where(
@@ -392,7 +392,24 @@ export class PostgresStorage implements IStorage {
           isNotNull(sensors.mqttUsername),
           isNotNull(sensors.mqttPassword)
         )
-      );
+      )
+      .orderBy(sensors.createdAt);
+    
+    console.log(`[POSTGRES-STORAGE] Found ${result.length} MQTT-enabled sensors:`, 
+      result.map(s => ({
+        id: s.id,
+        name: s.name,
+        mqttEnabled: s.mqttEnabled,
+        isActive: s.isActive,
+        mqttHost: s.mqttHost,
+        mqttPort: s.mqttPort,
+        ttnTopic: s.ttnTopic,
+        jsonFields: s.jsonFields,
+        hasCredentials: !!(s.mqttUsername && s.mqttPassword)
+      }))
+    );
+    
+    return result;
   }
 
   async getSensor(id: string): Promise<Sensor | undefined> {
