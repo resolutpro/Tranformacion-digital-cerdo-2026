@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { randomUUID } from "crypto";
 import type { Store } from "express-session";
-import { eq, and, desc, gte, lte, sql, isNull, or, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, isNull, isNotNull, or, inArray } from "drizzle-orm";
 import {
   type User,
   type InsertUser,
@@ -376,6 +376,23 @@ export class PostgresStorage implements IStorage {
       .innerJoin(zones, eq(sensors.zoneId, zones.id))
       .where(eq(zones.organizationId, organizationId));
     return results.map((r) => r.sensor);
+  }
+
+  async getAllMqttEnabledSensors(): Promise<Sensor[]> {
+    return await this.db
+      .select()
+      .from(sensors)
+      .where(
+        and(
+          eq(sensors.isActive, true),
+          eq(sensors.mqttEnabled, true),
+          isNotNull(sensors.mqttHost),
+          isNotNull(sensors.mqttPort),
+          isNotNull(sensors.ttnTopic),
+          isNotNull(sensors.mqttUsername),
+          isNotNull(sensors.mqttPassword)
+        )
+      );
   }
 
   async getSensor(id: string): Promise<Sensor | undefined> {

@@ -69,10 +69,58 @@ class MqttService {
     try {
       logger.info("Refreshing MQTT connections...");
 
-      // Get all sensors that have MQTT enabled
-      // Note: This is a simplified approach - in a full system you'd query all organizations
-      // For now, we'll connect any sensors that get configured via the API
+      // Import storage to get sensors
+      const { storage } = await import("./storage");
+      
+      // Get all sensors that have MQTT enabled from the database
+      logger.info("Loading MQTT-enabled sensors from database...");
+      
+      try {
+        const mqttEnabledSensors = await storage.getAllMqttEnabledSensors();
+        logger.info("Found MQTT-enabled sensors", {
+          count: mqttEnabledSensors.length,
+          sensors: mqttEnabledSensors.map(s => ({
+            id: s.id,
+            name: s.name,
+            mqttHost: s.mqttHost,
+            mqttPort: s.mqttPort,
+            ttnTopic: s.ttnTopic,
+          })),
+        });
 
+        // Group sensors by connection key (host:port:username)
+        const sensorsByConnection = new Map<string, Sensor[]>();
+        
+        for (const sensor of mqttEnabledSensors) {
+          const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
+          if (!sensorsByConnection.has(connectionKey)) {
+            sensorsByConnection.set(connectionKey, []);
+          }
+          sensorsByConnection.get(connectionKey)!.push(sensor);
+        }
+
+        // Connect each group of sensors
+        for (const [connectionKey, sensors] of sensorsByConnection.entries()) {
+          logger.info("Connecting sensor group", {
+            connectionKey,
+            sensorsCount: sensors.length,
+            sensors: sensors.map(s => ({ id: s.id, name: s.name })),
+          });
+          
+          try {
+            await this.ensureConnection(connectionKey, sensors);
+            logger.info("Successfully connected sensor group", { connectionKey });
+          } catch (connectionError) {
+            logger.error("Failed to connect sensor group", {
+              connectionKey,
+              error: connectionError.message,
+            });
+          }
+        }
+      } catch (storageError) {
+        logger.error("Error loading MQTT-enabled sensors from storage", storageError);
+      }
+      
       logger.info("MQTT connections refresh completed");
     } catch (error) {
       logger.error("Error refreshing MQTT connections", error);

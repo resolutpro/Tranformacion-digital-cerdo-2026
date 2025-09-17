@@ -154,6 +154,33 @@ export class SqlStorage implements IStorage {
       )
     `);
 
+    // Add MQTT configuration columns if they don't exist
+    try {
+      this.db.exec(`ALTER TABLE sensors ADD COLUMN mqtt_host TEXT NULL`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE sensors ADD COLUMN mqtt_port INTEGER NULL`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE sensors ADD COLUMN ttn_topic TEXT NULL`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE sensors ADD COLUMN json_fields TEXT NULL`);
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      this.db.exec(`ALTER TABLE sensors ADD COLUMN mqtt_enabled INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Column already exists
+    }
+
     // Sensor readings table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sensor_readings (
@@ -625,6 +652,22 @@ export class SqlStorage implements IStorage {
     return rows.map(row => this.mapSensor(row));
   }
 
+  async getAllMqttEnabledSensors(): Promise<Sensor[]> {
+    const stmt = this.db.prepare(`
+      SELECT * FROM sensors 
+      WHERE is_active = 1 
+        AND mqtt_enabled = 1 
+        AND mqtt_host IS NOT NULL 
+        AND mqtt_port IS NOT NULL 
+        AND ttn_topic IS NOT NULL 
+        AND mqtt_username IS NOT NULL 
+        AND mqtt_password IS NOT NULL
+      ORDER BY name
+    `);
+    const rows = stmt.all() as any[];
+    return rows.map(row => this.mapSensor(row));
+  }
+
   async getSensor(id: string): Promise<Sensor | undefined> {
     const stmt = this.db.prepare('SELECT * FROM sensors WHERE id = ?');
     const row = stmt.get(id) as any;
@@ -717,6 +760,55 @@ export class SqlStorage implements IStorage {
     stmt.run(newUsername, newPassword, id);
 
     return { username: newUsername, password: newPassword };
+  }
+
+  async updateSensorMqttConfig(
+    id: string,
+    config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>,
+  ): Promise<Sensor | undefined> {
+    const updates = [];
+    const values = [];
+
+    if (config.mqttHost !== undefined) {
+      updates.push('mqtt_host = ?');
+      values.push(config.mqttHost);
+    }
+    if (config.mqttPort !== undefined) {
+      updates.push('mqtt_port = ?');
+      values.push(config.mqttPort);
+    }
+    if (config.mqttUsername !== undefined) {
+      updates.push('mqtt_username = ?');
+      values.push(config.mqttUsername);
+    }
+    if (config.mqttPassword !== undefined) {
+      updates.push('mqtt_password = ?');
+      values.push(config.mqttPassword);
+    }
+    if (config.ttnTopic !== undefined) {
+      updates.push('ttn_topic = ?');
+      values.push(config.ttnTopic);
+    }
+    if (config.jsonFields !== undefined) {
+      updates.push('json_fields = ?');
+      values.push(config.jsonFields);
+    }
+    if (config.mqttEnabled !== undefined) {
+      updates.push('mqtt_enabled = ?');
+      values.push(config.mqttEnabled ? 1 : 0);
+    }
+
+    if (updates.length === 0) {
+      return this.getSensor(id);
+    }
+
+    values.push(id);
+    const stmt = this.db.prepare(
+      `UPDATE sensors SET ${updates.join(', ')} WHERE id = ?`
+    );
+    stmt.run(...values);
+
+    return this.getSensor(id);
   }
 
   async deleteSensor(id: string): Promise<boolean> {
@@ -922,6 +1014,11 @@ export class SqlStorage implements IStorage {
       mqttTopic: row.mqtt_topic,
       mqttUsername: row.mqtt_username,
       mqttPassword: row.mqtt_password,
+      mqttHost: row.mqtt_host,
+      mqttPort: row.mqtt_port,
+      ttnTopic: row.ttn_topic,
+      jsonFields: row.json_fields,
+      mqttEnabled: Boolean(row.mqtt_enabled),
       validationMin: row.validation_min ? row.validation_min.toString() : null,
       validationMax: row.validation_max ? row.validation_max.toString() : null,
       isActive: Boolean(row.is_active),

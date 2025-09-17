@@ -1,4 +1,4 @@
-import { 
+import {
   type User, type InsertUser,
   type Organization, type InsertOrganization,
   type Lote, type InsertLote,
@@ -67,6 +67,7 @@ export interface IStorage {
   getSensorsByOrganization(organizationId: string): Promise<Sensor[]>;
   getSensor(id: string): Promise<Sensor | undefined>;
   getSensorByDeviceId(deviceId: string): Promise<Sensor | undefined>;
+  getAllMqttEnabledSensors(): Promise<Sensor[]>;
   createSensor(sensor: InsertSensor & { deviceId: string; mqttTopic: string; mqttUsername: string; mqttPassword: string }): Promise<Sensor>;
   updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined>;
   updateSensorMqttConfig(id: string, config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>): Promise<Sensor | undefined>;
@@ -128,10 +129,10 @@ export class MemStorage implements IStorage {
 
   async createOrganization(org: InsertOrganization): Promise<Organization> {
     const id = randomUUID();
-    const organization: Organization = { 
-      ...org, 
-      id, 
-      createdAt: new Date() 
+    const organization: Organization = {
+      ...org,
+      id,
+      createdAt: new Date()
     };
     this.organizations.set(id, organization);
     return organization;
@@ -152,10 +153,10 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
-    const user: User = { 
-      ...insertUser, 
-      id, 
-      createdAt: new Date() 
+    const user: User = {
+      ...insertUser,
+      id,
+      createdAt: new Date()
     };
     this.users.set(id, user);
     return user;
@@ -167,7 +168,7 @@ export class MemStorage implements IStorage {
   }
 
   async getSubLotes(parentLoteId: string, organizationId: string): Promise<Lote[]> {
-    return Array.from(this.lotes.values()).filter(lote => 
+    return Array.from(this.lotes.values()).filter(lote =>
       lote.parentLoteId === parentLoteId && lote.organizationId === organizationId
     );
   }
@@ -179,9 +180,9 @@ export class MemStorage implements IStorage {
 
   async createLote(lote: InsertLote): Promise<Lote> {
     const id = randomUUID();
-    const newLote: Lote = { 
-      ...lote, 
-      id, 
+    const newLote: Lote = {
+      ...lote,
+      id,
       createdAt: new Date(),
       finalAnimals: lote.finalAnimals ?? null,
       foodRegime: lote.foodRegime ?? null,
@@ -240,7 +241,7 @@ export class MemStorage implements IStorage {
   }
 
   async getZonesByStage(organizationId: string, stage: string): Promise<Zone[]> {
-    return Array.from(this.zones.values()).filter(zone => 
+    return Array.from(this.zones.values()).filter(zone =>
       zone.organizationId === organizationId && zone.stage === stage && zone.isActive
     );
   }
@@ -252,9 +253,9 @@ export class MemStorage implements IStorage {
 
   async createZone(zone: InsertZone): Promise<Zone> {
     const id = randomUUID();
-    const newZone: Zone = { 
-      ...zone, 
-      id, 
+    const newZone: Zone = {
+      ...zone,
+      id,
       createdAt: new Date(),
       fixedInfo: zone.fixedInfo ?? null,
       temperatureTarget: zone.temperatureTarget ?? null,
@@ -279,7 +280,7 @@ export class MemStorage implements IStorage {
     if (!zone || zone.organizationId !== organizationId) return false;
 
     // Check for active stays
-    const activeStays = Array.from(this.stays.values()).filter(stay => 
+    const activeStays = Array.from(this.stays.values()).filter(stay =>
       stay.zoneId === id && !stay.exitTime
     );
     if (activeStays.length > 0) return false;
@@ -310,17 +311,17 @@ export class MemStorage implements IStorage {
   }
 
   async getActiveStaysByZone(zoneId: string): Promise<Stay[]> {
-    return Array.from(this.stays.values()).filter(stay => 
+    return Array.from(this.stays.values()).filter(stay =>
       stay.zoneId === zoneId && !stay.exitTime
     );
   }
 
   async createStay(stay: InsertStay): Promise<Stay> {
     const id = randomUUID();
-    const newStay: Stay = { 
-      ...stay, 
-      id, 
-      createdAt: new Date() 
+    const newStay: Stay = {
+      ...stay,
+      id,
+      createdAt: new Date()
     };
     this.stays.set(id, newStay);
     return newStay;
@@ -361,12 +362,16 @@ export class MemStorage implements IStorage {
     return Array.from(this.sensors.values()).find(sensor => sensor.deviceId === deviceId);
   }
 
+  async getAllMqttEnabledSensors(): Promise<Sensor[]> {
+    return Array.from(this.sensors.values()).filter(sensor => sensor.mqttEnabled);
+  }
+
   async createSensor(sensor: InsertSensor & { deviceId: string; mqttTopic: string; mqttUsername: string; mqttPassword: string }): Promise<Sensor> {
     const id = randomUUID();
-    const newSensor: Sensor = { 
-      ...sensor, 
-      id, 
-      createdAt: new Date() 
+    const newSensor: Sensor = {
+      ...sensor,
+      id,
+      createdAt: new Date()
     };
     this.sensors.set(id, newSensor);
     return newSensor;
@@ -454,7 +459,7 @@ export class MemStorage implements IStorage {
         const endOfDay = new Date(today);
         endOfDay.setHours(23, 59, 59, 999);
 
-        readings = readings.filter(reading => 
+        readings = readings.filter(reading =>
           reading.timestamp >= startOfDay && reading.timestamp <= endOfDay
         );
       }
@@ -470,10 +475,10 @@ export class MemStorage implements IStorage {
 
   async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
     const id = randomUUID();
-    const newReading: SensorReading = { 
-      ...reading, 
-      id, 
-      createdAt: new Date() 
+    const newReading: SensorReading = {
+      ...reading,
+      id,
+      createdAt: new Date()
     };
     this.sensorReadings.set(id, newReading);
     return newReading;
@@ -490,10 +495,10 @@ export class MemStorage implements IStorage {
 
   async createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr> {
     const id = randomUUID();
-    const newZoneQr: ZoneQr = { 
-      ...zoneQr, 
-      id, 
-      createdAt: new Date() 
+    const newZoneQr: ZoneQr = {
+      ...zoneQr,
+      id,
+      createdAt: new Date()
     };
     this.zoneQrs.set(id, newZoneQr);
     return newZoneQr;
@@ -510,7 +515,7 @@ export class MemStorage implements IStorage {
   }
 
   async getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined> {
-    return Array.from(this.qrSnapshots.values()).find(snapshot => 
+    return Array.from(this.qrSnapshots.values()).find(snapshot =>
       snapshot.publicToken === token && snapshot.isActive
     );
   }
@@ -530,11 +535,11 @@ export class MemStorage implements IStorage {
 
   async createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot> {
     const id = randomUUID();
-    const newSnapshot: QrSnapshot = { 
-      ...snapshot, 
-      id, 
+    const newSnapshot: QrSnapshot = {
+      ...snapshot,
+      id,
       scanCount: 0,
-      createdAt: new Date() 
+      createdAt: new Date()
     };
     this.qrSnapshots.set(id, newSnapshot);
     return newSnapshot;
@@ -608,7 +613,7 @@ export class MemStorage implements IStorage {
 
       const sensorIds = sensors.map(s => s.id);
       const readings = Array.from(this.sensorReadings.values())
-        .filter(reading => 
+        .filter(reading =>
           sensorIds.includes(reading.sensorId) &&
           reading.timestamp >= startTime &&
           reading.timestamp <= endTime
@@ -635,6 +640,6 @@ export class MemStorage implements IStorage {
 import { PostgresStorage } from "./postgres-storage";
 
 // Use PostgreSQL for persistence, fallback to memory for testing
-export const storage = process.env.STORAGE === 'memory' 
-  ? new MemStorage() 
+export const storage = process.env.STORAGE === 'memory'
+  ? new MemStorage()
   : new PostgresStorage();
