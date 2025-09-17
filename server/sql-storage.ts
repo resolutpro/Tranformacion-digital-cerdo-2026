@@ -873,9 +873,12 @@ export class SqlStorage implements IStorage {
 
   async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
     const id = randomUUID();
+    // Use Madrid timezone (UTC+2) for created_at
+    const madridTime = new Date(Date.now() + (2 * 60 * 60 * 1000));
+
     const stmt = this.db.prepare(`
-      INSERT INTO sensor_readings (id, sensor_id, value, timestamp, is_simulated)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sensor_readings (id, sensor_id, value, timestamp, is_simulated, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -883,16 +886,11 @@ export class SqlStorage implements IStorage {
       reading.sensorId,
       reading.value,
       reading.timestamp.toISOString(),
-      reading.isSimulated ? 1 : 0
+      reading.isSimulated ? 1 : 0,
+      madridTime.toISOString()
     );
 
-    const created: SensorReading = {
-      ...reading,
-      id,
-      isSimulated: reading.isSimulated || null,
-      createdAt: new Date()
-    };
-    return created;
+    return this.getLatestReadingBySensor(reading.sensorId)!;
   }
 
   // QR Snapshots
@@ -1097,7 +1095,7 @@ export class SqlStorage implements IStorage {
   ): Promise<any[]> {
     try {
       console.log(`Searching sensor data for lote ${loteId}, stage ${stage}, from ${startTime.toISOString()} to ${endTime.toISOString()}`);
-      
+
       // First get all stays for this lote in this stage during the time period
       const staysQuery = `
         SELECT s.zone_id, s.entry_time, s.exit_time
@@ -1127,7 +1125,7 @@ export class SqlStorage implements IStorage {
 
       // Get sensor readings for all relevant zones during the time period
       const zoneIds = relevantStays.map(stay => stay.zone_id).filter(Boolean);
-      
+
       if (zoneIds.length === 0) {
         console.log(`No valid zone IDs found for lote ${loteId} in stage ${stage}`);
         return [];

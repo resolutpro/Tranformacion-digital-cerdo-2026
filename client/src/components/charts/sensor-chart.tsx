@@ -117,7 +117,8 @@ export function SensorChart({ sensors }: SensorChartProps) {
       return allReadings;
     },
     enabled: sensorsToQuery.length > 0,
-    refetchInterval: isLive ? 30000 : false, // Refetch every 30 seconds if live
+    refetchInterval: isLive ? 5000 : 10000, // Refetch every 5 seconds if live, 10 seconds otherwise
+    refetchIntervalInBackground: true, // Keep refetching in background
     retry: 3,
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });

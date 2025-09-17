@@ -687,7 +687,7 @@ class MqttService {
       const actualValue = extractedValues[firstField];
       const readingValue = actualValue.toString();
 
-      // Extract timestamp from the message data, convert from Madrid timezone to UTC
+      // Extract timestamp from the message data, convert from UTC to Madrid timezone (UTC+2)
       let messageTimestamp = new Date(); // fallback to current time
       
       if (messageData.timestamp) {
@@ -703,16 +703,16 @@ class MqttService {
           const parsedTime = new Date(timestampValue);
           
           if (!isNaN(parsedTime.getTime())) {
-            // Convert from Madrid timezone (UTC+2) to UTC for storage
-            // Subtract 2 hours to convert Madrid time to UTC
-            messageTimestamp = new Date(parsedTime.getTime() - (2 * 60 * 60 * 1000));
+            // Convert from UTC to Madrid timezone (UTC+2) for storage
+            // Add 2 hours to convert UTC time to Madrid time
+            messageTimestamp = new Date(parsedTime.getTime() + (2 * 60 * 60 * 1000));
             
-            logger.info("✅✅✅ TIMESTAMP CONVERTED FROM MADRID TO UTC", {
+            logger.info("✅✅✅ TIMESTAMP CONVERTED FROM UTC TO MADRID", {
               sensorId: sensor.id,
               originalTimestamp: timestampValue,
-              parsedMadridTime: parsedTime.toISOString(),
-              convertedUTCTime: messageTimestamp.toISOString(),
-              timezoneOffset: "UTC+2 -> UTC",
+              parsedUTCTime: parsedTime.toISOString(),
+              convertedMadridTime: messageTimestamp.toISOString(),
+              timezoneOffset: "UTC -> UTC+2",
             });
           } else {
             logger.warn("⚠️⚠️⚠️ INVALID TIMESTAMP IN MESSAGE - USING CURRENT TIME", {
@@ -730,7 +730,9 @@ class MqttService {
           });
         }
       } else {
-        logger.warn("⚠️⚠️⚠️ NO TIMESTAMP IN MESSAGE - USING CURRENT TIME", {
+        // Use current time converted to Madrid timezone
+        messageTimestamp = new Date(Date.now() + (2 * 60 * 60 * 1000));
+        logger.warn("⚠️⚠️⚠️ NO TIMESTAMP IN MESSAGE - USING CURRENT MADRID TIME", {
           sensorId: sensor.id,
           availableFields: Object.keys(messageData || {}),
           fallbackTime: messageTimestamp.toISOString(),

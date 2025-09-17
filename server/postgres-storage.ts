@@ -544,9 +544,16 @@ export class PostgresStorage implements IStorage {
   async createSensorReading(
     reading: InsertSensorReading,
   ): Promise<SensorReading> {
+    // Ensure created_at is in Madrid timezone (UTC+2)
+    const madridTime = new Date(Date.now() + (2 * 60 * 60 * 1000));
+    const readingWithTimezone = {
+      ...reading,
+      createdAt: madridTime,
+    };
+    
     const result = await this.db
       .insert(sensorReadings)
-      .values([reading])
+      .values([readingWithTimezone])
       .returning();
     return result[0];
   }
