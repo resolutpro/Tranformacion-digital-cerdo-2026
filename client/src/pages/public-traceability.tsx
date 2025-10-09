@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Thermometer, Droplets, QrCode } from "lucide-react";
+import { Footer } from "@/components/layout/footer";
 
 const stageNames: Record<string, string> = {
   "cria": "Cría",
@@ -382,6 +383,8 @@ export default function PublicTraceability() {
           </Card>
         </div>
       </div>
+      
+      <Footer />
     </div>
   );
 }
