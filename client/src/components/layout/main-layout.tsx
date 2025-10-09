@@ -1,6 +1,7 @@
 import { ReactNode, createContext, useContext, useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { Footer } from "./footer";
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -33,6 +34,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <main className="p-4 md:p-6">
             {children}
           </main>
+          <Footer />
         </div>
       </div>
     </SidebarContext.Provider>
