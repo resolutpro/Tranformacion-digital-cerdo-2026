@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Footer } from "@/components/layout/footer";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
@@ -525,6 +526,7 @@ export default function ZoneMovementPage() {
           </p>
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

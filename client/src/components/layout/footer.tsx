@@ -7,7 +7,7 @@ export function Footer() {
           <img 
             src="/footer-logos.png" 
             alt="Financiado por la Unión Europea, Ministerio para la Transformación Digital y de la Función Pública, Plan de Recuperación Transformación y Resiliencia, Junta de Extremadura" 
-            className="h-12 md:h-16 w-auto object-contain"
+            className="h-16 md:h-20 lg:h-24 w-auto object-contain max-w-full"
           />
         </div>
       </div>
