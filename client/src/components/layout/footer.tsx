@@ -9,8 +9,8 @@ export function Footer() {
             alt="Financiado por la Unión Europea, Ministerio para la Transformación Digital y de la Función Pública, Plan de Recuperación Transformación y Resiliencia, Junta de Extremadura" 
             className="h-16 md:h-20 lg:h-24 w-auto object-contain max-w-full"
             onError={(e) => {
-              console.error('Error cargando imagen del footer');
-              e.currentTarget.style.display = 'none';
+              console.error('Error cargando imagen del footer - ruta:', e.currentTarget.src);
+              e.currentTarget.alt = 'Financiado por la Unión Europea - Next Generation EU';
             }}
           />
         </div>
