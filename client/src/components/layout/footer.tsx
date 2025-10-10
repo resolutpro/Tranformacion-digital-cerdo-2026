@@ -1,4 +1,8 @@
 
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Info } from "lucide-react";
+
 export function Footer() {
   // En desarrollo, Vite necesita que importemos las imágenes
   const footerLogoUrl = '/footer-logos.png';
@@ -10,7 +14,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border bg-card mt-8">
       <div className="container mx-auto px-4 py-6">
-        <div className="flex justify-center items-center">
+        <div className="flex flex-col items-center gap-4">
           <img 
             src={footerLogoUrl}
             alt="Financiado por la Unión Europea, Ministerio para la Transformación Digital y de la Función Pública, Plan de Recuperación Transformación y Resiliencia, Junta de Extremadura" 
@@ -35,6 +39,12 @@ export function Footer() {
               e.currentTarget.alt = 'Financiado por la Unión Europea - Next Generation EU';
             }}
           />
+          <Link href="/informacion-adicional">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Info className="h-4 w-4" />
+              Información Adicional
+            </Button>
+          </Link>
         </div>
       </div>
     </footer>
