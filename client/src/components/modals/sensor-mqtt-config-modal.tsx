@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,15 +31,31 @@ export function SensorMqttConfigModal({ isOpen, onClose, sensor }: SensorMqttCon
   const form = useForm<SensorMqttConfig>({
     resolver: zodResolver(sensorMqttConfigSchema),
     defaultValues: {
-      mqttHost: sensor?.mqttHost || "eu1.cloud.thethings.network",
-      mqttPort: sensor?.mqttPort || 8883,
-      mqttUsername: sensor?.mqttUsername || "",
-      mqttPassword: sensor?.mqttPassword || "",
-      ttnTopic: sensor?.ttnTopic || "",
-      jsonFields: sensor?.jsonFields || "",
-      mqttEnabled: sensor?.mqttEnabled || false,
+      mqttHost: "eu1.cloud.thethings.network",
+      mqttPort: 8883,
+      mqttUsername: "",
+      mqttPassword: "",
+      ttnTopic: "",
+      jsonFields: "",
+      mqttEnabled: false,
     },
   });
+
+  // Reset form when sensor changes or modal opens
+  React.useEffect(() => {
+    if (isOpen && sensor) {
+      form.reset({
+        mqttHost: sensor.mqttHost || "eu1.cloud.thethings.network",
+        mqttPort: sensor.mqttPort || 8883,
+        mqttUsername: sensor.mqttUsername || "",
+        mqttPassword: sensor.mqttPassword || "",
+        ttnTopic: sensor.ttnTopic || "",
+        jsonFields: sensor.jsonFields || "",
+        mqttEnabled: sensor.mqttEnabled || false,
+      });
+      setTestResult(null);
+    }
+  }, [isOpen, sensor, form]);
 
   const updateMqttConfigMutation = useMutation({
     mutationFn: async (config: SensorMqttConfig) => {
