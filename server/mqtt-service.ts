@@ -193,22 +193,28 @@ class MqttService {
       existingConnection.sensors.clear();
       sensors.forEach((s) => existingConnection.sensors.add(s.id));
 
-      // Subscribe to any new topics
-      for (const sensor of sensors) {
-        if (sensor.ttnTopic) {
-          existingConnection.client.subscribe(sensor.ttnTopic, (err) => {
-            if (err) {
-              logger.error(
-                `Failed to subscribe to topic ${sensor.ttnTopic}`,
-                err,
-              );
-            } else {
-              logger.info(`Subscribed to topic: ${sensor.ttnTopic}`, {
-                sensorId: sensor.id,
-              });
-            }
-          });
+      // Get unique topics to avoid duplicate subscriptions
+      const uniqueTopics = new Set<string>();
+      sensors.forEach((s) => {
+        if (s.ttnTopic) {
+          uniqueTopics.add(s.ttnTopic);
         }
+      });
+
+      // Subscribe to any new topics only once per unique topic
+      for (const topic of uniqueTopics) {
+        existingConnection.client.subscribe(topic, { qos: 0 }, (err) => {
+          if (err) {
+            logger.error(
+              `Failed to subscribe to topic ${topic}`,
+              err,
+            );
+          } else {
+            logger.info(`Subscribed to topic: ${topic}`, {
+              sensorsCount: sensors.filter(s => s.ttnTopic === topic).length,
+            });
+          }
+        });
       }
       return;
     }
@@ -271,48 +277,14 @@ class MqttService {
       connection.lastConnected = new Date();
       connection.reconnectCount = 0;
 
-      // Subscribe to all topics for this connection
-      const subscriptionPromises: Promise<void>[] = [];
-      
-      for (const sensor of sensors) {
+      // Get unique topics to avoid duplicate subscriptions
+      const topicSensorMap = new Map<string, Sensor[]>();
+      sensors.forEach(sensor => {
         if (sensor.ttnTopic) {
-          logger.info("📡📡📡 ATTEMPTING TOPIC SUBSCRIPTION", {
-            sensorId: sensor.id,
-            sensorName: sensor.name,
-            topic: sensor.ttnTopic,
-            jsonFields: sensor.jsonFields,
-            connectionKey,
-            subscriptionAttempt: sensors.indexOf(sensor) + 1,
-            totalSensors: sensors.length,
-          });
-
-          const subscriptionPromise = new Promise<void>((resolve, reject) => {
-            client.subscribe(sensor.ttnTopic!, { qos: 0 }, (err, granted) => {
-              if (err) {
-                logger.error("❌❌❌ SUBSCRIPTION FAILED", {
-                  topic: sensor.ttnTopic,
-                  sensorId: sensor.id,
-                  sensorName: sensor.name,
-                  error: err.message,
-                  errorCode: err.name,
-                  connectionKey,
-                });
-                reject(err);
-              } else {
-                logger.info("✅✅✅ SUBSCRIPTION SUCCESS", {
-                  topic: sensor.ttnTopic,
-                  sensorId: sensor.id,
-                  sensorName: sensor.name,
-                  granted: granted,
-                  qos: granted?.[0]?.qos,
-                  connectionKey,
-                });
-                resolve();
-              }
-            });
-          });
-          
-          subscriptionPromises.push(subscriptionPromise);
+          if (!topicSensorMap.has(sensor.ttnTopic)) {
+            topicSensorMap.set(sensor.ttnTopic, []);
+          }
+          topicSensorMap.get(sensor.ttnTopic)!.push(sensor);
         } else {
           logger.warn("⚠️⚠️⚠️ SENSOR MISSING TTN TOPIC", {
             sensorId: sensor.id,
@@ -326,6 +298,45 @@ class MqttService {
             },
           });
         }
+      });
+
+      // Subscribe to all unique topics
+      const subscriptionPromises: Promise<void>[] = [];
+      
+      for (const [topic, topicSensors] of topicSensorMap.entries()) {
+        logger.info("📡📡📡 ATTEMPTING TOPIC SUBSCRIPTION", {
+          topic,
+          sensorsCount: topicSensors.length,
+          sensors: topicSensors.map(s => ({ id: s.id, name: s.name, jsonFields: s.jsonFields })),
+          connectionKey,
+        });
+
+        const subscriptionPromise = new Promise<void>((resolve, reject) => {
+          client.subscribe(topic, { qos: 0 }, (err, granted) => {
+            if (err) {
+              logger.error("❌❌❌ SUBSCRIPTION FAILED", {
+                topic,
+                sensorsCount: topicSensors.length,
+                error: err.message,
+                errorCode: err.name,
+                connectionKey,
+              });
+              reject(err);
+            } else {
+              logger.info("✅✅✅ SUBSCRIPTION SUCCESS", {
+                topic,
+                sensorsCount: topicSensors.length,
+                sensors: topicSensors.map(s => ({ id: s.id, name: s.name })),
+                granted: granted,
+                qos: granted?.[0]?.qos,
+                connectionKey,
+              });
+              resolve();
+            }
+          });
+        });
+        
+        subscriptionPromises.push(subscriptionPromise);
       }
 
       // Wait for all subscriptions to complete
@@ -333,7 +344,8 @@ class MqttService {
         await Promise.all(subscriptionPromises);
         logger.info("🎉🎉🎉 ALL SUBSCRIPTIONS COMPLETED", {
           connectionKey,
-          totalSubscriptions: subscriptionPromises.length,
+          totalUniqueTopics: topicSensorMap.size,
+          totalSensors: sensors.length,
           sensorsWithTopics: sensors.filter(s => s.ttnTopic).length,
         });
       } catch (subscriptionError) {
