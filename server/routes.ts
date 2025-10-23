@@ -63,7 +63,7 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
   // For sublotes, also include parent lote's history
   let stays = await storage.getStaysByLote(loteId);
   const isSubLote = !!lote.parentLoteId;
-  
+
   if (isSubLote) {
     const parentStays = await storage.getStaysByLote(lote.parentLoteId);
     logger.info("Sublote inheritance debug", {
@@ -121,7 +121,7 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
     const duration = Math.floor((endTime - startTime) / (1000 * 60 * 60 * 24)); // days
 
     const zones = Array.from(new Set(stayZones.map((sz: any) => sz.zone.name)));
-    
+
     // Get sensor data for each phase
     let sensorData = [];
     try {
@@ -130,7 +130,7 @@ async function generateSnapshotData(loteId: string, organizationId: string) {
       const loteIdForSensorData = isSubLote && ["cria", "engorde", "matadero"].includes(stage) 
         ? lote.parentLoteId 
         : loteId;
-      
+
       sensorData = await storage.getSensorDataByLoteAndStage(
         loteIdForSensorData,
         stage,
@@ -968,53 +968,33 @@ export function registerRoutes(app: Express): Server {
       const zone = await storage.getZone(sensor.zoneId, req.organizationId);
       if (!zone)
         return res.status(404).json({ message: "Sensor no encontrado" });
-      
+
       // Validate the MQTT configuration data
       const mqttConfig = sensorMqttConfigSchema.parse(req.body);
-      
+
       logger.info("PUT /api/sensors/:id/mqtt-config", {
         organizationId: req.organizationId,
         sensorId: req.params.id,
-        config: { ...mqttConfig, mqttPassword: "***" }, // Hide password in logs
+        host: mqttConfig.mqttHost,
+        port: mqttConfig.mqttPort,
+        ttnTopic: mqttConfig.ttnTopic,
+        jsonFields: mqttConfig.jsonFields,
+        mqttEnabled: mqttConfig.mqttEnabled,
       });
 
       // Update the sensor's MQTT configuration
       const updatedSensor = await storage.updateSensorMqttConfig(req.params.id, mqttConfig);
+
       if (!updatedSensor) {
         return res.status(404).json({ message: "Sensor no encontrado" });
       }
 
-      // Connect or disconnect sensor from MQTT based on configuration
-      try {
-        if (mqttConfig.mqttEnabled && mqttConfig.mqttHost && mqttConfig.mqttPort && mqttConfig.ttnTopic) {
-          logger.info("Connecting sensor to MQTT", { sensorId: req.params.id });
-          await mqttService.connectSensor(updatedSensor);
-        } else {
-          logger.info("Disconnecting sensor from MQTT", { sensorId: req.params.id });
-          await mqttService.disconnectSensor(req.params.id);
-        }
-      } catch (mqttError) {
-        logger.error("MQTT connection error during config update", mqttError);
-        // Don't fail the entire request if MQTT connection fails
-      }
-
-      await storage.createAuditLog({
-        organizationId: req.organizationId,
-        userId: req.user.id,
-        entityType: "sensor",
-        entityId: sensor.id,
-        action: "mqtt-config-update",
-        oldData: {
-          mqttHost: sensor.mqttHost,
-          mqttPort: sensor.mqttPort,
-          mqttEnabled: sensor.mqttEnabled,
-        },
-        newData: {
-          mqttHost: mqttConfig.mqttHost,
-          mqttPort: mqttConfig.mqttPort,
-          mqttEnabled: mqttConfig.mqttEnabled,
-        },
+      // Force immediate MQTT refresh to subscribe to new topics
+      logger.info("Forcing MQTT refresh after sensor config update", {
+        sensorId: req.params.id,
+        ttnTopic: mqttConfig.ttnTopic,
       });
+      await mqttService.forceRefresh();
 
       res.json({ 
         message: "Configuración MQTT actualizada correctamente",
@@ -1034,10 +1014,10 @@ export function registerRoutes(app: Express): Server {
       const zone = await storage.getZone(sensor.zoneId, req.organizationId);
       if (!zone)
         return res.status(404).json({ message: "Sensor no encontrado" });
-      
+
       // Validate the MQTT configuration data
       const mqttConfig = sensorMqttConfigSchema.parse(req.body);
-      
+
       logger.info("POST /api/sensors/:id/test-mqtt", {
         organizationId: req.organizationId,
         sensorId: req.params.id,
@@ -1048,7 +1028,7 @@ export function registerRoutes(app: Express): Server {
       try {
         // Import MQTT client dynamically
         const mqtt = await import("mqtt");
-        
+
         // Create connection options
         const connectOptions = {
           host: mqttConfig.mqttHost,
@@ -1061,7 +1041,7 @@ export function registerRoutes(app: Express): Server {
 
         // Test connection
         const client = mqtt.connect(connectOptions);
-        
+
         const testPromise = new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             client.end();
