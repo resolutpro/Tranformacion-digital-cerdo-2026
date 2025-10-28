@@ -1,0 +1,20 @@
+NOMBRE DE LA OPERACIÓN/PROYECTO
+Gemelo Digital Ibérico – Trazabilidad y Eficiencia en la Cadena del Cerdo Ibérico.
+
+DESCRIPCIÓN DE LA OPERACIÓN/PROYECTO
+El proyecto consiste en el diseño e implementación de un gemelo digital de bajo coste que replica en tiempo casi real los procesos críticos del cerdo ibérico, abarcando desde la cría y el engorde hasta el matadero, el secadero y la distribución. La solución se integra con sensores IoT para capturar parámetros ambientales y operativos, registra los eventos clave en una blockchain de código abierto para asegurar la trazabilidad y la integridad de la información, y pone a disposición cuadros de mando interactivos que facilitan el análisis, la simulación de escenarios y la toma de decisiones basada en datos. La estrategia prioriza el uso de tecnologías existentes para minimizar costes, asegurar la escalabilidad y acelerar la adopción en entornos rurales.
+
+OBJETIVOS
+El proyecto persigue mejorar la trazabilidad del producto “de la dehesa al consumidor” mediante un registro inmutable y verificable; optimizar la eficiencia operativa reduciendo errores manuales y habilitando decisiones ágiles con métricas en tiempo real; fomentar la innovación y la competitividad del sector a través de la adopción de IoT, blockchain y analítica abierta; y contribuir a la modernización del tejido productivo rural con soluciones digitales de bajo coste y alto impacto.
+
+RESULTADOS PREVISTOS
+Se espera disponer de una plataforma operativa de gemelo digital que integre ingesta IoT (temperatura, humedad, localización y eventos de proceso), un libro mayor de trazabilidad en blockchain de código abierto para altas, transformaciones y transferencias de lotes, y paneles de control con indicadores clave y simulación de escenarios. El piloto cubrirá al menos tres eslabones de la cadena (por ejemplo, engorde, matadero y secadero) con lotes reales, y tendrá como objetivos iniciales registrar el 90% o más de los eventos críticos con sello temporal verificable, reducir la latencia media desde la captura hasta la visualización a cinco minutos o menos y disminuir en torno a un 30% los errores de registro frente al proceso manual de referencia. Además, se elaborará una guía de uso y se impartirán dos sesiones formativas al personal implicado.
+
+PRESUPUESTO
+37.500 euros.
+
+AYUDA RECIBIDA
+30.000 euros.
+
+FONDO/PROGRAMA
+Ayudas destinadas a la aceleración de ecosistemas de emprendimiento e innovación basados en Gemelos Digitales del programa Redes Territoriales de Especialización Tecnológica (RETECH) en el marco del Plan de Recuperación, Transformación y Resiliencia.
