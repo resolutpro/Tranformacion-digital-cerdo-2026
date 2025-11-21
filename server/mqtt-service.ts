@@ -123,21 +123,43 @@ class MqttService {
     try {
       logger.info("💾 ATTEMPTING TO SAVE BUFFER TO FILE", {
         bufferSize: this.readingsBuffer.length,
-        filePath: this.bufferFilePath
+        filePath: this.bufferFilePath,
+        absolutePath: path.resolve(this.bufferFilePath)
       });
+      
+      // Ensure the directory exists (should be root, but just in case)
+      const dir = path.dirname(this.bufferFilePath);
+      const { mkdir } = await import('fs/promises');
+      try {
+        await mkdir(dir, { recursive: true });
+      } catch (mkdirError) {
+        // Directory might already exist, that's fine
+        logger.info("Directory already exists or created", { dir });
+      }
       
       const data = JSON.stringify(this.readingsBuffer, null, 2);
       await writeFile(this.bufferFilePath, data, 'utf-8');
       
       logger.info(`💾 ✅ SUCCESSFULLY SAVED ${this.readingsBuffer.length} readings to buffer file`, {
         filePath: this.bufferFilePath,
-        fileSize: data.length
+        absolutePath: path.resolve(this.bufferFilePath),
+        fileSize: data.length,
+        dataPreview: data.substring(0, 200)
       });
+      
+      // Verify file was created
+      if (existsSync(this.bufferFilePath)) {
+        logger.info("✅ File existence verified", { filePath: this.bufferFilePath });
+      } else {
+        logger.error("❌ File was NOT created despite no errors!", { filePath: this.bufferFilePath });
+      }
     } catch (error: any) {
       logger.error("💾 ❌ ERROR SAVING BUFFER TO FILE", {
         filePath: this.bufferFilePath,
+        absolutePath: path.resolve(this.bufferFilePath),
         error: error?.message || String(error),
-        stack: error?.stack || 'No stack trace'
+        stack: error?.stack || 'No stack trace',
+        errorCode: error?.code
       });
     }
   }
@@ -878,16 +900,26 @@ class MqttService {
       timestamp: reading.timestamp.toISOString(),
       bufferSize: this.readingsBuffer.length,
       bufferFilePath: this.bufferFilePath,
+      absolutePath: path.resolve(this.bufferFilePath),
       nextFlush: "in 1 hour or on shutdown"
     });
 
-    // Guardar buffer en archivo inmediatamente en la primera lectura y luego cada 10
-    if (this.readingsBuffer.length === 1 || this.readingsBuffer.length % 10 === 0) {
-      logger.info("💾 Triggering buffer save to file", {
-        bufferSize: this.readingsBuffer.length,
-        filePath: this.bufferFilePath
-      });
+    // Guardar buffer en archivo inmediatamente en cada lectura (para debugging)
+    // Luego optimizaremos a solo guardar cada 10
+    logger.info("💾 Triggering IMMEDIATE buffer save to file", {
+      bufferSize: this.readingsBuffer.length,
+      filePath: this.bufferFilePath,
+      absolutePath: path.resolve(this.bufferFilePath)
+    });
+    
+    try {
       await this.saveBufferToFile();
+      logger.info("✅ Buffer save completed successfully");
+    } catch (saveError: any) {
+      logger.error("❌ Buffer save failed", {
+        error: saveError?.message,
+        stack: saveError?.stack
+      });
     }
   }
 }
