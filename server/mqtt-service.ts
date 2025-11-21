@@ -133,11 +133,11 @@ class MqttService {
         filePath: this.bufferFilePath,
         fileSize: data.length
       });
-    } catch (error) {
+    } catch (error: any) {
       logger.error("💾 ❌ ERROR SAVING BUFFER TO FILE", {
         filePath: this.bufferFilePath,
-        error: error.message,
-        stack: error.stack
+        error: error?.message || String(error),
+        stack: error?.stack || 'No stack trace'
       });
     }
   }
@@ -862,6 +862,14 @@ class MqttService {
 
   // Public method to add readings to buffer (for simulated "real" readings)
   async addReadingToBuffer(reading: BufferedReading): Promise<void> {
+    logger.info("🔵 addReadingToBuffer CALLED", {
+      sensorId: reading.sensorId,
+      value: reading.value,
+      timestamp: reading.timestamp.toISOString(),
+      isSimulated: reading.isSimulated,
+      currentBufferSize: this.readingsBuffer.length
+    });
+
     this.readingsBuffer.push(reading);
     
     logger.info("📦 SIMULATED REAL READING ADDED TO BUFFER", {

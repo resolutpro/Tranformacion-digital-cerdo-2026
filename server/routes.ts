@@ -1165,17 +1165,37 @@ export function registerRoutes(app: Express): Server {
           ? new Date(customTimestamp)
           : new Date();
         
+        logger.info("🎯 SIMULATE SINGLE - Processing", {
+          sensorId: req.params.id,
+          value: value,
+          isSimulated: isSimulated,
+          markAsSimulated: markAsSimulated,
+          timestamp: timestamp.toISOString()
+        });
+        
         // Si es marcado como real, usar buffer de MQTT
         if (!isSimulated) {
+          logger.info("🔵 CALLING addReadingToBuffer for REAL reading", {
+            sensorId: req.params.id,
+            value: value.toString()
+          });
+          
           await mqttService.addReadingToBuffer({
             sensorId: req.params.id,
             value: value.toString(),
             timestamp,
             isSimulated: false
           });
+          
+          logger.info("✅ Buffer method called successfully");
           res.json({ message: "Lectura real agregada al buffer", buffered: true });
         } else {
           // Si es simulada, escribir directamente
+          logger.info("📝 Creating SIMULATED reading directly in DB", {
+            sensorId: req.params.id,
+            value: value.toString()
+          });
+          
           const reading = await storage.createSensorReading({
             sensorId: req.params.id,
             value: value.toString(),
