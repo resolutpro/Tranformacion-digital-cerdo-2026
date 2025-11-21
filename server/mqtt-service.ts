@@ -841,6 +841,24 @@ class MqttService {
     logger.info("🔧 Manual flush requested");
     await this.flushBufferToDatabase();
   }
+
+  // Public method to add readings to buffer (for simulated "real" readings)
+  async addReadingToBuffer(reading: BufferedReading): Promise<void> {
+    this.readingsBuffer.push(reading);
+    
+    logger.info("📦 SIMULATED REAL READING ADDED TO BUFFER", {
+      sensorId: reading.sensorId,
+      value: reading.value,
+      timestamp: reading.timestamp.toISOString(),
+      bufferSize: this.readingsBuffer.length,
+      nextFlush: "in 1 hour or on shutdown"
+    });
+
+    // Guardar buffer en archivo periódicamente (cada 10 lecturas)
+    if (this.readingsBuffer.length % 10 === 0) {
+      await this.saveBufferToFile();
+    }
+  }
 }
 
 // Export singleton instance

@@ -1158,17 +1158,32 @@ export function registerRoutes(app: Express): Server {
         customTimestamp,
       } = req.body;
 
+      const isSimulated = markAsSimulated !== false;
+
       if (mode === "single") {
         const timestamp = customTimestamp
           ? new Date(customTimestamp)
           : new Date();
-        const reading = await storage.createSensorReading({
-          sensorId: req.params.id,
-          value: value.toString(),
-          timestamp,
-          isSimulated: markAsSimulated !== false,
-        });
-        res.json({ message: "Lectura simulada creada", reading });
+        
+        // Si es marcado como real, usar buffer de MQTT
+        if (!isSimulated) {
+          await mqttService.addReadingToBuffer({
+            sensorId: req.params.id,
+            value: value.toString(),
+            timestamp,
+            isSimulated: false
+          });
+          res.json({ message: "Lectura real agregada al buffer", buffered: true });
+        } else {
+          // Si es simulada, escribir directamente
+          const reading = await storage.createSensorReading({
+            sensorId: req.params.id,
+            value: value.toString(),
+            timestamp,
+            isSimulated: true,
+          });
+          res.json({ message: "Lectura simulada creada", reading });
+        }
         return;
       }
       if (mode === "range") {
@@ -1181,13 +1196,26 @@ export function registerRoutes(app: Express): Server {
         const timestamp = customTimestamp
           ? new Date(customTimestamp)
           : new Date();
-        const reading = await storage.createSensorReading({
-          sensorId: req.params.id,
-          value: finalValue.toString(),
-          timestamp,
-          isSimulated: markAsSimulated !== false,
-        });
-        res.json({ message: "Lectura aleatoria creada", reading });
+        
+        // Si es marcado como real, usar buffer de MQTT
+        if (!isSimulated) {
+          await mqttService.addReadingToBuffer({
+            sensorId: req.params.id,
+            value: finalValue.toString(),
+            timestamp,
+            isSimulated: false
+          });
+          res.json({ message: "Lectura real aleatoria agregada al buffer", buffered: true });
+        } else {
+          // Si es simulada, escribir directamente
+          const reading = await storage.createSensorReading({
+            sensorId: req.params.id,
+            value: finalValue.toString(),
+            timestamp,
+            isSimulated: true,
+          });
+          res.json({ message: "Lectura aleatoria creada", reading });
+        }
         return;
       }
       if (mode === "burst") {
@@ -1195,10 +1223,11 @@ export function registerRoutes(app: Express): Server {
           count ||
           Math.floor(((duration || 5) * 60 * 1000) / ((interval || 30) * 1000));
         const intervalMs = (interval || 30) * 1000;
-        const readings = [];
         const baseTime = customTimestamp
           ? new Date(customTimestamp).getTime()
           : Date.now() - (burstCount - 1) * intervalMs;
+        
+        const readings = [];
         for (let i = 0; i < burstCount; i++) {
           const timestamp = new Date(baseTime + i * intervalMs);
           let simulatedValue = value;
@@ -1206,18 +1235,40 @@ export function registerRoutes(app: Express): Server {
             const variance = (Math.random() - 0.5) * 0.2; // ±10%
             simulatedValue = value * (1 + variance);
           }
-          const reading = await storage.createSensorReading({
-            sensorId: req.params.id,
-            value: simulatedValue.toString(),
-            timestamp,
-            isSimulated: markAsSimulated !== false,
-          });
-          readings.push(reading);
+          
+          // Si es marcado como real, usar buffer de MQTT
+          if (!isSimulated) {
+            await mqttService.addReadingToBuffer({
+              sensorId: req.params.id,
+              value: simulatedValue.toString(),
+              timestamp,
+              isSimulated: false
+            });
+            readings.push({ buffered: true, timestamp });
+          } else {
+            // Si es simulada, escribir directamente
+            const reading = await storage.createSensorReading({
+              sensorId: req.params.id,
+              value: simulatedValue.toString(),
+              timestamp,
+              isSimulated: true,
+            });
+            readings.push(reading);
+          }
         }
-        res.json({
-          message: `${readings.length} lecturas en ráfaga creadas`,
-          count: readings.length,
-        });
+        
+        if (!isSimulated) {
+          res.json({
+            message: `${readings.length} lecturas reales agregadas al buffer`,
+            count: readings.length,
+            buffered: true
+          });
+        } else {
+          res.json({
+            message: `${readings.length} lecturas en ráfaga creadas`,
+            count: readings.length,
+          });
+        }
         return;
       }
       res.status(400).json({ message: "Modo de simulación no válido" });
