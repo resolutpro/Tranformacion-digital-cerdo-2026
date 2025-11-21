@@ -121,11 +121,24 @@ class MqttService {
 
   private async saveBufferToFile(): Promise<void> {
     try {
+      logger.info("💾 ATTEMPTING TO SAVE BUFFER TO FILE", {
+        bufferSize: this.readingsBuffer.length,
+        filePath: this.bufferFilePath
+      });
+      
       const data = JSON.stringify(this.readingsBuffer, null, 2);
       await writeFile(this.bufferFilePath, data, 'utf-8');
-      logger.info(`💾 Saved ${this.readingsBuffer.length} readings to buffer file`);
+      
+      logger.info(`💾 ✅ SUCCESSFULLY SAVED ${this.readingsBuffer.length} readings to buffer file`, {
+        filePath: this.bufferFilePath,
+        fileSize: data.length
+      });
     } catch (error) {
-      logger.error("Error saving buffer to file", error);
+      logger.error("💾 ❌ ERROR SAVING BUFFER TO FILE", {
+        filePath: this.bufferFilePath,
+        error: error.message,
+        stack: error.stack
+      });
     }
   }
 
@@ -729,11 +742,16 @@ class MqttService {
         value: readingValue,
         timestamp: messageTimestamp.toISOString(),
         bufferSize: this.readingsBuffer.length,
+        bufferFilePath: this.bufferFilePath,
         nextFlush: "in 1 hour or on shutdown"
       });
 
-      // Guardar buffer en archivo periódicamente (cada 10 lecturas)
-      if (this.readingsBuffer.length % 10 === 0) {
+      // Guardar buffer en archivo inmediatamente en la primera lectura y luego cada 10
+      if (this.readingsBuffer.length === 1 || this.readingsBuffer.length % 10 === 0) {
+        logger.info("💾 Triggering buffer save to file from MQTT message", {
+          bufferSize: this.readingsBuffer.length,
+          filePath: this.bufferFilePath
+        });
         await this.saveBufferToFile();
       }
 
@@ -851,11 +869,16 @@ class MqttService {
       value: reading.value,
       timestamp: reading.timestamp.toISOString(),
       bufferSize: this.readingsBuffer.length,
+      bufferFilePath: this.bufferFilePath,
       nextFlush: "in 1 hour or on shutdown"
     });
 
-    // Guardar buffer en archivo periódicamente (cada 10 lecturas)
-    if (this.readingsBuffer.length % 10 === 0) {
+    // Guardar buffer en archivo inmediatamente en la primera lectura y luego cada 10
+    if (this.readingsBuffer.length === 1 || this.readingsBuffer.length % 10 === 0) {
+      logger.info("💾 Triggering buffer save to file", {
+        bufferSize: this.readingsBuffer.length,
+        filePath: this.bufferFilePath
+      });
       await this.saveBufferToFile();
     }
   }
