@@ -1173,11 +1173,13 @@ export function registerRoutes(app: Express): Server {
           timestamp: timestamp.toISOString()
         });
         
-        // Si es marcado como real, usar buffer de MQTT
+        // Si es marcado como real (markAsSimulated === false), usar buffer de MQTT
         if (!isSimulated) {
           logger.info("🔵 CALLING addReadingToBuffer for REAL reading", {
             sensorId: req.params.id,
-            value: value.toString()
+            value: value.toString(),
+            willSaveToFile: true,
+            willFlushIn: "1 hour"
           });
           
           await mqttService.addReadingToBuffer({
@@ -1187,22 +1189,34 @@ export function registerRoutes(app: Express): Server {
             isSimulated: false
           });
           
-          logger.info("✅ Buffer method called successfully");
-          res.json({ message: "Lectura real agregada al buffer", buffered: true });
+          logger.info("✅ Reading added to buffer file successfully");
+          res.json({ 
+            message: "Lectura real agregada al buffer (se escribirá en BD cada hora)", 
+            buffered: true,
+            nextFlush: "in 1 hour"
+          });
         } else {
-          // Si es simulada, escribir directamente
-          logger.info("📝 Creating SIMULATED reading directly in DB", {
+          // Si es simulada, también usar el buffer pero marcada como simulada
+          logger.info("📝 CALLING addReadingToBuffer for SIMULATED reading", {
             sensorId: req.params.id,
-            value: value.toString()
+            value: value.toString(),
+            willSaveToFile: true,
+            willFlushIn: "1 hour"
           });
           
-          const reading = await storage.createSensorReading({
+          await mqttService.addReadingToBuffer({
             sensorId: req.params.id,
             value: value.toString(),
             timestamp,
-            isSimulated: true,
+            isSimulated: true
           });
-          res.json({ message: "Lectura simulada creada", reading });
+          
+          logger.info("✅ Simulated reading added to buffer file successfully");
+          res.json({ 
+            message: "Lectura simulada agregada al buffer (se escribirá en BD cada hora)", 
+            buffered: true,
+            nextFlush: "in 1 hour"
+          });
         }
         return;
       }
@@ -1217,25 +1231,19 @@ export function registerRoutes(app: Express): Server {
           ? new Date(customTimestamp)
           : new Date();
         
-        // Si es marcado como real, usar buffer de MQTT
-        if (!isSimulated) {
-          await mqttService.addReadingToBuffer({
-            sensorId: req.params.id,
-            value: finalValue.toString(),
-            timestamp,
-            isSimulated: false
-          });
-          res.json({ message: "Lectura real aleatoria agregada al buffer", buffered: true });
-        } else {
-          // Si es simulada, escribir directamente
-          const reading = await storage.createSensorReading({
-            sensorId: req.params.id,
-            value: finalValue.toString(),
-            timestamp,
-            isSimulated: true,
-          });
-          res.json({ message: "Lectura aleatoria creada", reading });
-        }
+        // Siempre usar buffer, independientemente de si es simulada o real
+        await mqttService.addReadingToBuffer({
+          sensorId: req.params.id,
+          value: finalValue.toString(),
+          timestamp,
+          isSimulated: isSimulated
+        });
+        
+        res.json({ 
+          message: `Lectura ${isSimulated ? 'simulada' : 'real'} aleatoria agregada al buffer (se escribirá en BD cada hora)`, 
+          buffered: true,
+          nextFlush: "in 1 hour"
+        });
         return;
       }
       if (mode === "burst") {
@@ -1256,39 +1264,22 @@ export function registerRoutes(app: Express): Server {
             simulatedValue = value * (1 + variance);
           }
           
-          // Si es marcado como real, usar buffer de MQTT
-          if (!isSimulated) {
-            await mqttService.addReadingToBuffer({
-              sensorId: req.params.id,
-              value: simulatedValue.toString(),
-              timestamp,
-              isSimulated: false
-            });
-            readings.push({ buffered: true, timestamp });
-          } else {
-            // Si es simulada, escribir directamente
-            const reading = await storage.createSensorReading({
-              sensorId: req.params.id,
-              value: simulatedValue.toString(),
-              timestamp,
-              isSimulated: true,
-            });
-            readings.push(reading);
-          }
+          // Siempre usar buffer, independientemente de si es simulada o real
+          await mqttService.addReadingToBuffer({
+            sensorId: req.params.id,
+            value: simulatedValue.toString(),
+            timestamp,
+            isSimulated: isSimulated
+          });
+          readings.push({ buffered: true, timestamp });
         }
         
-        if (!isSimulated) {
-          res.json({
-            message: `${readings.length} lecturas reales agregadas al buffer`,
-            count: readings.length,
-            buffered: true
-          });
-        } else {
-          res.json({
-            message: `${readings.length} lecturas en ráfaga creadas`,
-            count: readings.length,
-          });
-        }
+        res.json({
+          message: `${readings.length} lecturas ${isSimulated ? 'simuladas' : 'reales'} agregadas al buffer (se escribirán en BD cada hora)`,
+          count: readings.length,
+          buffered: true,
+          nextFlush: "in 1 hour"
+        });
         return;
       }
       res.status(400).json({ message: "Modo de simulación no válido" });
