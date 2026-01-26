@@ -37,10 +37,10 @@ export default function ZoneDetail() {
     useState(false);
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
 
-  // CORRECCIÓN: Se añade isLoading para evitar el falso negativo de "No encontrada"
-  const { data: zone, isLoading: isLoadingZone } = useQuery<Zone>({
+  const { data: zone, isLoading: isLoadingZone, error: zoneError } = useQuery<Zone>({
     queryKey: ["/api/zones", params.id],
     enabled: !!params.id,
+    retry: false,
   });
 
   const { data: sensors = [] } = useQuery<Sensor[]>({
@@ -101,12 +101,15 @@ export default function ZoneDetail() {
     );
   }
 
-  if (!zone) {
+  if (!zone && !isLoadingZone) {
     return (
       <MainLayout>
         <div className="text-center py-12">
+          <p className="text-destructive font-semibold mb-2">
+            Error al cargar la zona
+          </p>
           <p className="text-muted-foreground">
-            Zona no encontrada (ID: {params.id})
+            {zoneError instanceof Error ? zoneError.message : "Zona no encontrada o sin acceso"} (ID: {params.id})
           </p>
         </div>
       </MainLayout>

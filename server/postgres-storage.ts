@@ -293,15 +293,29 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  // CORRECCIÓN PARA "Zona no encontrada":
-  // Nos aseguramos de que el ID sea tratado como UUID y que el organizationId coincida estrictamente.
   async getZone(id: string, organizationId: string): Promise<Zone | undefined> {
     try {
+      console.log(`[STORAGE] Buscando zona: id=${id}, org=${organizationId}`);
       const result = await this.db
         .select()
         .from(zones)
-        .where(and(eq(zones.id, id), eq(zones.organizationId, organizationId)))
+        .where(
+          and(
+            eq(zones.id, id),
+            eq(zones.organizationId, organizationId)
+          )
+        )
         .limit(1);
+      
+      if (!result[0]) {
+        // Búsqueda de respaldo solo por ID para depuración
+        const backup = await this.db.select().from(zones).where(eq(zones.id, id)).limit(1);
+        if (backup[0]) {
+          console.warn(`[STORAGE] Zona encontrada por ID ${id} pero pertenece a otra org: ${backup[0].organizationId} (esperada: ${organizationId})`);
+        } else {
+          console.warn(`[STORAGE] Zona no encontrada ni siquiera por ID: ${id}`);
+        }
+      }
       return result[0];
     } catch (e) {
       console.error(`Error en getZone para ID ${id}:`, e);
