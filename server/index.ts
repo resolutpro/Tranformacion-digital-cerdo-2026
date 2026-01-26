@@ -39,11 +39,11 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-
+    
     // Log todas las rutas que no sean archivos estáticos comunes
     if (!path.match(/\.(js|css|ico|png|jpg|svg|woff|woff2)$/)) {
       let line = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-
+      
       if (path.startsWith("/api") && capturedJsonResponse !== undefined) {
         const s = safeSerialize(capturedJsonResponse) ?? "[unserializable-json]";
         const snippet = s.length > 300 ? s.slice(0, 299) + "…" : s;
@@ -51,7 +51,7 @@ app.use((req, res, next) => {
       } else if (!path.startsWith("/api")) {
         line += ` [SPA-ROUTE]`;
       }
-
+      
       if (line.length > 1000) line = line.slice(0, 999) + "…";
       log(line);
     }
@@ -101,20 +101,15 @@ app.use((req, res, next) => {
   });
 
   // Graceful shutdown
-  process.on("SIGTERM", async () => {
-    log("SIGTERM signal received: closing HTTP server");
+  process.on('SIGINT', async () => {
+    console.log('[SHUTDOWN] Received SIGINT, shutting down gracefully...');
     await mqttService.shutdown();
-    server.close(() => {
-      log("HTTP server closed");
-    });
+    process.exit(0);
   });
 
-  process.on("SIGINT", async () => {
-    log("SIGINT signal received: closing HTTP server");
+  process.on('SIGTERM', async () => {
+    console.log('[SHUTDOWN] Received SIGTERM, shutting down gracefully...');
     await mqttService.shutdown();
-    server.close(() => {
-      log("HTTP server closed");
-      process.exit(0);
-    });
+    process.exit(0);
   });
 })();

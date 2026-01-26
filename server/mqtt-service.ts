@@ -1,9 +1,6 @@
 import mqtt from "mqtt";
 import { storage } from "./storage";
 import type { Sensor } from "@shared/schema";
-import { writeFile, readFile, unlink } from "fs/promises";
-import { existsSync } from "fs";
-import path from "path";
 
 // Simple logger for MQTT service
 const logger = {
@@ -36,24 +33,11 @@ interface MqttConnection {
   reconnectCount: number;
 }
 
-interface BufferedReading {
-  sensorId: string;
-  value: string;
-  timestamp: Date;
-  isSimulated: boolean;
-}
-
 class MqttService {
   private connections: Map<string, MqttConnection> = new Map();
   private initialized = false;
   private reconnectInterval = 30000; // 30 seconds
   private maxReconnectAttempts = 5;
-
-  // Buffer para almacenar lecturas antes de escribir en BD
-  private readingsBuffer: BufferedReading[] = [];
-  private bufferFilePath = path.join(process.cwd(), 'mqtt-readings-buffer.json');
-  private flushInterval = 3600000; // 1 hora en milisegundos
-  private flushTimer: NodeJS.Timeout | null = null;
 
   async initialize(): Promise<void> {
     if (this.initialized) {
@@ -64,16 +48,10 @@ class MqttService {
     logger.info("Initializing MQTT Service...");
 
     try {
-      // Cargar buffer existente si hay
-      await this.loadBufferFromFile();
-
       // Load all sensors with MQTT enabled
       await this.refreshMqttConnections();
       this.initialized = true;
       logger.info("MQTT Service initialized successfully");
-
-      // Iniciar timer de flush cada hora
-      this.startFlushTimer();
 
       // Start periodic refresh of connections
       setInterval(() => {
@@ -87,153 +65,16 @@ class MqttService {
     }
   }
 
-  private startFlushTimer(): void {
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-    }
-
-    logger.info("⏰ Starting flush timer - will write to DB every hour");
-
-    this.flushTimer = setInterval(async () => {
-      await this.flushBufferToDatabase();
-    }, this.flushInterval);
-  }
-
-  private async loadBufferFromFile(): Promise<void> {
-    try {
-      if (existsSync(this.bufferFilePath)) {
-        const data = await readFile(this.bufferFilePath, 'utf-8');
-        const loadedBuffer = JSON.parse(data);
-
-        // Convertir timestamps de string a Date
-        this.readingsBuffer = loadedBuffer.map((reading: any) => ({
-          ...reading,
-          timestamp: new Date(reading.timestamp)
-        }));
-
-        logger.info(`📂 Loaded ${this.readingsBuffer.length} buffered readings from file`);
-      }
-    } catch (error) {
-      logger.error("Error loading buffer from file", error);
-      this.readingsBuffer = [];
-    }
-  }
-
-  private async saveBufferToFile(): Promise<void> {
-    try {
-      logger.info("💾 ATTEMPTING TO SAVE BUFFER TO FILE", {
-        bufferSize: this.readingsBuffer.length,
-        filePath: this.bufferFilePath,
-        absolutePath: path.resolve(this.bufferFilePath)
-      });
-      
-      // Ensure the directory exists (should be root, but just in case)
-      const dir = path.dirname(this.bufferFilePath);
-      const { mkdir } = await import('fs/promises');
-      try {
-        await mkdir(dir, { recursive: true });
-      } catch (mkdirError) {
-        // Directory might already exist, that's fine
-        logger.info("Directory already exists or created", { dir });
-      }
-      
-      const data = JSON.stringify(this.readingsBuffer, null, 2);
-      await writeFile(this.bufferFilePath, data, 'utf-8');
-      
-      logger.info(`💾 ✅ SUCCESSFULLY SAVED ${this.readingsBuffer.length} readings to buffer file`, {
-        filePath: this.bufferFilePath,
-        absolutePath: path.resolve(this.bufferFilePath),
-        fileSize: data.length,
-        dataPreview: data.substring(0, 200)
-      });
-      
-      // Verify file was created
-      if (existsSync(this.bufferFilePath)) {
-        logger.info("✅ File existence verified", { filePath: this.bufferFilePath });
-      } else {
-        logger.error("❌ File was NOT created despite no errors!", { filePath: this.bufferFilePath });
-      }
-    } catch (error: any) {
-      logger.error("💾 ❌ ERROR SAVING BUFFER TO FILE", {
-        filePath: this.bufferFilePath,
-        absolutePath: path.resolve(this.bufferFilePath),
-        error: error?.message || String(error),
-        stack: error?.stack || 'No stack trace',
-        errorCode: error?.code
-      });
-    }
-  }
-
-  private async flushBufferToDatabase(): Promise<void> {
-    if (this.readingsBuffer.length === 0) {
-      logger.info("⏭️ No readings to flush - buffer is empty");
-      return;
-    }
-
-    const readingsToFlush = [...this.readingsBuffer];
-    const flushCount = readingsToFlush.length;
-
-    logger.info(`🚀 Starting DB flush - ${flushCount} readings to insert`, {
-      firstTimestamp: readingsToFlush[0]?.timestamp,
-      lastTimestamp: readingsToFlush[flushCount - 1]?.timestamp
-    });
-
-    try {
-      // Insertar todas las lecturas en la base de datos
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (const reading of readingsToFlush) {
-        try {
-          await storage.createSensorReading({
-            sensorId: reading.sensorId,
-            value: reading.value,
-            timestamp: reading.timestamp,
-            isSimulated: reading.isSimulated
-          });
-          successCount++;
-        } catch (error) {
-          logger.error(`Error inserting reading for sensor ${reading.sensorId}`, error);
-          errorCount++;
-        }
-      }
-
-      logger.info(`✅ DB flush completed`, {
-        total: flushCount,
-        success: successCount,
-        errors: errorCount
-      });
-
-      // Limpiar el buffer solo de las lecturas exitosamente insertadas
-      if (errorCount === 0) {
-        this.readingsBuffer = [];
-
-        // Eliminar archivo de buffer
-        if (existsSync(this.bufferFilePath)) {
-          await unlink(this.bufferFilePath);
-          logger.info("🗑️ Buffer file deleted after successful flush");
-        }
-      } else {
-        // Si hubo errores, mantener las lecturas fallidas en el buffer
-        logger.warn(`⚠️ Keeping ${errorCount} failed readings in buffer for retry`);
-      }
-
-    } catch (error) {
-      logger.error("💥 Critical error during DB flush", error);
-      // Mantener el buffer para reintentar
-    }
-  }
-
   async refreshMqttConnections(): Promise<void> {
     try {
       logger.info("Refreshing MQTT connections...");
 
       // Import storage to get sensors
       const { storage } = await import("./storage");
-
+      
       // Get all sensors that have MQTT enabled from the database
       logger.info("Loading MQTT-enabled sensors from database...");
-
+      
       try {
         const mqttEnabledSensors = await storage.getAllMqttEnabledSensors();
         logger.info("🔍🔍🔍 DETAILED MQTT SENSORS ANALYSIS", {
@@ -256,7 +97,7 @@ class MqttService {
         // Filter out sensors that don't have complete configuration
         const validSensors = mqttEnabledSensors.filter(sensor => {
           const isValid = !!(sensor.mqttEnabled && sensor.isActive && sensor.mqttHost && sensor.mqttPort && sensor.ttnTopic && sensor.mqttUsername && sensor.mqttPassword);
-
+          
           if (!isValid) {
             logger.warn("⚠️⚠️⚠️ SENSOR WITH INCOMPLETE MQTT CONFIG", {
               sensorId: sensor.id,
@@ -270,7 +111,7 @@ class MqttService {
               hasPassword: !!sensor.mqttPassword,
             });
           }
-
+          
           return isValid;
         });
 
@@ -282,7 +123,7 @@ class MqttService {
 
         // Group sensors by connection key (host:port:username)
         const sensorsByConnection = new Map<string, Sensor[]>();
-
+        
         for (const sensor of validSensors) {
           const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
           if (!sensorsByConnection.has(connectionKey)) {
@@ -311,10 +152,10 @@ class MqttService {
             sensorsCount: sensors.length,
             sensors: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic })),
           });
-
+          
           try {
             await this.ensureConnection(connectionKey, sensors);
-            logger.info("✅✅✅ SENSOR GROUP CONNECTION SUCCESS", {
+            logger.info("✅✅✅ SENSOR GROUP CONNECTION SUCCESS", { 
               connectionKey,
               sensorsConnected: sensors.length,
             });
@@ -333,7 +174,7 @@ class MqttService {
           errorStack: storageError.stack,
         });
       }
-
+      
       logger.info("MQTT connections refresh completed");
     } catch (error) {
       logger.error("Error refreshing MQTT connections", error);
@@ -461,7 +302,7 @@ class MqttService {
 
       // Subscribe to all unique topics
       const subscriptionPromises: Promise<void>[] = [];
-
+      
       for (const [topic, topicSensors] of topicSensorMap.entries()) {
         logger.info("📡📡📡 ATTEMPTING TOPIC SUBSCRIPTION", {
           topic,
@@ -494,7 +335,7 @@ class MqttService {
             }
           });
         });
-
+        
         subscriptionPromises.push(subscriptionPromise);
       }
 
@@ -516,19 +357,42 @@ class MqttService {
     });
 
     client.on("message", async (topic, message) => {
-      logger.info("📨📨📨 MQTT MESSAGE RECEIVED", {
+      logger.info("📨📨📨 MQTT MESSAGE EVENT TRIGGERED - RAW EVENT", {
         topic,
+        topicLength: topic?.length,
         messageSize: message.length,
+        messagePreview: message.toString().substring(0, 100),
+        connectionKey,
+        sensorsInConnection: sensors.map((s) => ({
+          id: s.id,
+          name: s.name,
+          topic: s.ttnTopic,
+        })),
         timestamp: new Date().toISOString(),
+        eventType: "mqtt-message-received",
       });
 
       try {
+        logger.info("🔄🔄🔄 CALLING handleMqttMessage FROM MESSAGE EVENT", {
+          topic,
+          messageLength: message.length,
+          sensorsCount: sensors.length,
+          callStartTime: new Date().toISOString(),
+        });
+
         await this.handleMqttMessage(topic, message, sensors);
+
+        logger.info("✅✅✅ handleMqttMessage COMPLETED SUCCESSFULLY", {
+          topic,
+          callEndTime: new Date().toISOString(),
+        });
       } catch (error) {
-        logger.error("💥💥💥 ERROR in message handler", {
+        logger.error("💥💥💥 ERROR in message handler - HANDLER FAILED", {
           topic,
           error: error.message,
           stack: error.stack,
+          errorType: error.constructor.name,
+          handlerFailedAt: new Date().toISOString(),
         });
       }
     });
@@ -591,76 +455,212 @@ class MqttService {
     sensors: Sensor[],
   ): Promise<void> {
     try {
-      logger.info("🔔 MQTT MESSAGE - PROCESSING", {
+      logger.info("🔔🔔🔔 MQTT MESSAGE RECEIVED - STARTING PROCESSING", {
         topic,
         messageLength: message.length,
+        bufferPreview: message.toString().substring(0, 100),
         availableSensors: sensors.length,
+        sensorTopics: sensors.map((s) => ({
+          id: s.id,
+          name: s.name,
+          topic: s.ttnTopic,
+        })),
+        timestamp: new Date().toISOString(),
+        threadId: process.pid,
       });
 
       const messageStr = message.toString();
+      logger.info("📄📄📄 MESSAGE STRING CONVERSION", {
+        topic,
+        messageStr: messageStr.substring(0, 1000), // Show even more characters
+        fullLength: messageStr.length,
+        encoding: "utf8",
+        firstChars: messageStr.substring(0, 50),
+        lastChars: messageStr.substring(Math.max(0, messageStr.length - 50)),
+      });
 
       let messageData: any;
 
       try {
+        logger.info("🔍🔍🔍 ATTEMPTING JSON PARSE", {
+          topic,
+          messageToParseLength: messageStr.length,
+          messageToParsePreview: messageStr.substring(0, 200),
+        });
+
         const fullMessageData = JSON.parse(messageStr);
 
         // Extraer uplink_message.decoded_payload si existe
         messageData =
           fullMessageData.uplink_message?.decoded_payload || fullMessageData;
 
-        logger.info("✅ JSON PARSE SUCCESS", {
+        logger.info("✅✅✅ JSON PARSE SUCCESS - DATA EXTRACTED", {
           topic,
+          fullMessageKeys: Object.keys(fullMessageData),
+          hasUplinkMessage: !!fullMessageData.uplink_message,
+          hasDecodedPayload: !!fullMessageData.uplink_message?.decoded_payload,
           extractedDataKeys: Object.keys(messageData),
+          extractedData: messageData,
+          dataType: typeof messageData,
+          isObject: typeof messageData === "object",
+          hasKeys: Object.keys(messageData).length > 0,
           dataSource: fullMessageData.uplink_message?.decoded_payload
             ? "uplink_message.decoded_payload"
             : "root",
         });
       } catch (parseError) {
-        logger.error("❌ JSON PARSE FAILED", {
+        logger.error("❌❌❌ JSON PARSE FAILED - CRITICAL ERROR", {
           topic,
+          message: messageStr,
           parseError: parseError.message,
+          parseErrorStack: parseError.stack,
+          messageType: typeof messageStr,
+          isValidString: typeof messageStr === "string",
+          stringLength: messageStr.length,
         });
         return;
       }
 
       // Find sensors that match this topic
-      const matchingSensors = sensors.filter((s) => s.ttnTopic === topic);
+      logger.info("🔍🔍🔍 SEARCHING FOR MATCHING SENSORS - COMPREHENSIVE", {
+        receivedTopic: topic,
+        receivedTopicLength: topic?.length,
+        receivedTopicType: typeof topic,
+        availableSensorsCount: sensors.length,
+        allSensorData: sensors.map((s) => ({
+          id: s.id,
+          name: s.name,
+          ttnTopic: s.ttnTopic,
+          ttnTopicLength: s.ttnTopic?.length,
+          ttnTopicType: typeof s.ttnTopic,
+          exactMatch: s.ttnTopic === topic,
+          trimmedMatch: s.ttnTopic?.trim() === topic?.trim(),
+          bothExist: !!(s.ttnTopic && topic),
+          jsonFields: s.jsonFields,
+          mqttEnabled: s.mqttEnabled,
+          isActive: s.isActive,
+        })),
+      });
 
-      logger.info("🎯 TOPIC MATCHING RESULTS", {
+      const matchingSensors = sensors.filter((s) => {
+        const matches = s.ttnTopic === topic;
+        
+        if (matches) {
+          logger.info("🎯🎯🎯 SENSOR MATCHED FOR TOPIC", {
+            sensorId: s.id,
+            sensorName: s.name,
+            sensorTopic: s.ttnTopic,
+            receivedTopic: topic,
+            jsonFields: s.jsonFields,
+          });
+        }
+        
+        return matches;
+      });
+
+      logger.info("🎯🎯🎯 TOPIC MATCHING RESULTS - DETAILED", {
         topic,
         matchingSensorsCount: matchingSensors.length,
         matchingSensors: matchingSensors.map((s) => ({
           id: s.id,
           name: s.name,
+          expectedTopic: s.ttnTopic,
           jsonFields: s.jsonFields,
+          mqttEnabled: s.mqttEnabled,
+          isActive: s.isActive,
+        })),
+        allSensorTopics: sensors.map((s) => ({
+          topic: s.ttnTopic,
+          sensorId: s.id,
+          name: s.name,
+        })),
+        exactTopicComparison: sensors.map((s) => ({
+          sensorId: s.id,
+          sensorName: s.name,
+          sensorTopic: `"${s.ttnTopic}"`,
+          receivedTopic: `"${topic}"`,
+          matches: s.ttnTopic === topic,
+          exactMatch: s.ttnTopic?.trim() === topic?.trim(),
+          lengthMatch: s.ttnTopic?.length === topic?.length,
         })),
       });
 
       if (matchingSensors.length === 0) {
-        logger.warn("⚠️ NO MATCHING SENSORS FOUND", {
+        logger.warn("⚠️⚠️⚠️ NO MATCHING SENSORS FOUND - WILL NOT PROCESS", {
           receivedTopic: topic,
+          receivedTopicLength: topic.length,
           availableTopics: sensors.map((s) => s.ttnTopic),
+          detailedComparison: sensors.map((s) => ({
+            sensorId: s.id,
+            sensorName: s.name,
+            sensorTopic: s.ttnTopic,
+            sensorTopicLength: s.ttnTopic?.length,
+            matches: s.ttnTopic === topic,
+            exactMatch: s.ttnTopic?.trim() === topic?.trim(),
+            charByCharComparison: topic
+              .split("")
+              .map((char, idx) => ({
+                index: idx,
+                received: char,
+                expected: s.ttnTopic?.[idx] || "undefined",
+                match: char === s.ttnTopic?.[idx],
+              }))
+              .slice(0, 20), // First 20 chars
+          })),
         });
         return;
       }
 
+      logger.info("🚀🚀🚀 STARTING SENSOR PROCESSING LOOP", {
+        matchingSensorsCount: matchingSensors.length,
+        sensorsToProcess: matchingSensors.map((s) => ({
+          id: s.id,
+          name: s.name,
+        })),
+      });
+
       for (const sensor of matchingSensors) {
+        logger.info(`🔄🔄🔄 PROCESSING INDIVIDUAL SENSOR: ${sensor.name}`, {
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          sensorTopic: sensor.ttnTopic,
+          jsonFields: sensor.jsonFields,
+          sensorType: sensor.sensorType,
+          isActive: sensor.isActive,
+          processingStartTime: new Date().toISOString(),
+        });
+
         try {
           await this.processSensorMessage(sensor, messageData);
+          logger.info(`✅✅✅ SENSOR PROCESSING COMPLETED: ${sensor.name}`, {
+            sensorId: sensor.id,
+            processingEndTime: new Date().toISOString(),
+          });
         } catch (processingError) {
-          logger.error(`❌ SENSOR PROCESSING FAILED: ${sensor.name}`, {
+          logger.error(`❌❌❌ SENSOR PROCESSING FAILED: ${sensor.name}`, {
             sensorId: sensor.id,
             error: processingError.message,
+            stack: processingError.stack,
           });
         }
       }
 
-    } catch (error) {
-      logger.error("💥 CRITICAL ERROR in handleMqttMessage", {
+      logger.info("🏁🏁🏁 MQTT MESSAGE PROCESSING COMPLETED", {
         topic,
-        error: error.message,
-        stack: error.stack,
+        processedSensors: matchingSensors.length,
+        totalProcessingTime: new Date().toISOString(),
       });
+    } catch (error) {
+      logger.error(
+        "💥💥💥 CRITICAL ERROR in handleMqttMessage - TOTAL FAILURE",
+        {
+          topic,
+          error: error.message,
+          stack: error.stack,
+          errorType: error.constructor.name,
+          timestamp: new Date().toISOString(),
+        },
+      );
     }
   }
 
@@ -669,10 +669,16 @@ class MqttService {
     messageData: any,
   ): Promise<void> {
     try {
-      logger.info(`🚀 PROCESSING SENSOR: ${sensor.name}`, {
+      logger.info(`🚀🚀🚀 STARTING SENSOR MESSAGE PROCESSING - DETAILED`, {
         sensorId: sensor.id,
+        sensorName: sensor.name,
+        sensorType: sensor.sensorType,
+        zoneId: sensor.zoneId,
         jsonFields: sensor.jsonFields,
         messageDataKeys: Object.keys(messageData),
+        messageDataType: typeof messageData,
+        fullMessageData: messageData,
+        processingStartTime: new Date().toISOString(),
       });
 
       // Extract the specified JSON fields
@@ -680,10 +686,28 @@ class MqttService {
         ? sensor.jsonFields.split(",").map((f) => f.trim())
         : [];
 
+      logger.info("📋📋📋 FIELDS TO EXTRACT - DETAILED ANALYSIS", {
+        sensorId: sensor.id,
+        rawJsonFields: sensor.jsonFields,
+        rawJsonFieldsType: typeof sensor.jsonFields,
+        rawJsonFieldsLength: sensor.jsonFields?.length,
+        parsedFields: fieldsToRead,
+        fieldsCount: fieldsToRead.length,
+        fieldsArray: fieldsToRead.map((f, idx) => ({
+          index: idx,
+          field: f,
+          fieldLength: f.length,
+        })),
+      });
+
       if (fieldsToRead.length === 0) {
-        logger.error("❌ NO JSON FIELDS SPECIFIED", {
+        logger.error("❌❌❌ NO JSON FIELDS SPECIFIED - CANNOT PROCEED", {
           sensorId: sensor.id,
           sensorName: sensor.name,
+          jsonFieldsValue: sensor.jsonFields,
+          jsonFieldsIsNull: sensor.jsonFields === null,
+          jsonFieldsIsUndefined: sensor.jsonFields === undefined,
+          jsonFieldsIsEmptyString: sensor.jsonFields === "",
         });
         return;
       }
@@ -691,115 +715,344 @@ class MqttService {
       // Extract values from message data
       const extractedValues: Record<string, any> = {};
 
+      logger.info("🔍🔍🔍 STARTING FIELD EXTRACTION LOOP", {
+        sensorId: sensor.id,
+        fieldsToProcess: fieldsToRead,
+        messageDataAvailable: !!messageData,
+        messageDataKeys: Object.keys(messageData || {}),
+      });
+
       for (const field of fieldsToRead) {
+        logger.info(`🔍🔍🔍 EXTRACTING FIELD: "${field}" - DETAILED`, {
+          sensorId: sensor.id,
+          field,
+          fieldIndex: fieldsToRead.indexOf(field),
+          fieldLength: field.length,
+          messageDataStructure: this.getDataStructure(messageData),
+          availableTopLevelKeys: Object.keys(messageData || {}),
+        });
+
         const value = this.extractNestedValue(messageData, field);
+
+        logger.info(`📊📊📊 FIELD EXTRACTION RESULT - DETAILED`, {
+          sensorId: sensor.id,
+          field,
+          extractedValue: value,
+          valueType: typeof value,
+          isUndefined: value === undefined,
+          isNull: value === null,
+          isNumber: typeof value === "number",
+          isString: typeof value === "string",
+          isObject: typeof value === "object",
+          valueStringified: JSON.stringify(value),
+          extractionSuccessful: value !== undefined,
+        });
 
         if (value !== undefined) {
           extractedValues[field] = value;
-        } else {
-          logger.warn(`⚠️ FIELD NOT FOUND: "${field}"`, {
+          logger.info(`✅✅✅ FIELD EXTRACTED SUCCESSFULLY: "${field}"`, {
             sensorId: sensor.id,
+            field,
+            value,
+            extractedValueCount: Object.keys(extractedValues).length,
+          });
+        } else {
+          logger.warn(`⚠️⚠️⚠️ FIELD NOT FOUND: "${field}"`, {
+            sensorId: sensor.id,
+            field,
             availableFields: Object.keys(messageData || {}),
+            messageDataSample: JSON.stringify(messageData).substring(0, 200),
           });
         }
       }
 
+      logger.info("🎯🎯🎯 EXTRACTION SUMMARY - COMPREHENSIVE", {
+        sensorId: sensor.id,
+        sensorName: sensor.name,
+        requestedFields: fieldsToRead,
+        requestedFieldsCount: fieldsToRead.length,
+        extractedFields: Object.keys(extractedValues),
+        extractedFieldsCount: Object.keys(extractedValues).length,
+        extractedValues,
+        extractionSuccessRate: `${Object.keys(extractedValues).length}/${fieldsToRead.length}`,
+        availableTopLevelFields: Object.keys(messageData || {}),
+        messageDataSample: JSON.stringify(messageData).substring(0, 500),
+        fullMessageStructure: this.getDataStructure(messageData, 5),
+      });
+
       if (Object.keys(extractedValues).length === 0) {
-        logger.error("❌ NO MATCHING FIELDS FOUND", {
+        logger.error("❌❌❌ NO MATCHING FIELDS FOUND - ABORTING SAVE", {
           sensorId: sensor.id,
           sensorName: sensor.name,
           requestedFields: fieldsToRead,
+          requestedFieldsDetailed: fieldsToRead.map((f) => ({
+            field: f,
+            searched: true,
+            found: false,
+          })),
           availableFields: Object.keys(messageData || {}),
+          messageStructure: this.getDataStructure(messageData, 5),
+          fullMessage: messageData,
+          possibleReasons: [
+            "Field names do not match exactly",
+            "Data is nested deeper than expected",
+            "Message format has changed",
+            "Sensor jsonFields configuration is incorrect",
+          ],
         });
         return;
       }
 
       // Extract the actual numeric value from the first field
+      // For single field sensors, use the first extracted value
+      // For multiple field sensors, we could extend this logic
       const firstField = fieldsToRead[0];
       const actualValue = extractedValues[firstField];
       const readingValue = actualValue.toString();
 
       // Extract timestamp from the message data, keep in UTC
       let messageTimestamp = new Date(); // fallback to current time in UTC
-
+      
       if (messageData.timestamp) {
         try {
-          const parsedTime = new Date(messageData.timestamp);
-
+          const timestampValue = messageData.timestamp;
+          logger.info("🕒🕒🕒 PROCESSING TIMESTAMP FROM MESSAGE", {
+            sensorId: sensor.id,
+            rawTimestamp: timestampValue,
+            timestampType: typeof timestampValue,
+          });
+          
+          // Parse the timestamp from the message and keep it in UTC
+          const parsedTime = new Date(timestampValue);
+          
           if (!isNaN(parsedTime.getTime())) {
+            // Keep timestamp in UTC for storage
             messageTimestamp = parsedTime;
-
-            logger.info("✅ TIMESTAMP PARSED (UTC)", {
+            
+            logger.info("✅✅✅ TIMESTAMP PARSED AND KEPT IN UTC", {
               sensorId: sensor.id,
-              originalTimestamp: messageData.timestamp,
+              originalTimestamp: timestampValue,
+              parsedUTCTime: parsedTime.toISOString(),
               storedUTCTime: messageTimestamp.toISOString(),
+              timezoneNote: "Stored in UTC, conversion to Madrid time happens at display",
             });
           } else {
-            logger.warn("⚠️ INVALID TIMESTAMP - USING CURRENT UTC", {
+            logger.warn("⚠️⚠️⚠️ INVALID TIMESTAMP IN MESSAGE - USING CURRENT UTC TIME", {
               sensorId: sensor.id,
-              invalidTimestamp: messageData.timestamp,
+              invalidTimestamp: timestampValue,
+              fallbackTime: messageTimestamp.toISOString(),
             });
           }
         } catch (timestampError) {
-          logger.error("❌ ERROR PARSING TIMESTAMP", {
+          logger.error("❌❌❌ ERROR PARSING TIMESTAMP - USING CURRENT UTC TIME", {
             sensorId: sensor.id,
             timestampError: timestampError.message,
+            rawTimestamp: messageData.timestamp,
+            fallbackTime: messageTimestamp.toISOString(),
           });
         }
-      }
-
-      // AGREGAR AL BUFFER EN LUGAR DE ESCRIBIR DIRECTAMENTE A LA BD
-      const bufferedReading: BufferedReading = {
-        sensorId: sensor.id,
-        value: readingValue,
-        timestamp: messageTimestamp,
-        isSimulated: false
-      };
-
-      this.readingsBuffer.push(bufferedReading);
-
-      logger.info("📦 READING ADDED TO BUFFER", {
-        sensorId: sensor.id,
-        sensorName: sensor.name,
-        value: readingValue,
-        timestamp: messageTimestamp.toISOString(),
-        bufferSize: this.readingsBuffer.length,
-        bufferFilePath: this.bufferFilePath,
-        nextFlush: "in 1 hour or on shutdown"
-      });
-
-      // Guardar buffer en archivo inmediatamente en la primera lectura y luego cada 10
-      if (this.readingsBuffer.length === 1 || this.readingsBuffer.length % 10 === 0) {
-        logger.info("💾 Triggering buffer save to file from MQTT message", {
-          bufferSize: this.readingsBuffer.length,
-          filePath: this.bufferFilePath
+      } else {
+        // Use current UTC time
+        messageTimestamp = new Date();
+        logger.warn("⚠️⚠️⚠️ NO TIMESTAMP IN MESSAGE - USING CURRENT UTC TIME", {
+          sensorId: sensor.id,
+          availableFields: Object.keys(messageData || {}),
+          fallbackTime: messageTimestamp.toISOString(),
         });
-        await this.saveBufferToFile();
       }
 
-    } catch (error) {
-      logger.error("💥 CRITICAL ERROR in processSensorMessage", {
+      logger.info("💾💾💾 PREPARING TO SAVE SENSOR READING", {
         sensorId: sensor.id,
         sensorName: sensor.name,
-        error: error.message,
-        stack: error.stack,
+        extractedField: firstField,
+        actualValue,
+        readingValue,
+        readingValueLength: readingValue.length,
+        extractedFieldsCount: Object.keys(extractedValues).length,
+        messageTimestamp: messageTimestamp.toISOString(),
+        isSimulated: false,
+        databaseCallStartTime: new Date().toISOString(),
       });
+
+      try {
+        logger.info("🔄🔄🔄 CALLING STORAGE.createSensorReading", {
+          sensorId: sensor.id,
+          parameters: {
+            sensorId: sensor.id,
+            value: readingValue,
+            timestamp: messageTimestamp,
+            isSimulated: false,
+            extractedFrom: firstField,
+            originalExtractedValues: extractedValues,
+          },
+        });
+
+        const savedReading = await storage.createSensorReading({
+          sensorId: sensor.id,
+          value: readingValue,
+          timestamp: messageTimestamp, // UTC timestamp for storage
+          isSimulated: false,
+        });
+
+        logger.info(
+          "✅✅✅ SENSOR READING SAVED SUCCESSFULLY - DATABASE CONFIRMED",
+          {
+            sensorId: sensor.id,
+            sensorName: sensor.name,
+            readingId: savedReading.id,
+            extractedField: firstField,
+            extractedFields: Object.keys(extractedValues),
+            actualValue,
+            value: readingValue,
+            timestamp: savedReading.timestamp,
+            createdAt: savedReading.createdAt,
+            isSimulated: savedReading.isSimulated,
+            databaseSaveTime: new Date().toISOString(),
+            savedReadingObject: savedReading,
+            allExtractedValues: extractedValues,
+          },
+        );
+      } catch (saveError) {
+        logger.error("💥💥💥 DATABASE SAVE FAILED - CRITICAL ERROR", {
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          extractedField: firstField,
+          actualValue,
+          readingValue,
+          allExtractedValues: extractedValues,
+          saveError: saveError.message,
+          saveErrorStack: saveError.stack,
+          saveErrorType: saveError.constructor.name,
+        });
+        throw saveError;
+      }
+    } catch (error) {
+      logger.error(
+        "💥💥💥 CRITICAL ERROR in processSensorMessage - COMPLETE FAILURE",
+        {
+          sensorId: sensor.id,
+          sensorName: sensor.name,
+          error: error.message,
+          stack: error.stack,
+          errorType: error.constructor.name,
+          messageData,
+          processingFailedAt: new Date().toISOString(),
+        },
+      );
     }
   }
 
   private extractNestedValue(obj: any, path: string): any {
+    logger.info(`🔍🔍🔍 EXTRACTING NESTED VALUE - START`, {
+      path,
+      pathType: typeof path,
+      pathLength: path?.length,
+      startingObject: typeof obj === "object" ? Object.keys(obj) : obj,
+      startingObjectType: typeof obj,
+      pathSegments: path.split("."),
+      segmentsCount: path.split(".").length,
+    });
+
     const pathSegments = path.split(".");
     let current = obj;
 
-    for (const key of pathSegments) {
+    for (let index = 0; index < pathSegments.length; index++) {
+      const key = pathSegments[index];
+
+      logger.info(`📍📍📍 PATH STEP ${index + 1}/${pathSegments.length}`, {
+        currentKey: key,
+        keyIndex: index,
+        keyType: typeof key,
+        keyLength: key?.length,
+        currentObjectType: typeof current,
+        currentObjectIsNull: current === null,
+        currentObjectIsUndefined: current === undefined,
+        currentObjectKeys:
+          current && typeof current === "object"
+            ? Object.keys(current)
+            : "not-object",
+        currentObjectKeysCount:
+          current && typeof current === "object"
+            ? Object.keys(current).length
+            : 0,
+        hasKey: current && current[key] !== undefined,
+        keyValue: current && current[key],
+        keyValueType:
+          current && current[key] ? typeof current[key] : "undefined",
+        exactKeyMatch: current && typeof current === "object" && key in current,
+        allKeysInCurrent:
+          current && typeof current === "object" ? Object.keys(current) : [],
+        keyComparison:
+          current && typeof current === "object"
+            ? Object.keys(current).map((k) => ({
+                availableKey: k,
+                searchingFor: key,
+                exactMatch: k === key,
+                caseInsensitiveMatch: k.toLowerCase() === key.toLowerCase(),
+              }))
+            : [],
+      });
+
       if (current && current[key] !== undefined) {
         current = current[key];
+        logger.info(`✅✅✅ KEY FOUND - MOVING DEEPER`, {
+          key,
+          newCurrent: current,
+          newCurrentType: typeof current,
+          remainingSteps: pathSegments.length - index - 1,
+        });
       } else {
+        logger.warn(`❌❌❌ KEY NOT FOUND - EXTRACTION FAILED`, {
+          key,
+          pathSoFar: pathSegments.slice(0, index + 1).join("."),
+          remainingPath: pathSegments.slice(index + 1).join("."),
+          currentWas: current,
+          availableKeysWere:
+            current && typeof current === "object"
+              ? Object.keys(current)
+              : "not-an-object",
+        });
         return undefined;
       }
     }
 
+    logger.info(`🎯🎯🎯 EXTRACTION COMPLETE - FINAL RESULT`, {
+      path,
+      finalResult: current,
+      resultType: typeof current,
+      resultIsNull: current === null,
+      resultIsUndefined: current === undefined,
+      wasSuccessful: current !== undefined,
+      resultStringified: JSON.stringify(current),
+    });
+
     return current;
+  }
+
+  private getDataStructure(
+    obj: any,
+    maxDepth: number = 2,
+    currentDepth: number = 0,
+  ): any {
+    if (currentDepth >= maxDepth || obj === null || typeof obj !== "object") {
+      return typeof obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return `Array[${obj.length}]`;
+    }
+
+    const structure: any = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        structure[key] = this.getDataStructure(
+          obj[key],
+          maxDepth,
+          currentDepth + 1,
+        );
+      }
+    }
+    return structure;
   }
 
   // Public method to connect a specific sensor to MQTT
@@ -808,6 +1061,12 @@ class MqttService {
       sensorId: sensor.id,
       sensorName: sensor.name,
       mqttEnabled: sensor.mqttEnabled,
+      mqttHost: sensor.mqttHost,
+      mqttPort: sensor.mqttPort,
+      ttnTopic: sensor.ttnTopic,
+      jsonFields: sensor.jsonFields,
+      hasUsername: !!sensor.mqttUsername,
+      hasPassword: !!sensor.mqttPassword,
     });
 
     if (
@@ -819,11 +1078,26 @@ class MqttService {
       logger.error("❌ SENSOR MISSING REQUIRED MQTT CONFIGURATION", {
         sensorId: sensor.id,
         sensorName: sensor.name,
+        mqttEnabled: sensor.mqttEnabled,
+        mqttHost: sensor.mqttHost,
+        mqttPort: sensor.mqttPort,
+        ttnTopic: sensor.ttnTopic,
+        missingFields: [
+          !sensor.mqttEnabled && "mqttEnabled",
+          !sensor.mqttHost && "mqttHost",
+          !sensor.mqttPort && "mqttPort",
+          !sensor.ttnTopic && "ttnTopic",
+        ].filter(Boolean),
       });
       return;
     }
 
     const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
+    logger.info("🔑 CONNECTION KEY GENERATED", {
+      connectionKey,
+      sensorId: sensor.id,
+    });
+
     await this.ensureConnection(connectionKey, [sensor]);
   }
 
@@ -851,15 +1125,6 @@ class MqttService {
   async shutdown(): Promise<void> {
     logger.info("Shutting down MQTT Service...");
 
-    // Flush buffer antes de cerrar
-    await this.flushBufferToDatabase();
-
-    // Detener timer
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
-
     for (const [connectionKey, connection] of this.connections.entries()) {
       logger.info("Closing MQTT connection", { connectionKey });
       connection.client.end();
@@ -874,53 +1139,6 @@ class MqttService {
   async forceRefresh(): Promise<void> {
     logger.info("Forcing MQTT connections refresh");
     await this.refreshMqttConnections();
-  }
-
-  // Public method to manually flush buffer (useful for testing)
-  async forceFlush(): Promise<void> {
-    logger.info("🔧 Manual flush requested");
-    await this.flushBufferToDatabase();
-  }
-
-  // Public method to add readings to buffer (for simulated "real" readings)
-  async addReadingToBuffer(reading: BufferedReading): Promise<void> {
-    logger.info("🔵 addReadingToBuffer CALLED", {
-      sensorId: reading.sensorId,
-      value: reading.value,
-      timestamp: reading.timestamp.toISOString(),
-      isSimulated: reading.isSimulated,
-      currentBufferSize: this.readingsBuffer.length
-    });
-
-    this.readingsBuffer.push(reading);
-    
-    logger.info("📦 SIMULATED REAL READING ADDED TO BUFFER", {
-      sensorId: reading.sensorId,
-      value: reading.value,
-      timestamp: reading.timestamp.toISOString(),
-      bufferSize: this.readingsBuffer.length,
-      bufferFilePath: this.bufferFilePath,
-      absolutePath: path.resolve(this.bufferFilePath),
-      nextFlush: "in 1 hour or on shutdown"
-    });
-
-    // Guardar buffer en archivo inmediatamente en cada lectura (para debugging)
-    // Luego optimizaremos a solo guardar cada 10
-    logger.info("💾 Triggering IMMEDIATE buffer save to file", {
-      bufferSize: this.readingsBuffer.length,
-      filePath: this.bufferFilePath,
-      absolutePath: path.resolve(this.bufferFilePath)
-    });
-    
-    try {
-      await this.saveBufferToFile();
-      logger.info("✅ Buffer save completed successfully");
-    } catch (saveError: any) {
-      logger.error("❌ Buffer save failed", {
-        error: saveError?.message,
-        stack: saveError?.stack
-      });
-    }
   }
 }
 
