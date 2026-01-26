@@ -155,4 +155,25 @@ export type QrSnapshot = typeof qrSnapshots.$inferSelect;
 export type LoteTemplate = typeof loteTemplates.$inferSelect;
 export type AuditLog = typeof auditLog.$inferSelect;
 export type Alert = typeof alerts.$inferSelect;
+
+export const insertStaySchema = createInsertSchema(stays).omit({ id: true, createdAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true });
+export const insertSensorReadingSchema = createInsertSchema(sensorReadings).omit({ id: true, createdAt: true });
+export const insertZoneQrSchema = createInsertSchema(zoneQrs).omit({ id: true, createdAt: true });
+export const insertQrSnapshotSchema = createInsertSchema(qrSnapshots).omit({ id: true, createdAt: true });
+export const insertLoteTemplateSchema = createInsertSchema(loteTemplates).omit({ id: true, createdAt: true });
+export const insertAuditLogSchema = createInsertSchema(auditLog).omit({ id: true, createdAt: true });
+
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
+export type InsertLote = z.infer<typeof insertLoteSchema>;
+export type InsertZone = z.infer<typeof insertZoneSchema>;
+export type InsertSensor = z.infer<typeof insertSensorSchema>;
+export type InsertStay = z.infer<typeof insertStaySchema>;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type InsertSensorReading = z.infer<typeof insertSensorReadingSchema>;
+export type InsertZoneQr = z.infer<typeof insertZoneQrSchema>;
+export type InsertQrSnapshot = z.infer<typeof insertQrSnapshotSchema>;
+export type InsertLoteTemplate = z.infer<typeof insertLoteTemplateSchema>;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
