@@ -3,7 +3,6 @@ import { pgTable, text, varchar, integer, timestamp, boolean, decimal, json, uui
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Users and Organizations
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
@@ -20,7 +19,6 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Lote Management
 export const loteTemplates = pgTable("lote_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
@@ -36,18 +34,17 @@ export const lotes = pgTable("lotes", {
   finalAnimals: integer("final_animals"),
   foodRegime: text("food_regime"),
   customData: json("custom_data").$type<Record<string, any>>().default({}),
-  status: text("status").notNull().default("active"), // active, finished
-  parentLoteId: uuid("parent_lote_id"), // for sublotes
-  pieceType: text("piece_type"), // for sublotes: jamón, paleta, etc.
+  status: text("status").notNull().default("active"),
+  parentLoteId: uuid("parent_lote_id"),
+  pieceType: text("piece_type"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Zones and Stages
 export const zones = pgTable("zones", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
   name: text("name").notNull(),
-  stage: text("stage").notNull(), // cria, engorde, matadero, secadero, distribucion
+  stage: text("stage").notNull(),
   fixedInfo: json("fixed_info").$type<Record<string, any>>().default({}),
   temperatureTarget: json("temperature_target").$type<{min: number, max: number}>(),
   humidityTarget: json("humidity_target").$type<{min: number, max: number}>(),
@@ -55,7 +52,6 @@ export const zones = pgTable("zones", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Stays (Estancias)
 export const stays = pgTable("stays", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   loteId: uuid("lote_id").references(() => lotes.id).notNull(),
@@ -66,32 +62,29 @@ export const stays = pgTable("stays", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Sensors
 export const sensors = pgTable("sensors", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
   zoneId: uuid("zone_id").references(() => zones.id).notNull(),
   name: text("name").notNull(),
   deviceId: text("device_id").notNull().unique(),
-  sensorType: text("sensor_type").notNull(), // temperature, humidity, location, custom
+  sensorType: text("sensor_type").notNull(),
   unit: text("unit"),
   mqttTopic: text("mqtt_topic").notNull().unique(),
   mqttUsername: text("mqtt_username").notNull(),
   mqttPassword: text("mqtt_password").notNull(),
-  // TTN MQTT Configuration
   mqttHost: text("mqtt_host").default("eu1.cloud.thethings.network"),
   mqttPort: integer("mqtt_port").default(8883),
-  ttnTopic: text("ttn_topic"), // e.g., v3/mi-app@ttn/devices/<device-id>/up
-  jsonFields: text("json_fields"), // comma-separated fields like "temperature,humidity,co2"
+  ttnTopic: text("ttn_topic"),
+  jsonFields: text("json_fields"),
   mqttEnabled: boolean("mqtt_enabled").default(false),
   validationMin: decimal("validation_min", { precision: 10, scale: 2 }),
   validationMax: decimal("validation_max", { precision: 10, scale: 2 }),
   isActive: boolean("is_active").default(true),
-  isPublic: boolean("is_public").default(true), // for traceability
+  isPublic: boolean("is_public").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Sensor Readings
 export const sensorReadings = pgTable("sensor_readings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   sensorId: uuid("sensor_id").references(() => sensors.id).notNull(),
@@ -101,7 +94,6 @@ export const sensorReadings = pgTable("sensor_readings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Zone QR Codes for movement
 export const zoneQrs = pgTable("zone_qrs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   zoneId: uuid("zone_id").references(() => zones.id).notNull(),
@@ -109,141 +101,50 @@ export const zoneQrs = pgTable("zone_qrs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// QR Traceability
 export const qrSnapshots = pgTable("qr_snapshots", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   loteId: uuid("lote_id").references(() => lotes.id).notNull(),
   publicToken: text("public_token").notNull().unique(),
-  snapshotData: json("snapshot_data").$type<{
-    lote: {
-      id: string;
-      name: string;
-      iberianPercentage?: number;
-      regime?: string;
-    };
-    phases: Array<{
-      stage: string;
-      zones: string[];
-      startTime: string;
-      endTime?: string;
-      duration: number;
-      metrics: Record<string, {
-        avg: number;
-        min: number;
-        max: number;
-        pctInTarget?: number;
-      }>;
-    }>;
-    metadata: {
-      generatedAt: string;
-      version: string;
-    };
-  }>().notNull(),
+  snapshotData: json("snapshot_data").$type<any>().notNull(),
   scanCount: integer("scan_count").default(0),
   isActive: boolean("is_active").default(true),
   createdBy: uuid("created_by").references(() => users.id).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Audit Trail
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
   userId: uuid("user_id").references(() => users.id).notNull(),
-  entityType: text("entity_type").notNull(), // lote, stay, sensor, etc.
+  entityType: text("entity_type").notNull(),
   entityId: uuid("entity_id").notNull(),
-  action: text("action").notNull(), // create, update, delete, move
+  action: text("action").notNull(),
   oldData: json("old_data"),
   newData: json("new_data"),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
-// Insert schemas
-export const insertOrganizationSchema = createInsertSchema(organizations).omit({
-  id: true,
-  createdAt: true,
+// NUEVA TABLA: Alertas
+export const alerts = pgTable("alerts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: uuid("organization_id").references(() => organizations.id).notNull(),
+  sensorId: uuid("sensor_id").references(() => sensors.id).notNull(),
+  zoneId: uuid("zone_id").references(() => zones.id).notNull(),
+  type: text("type").notNull(), // 'min_breach' | 'max_breach'
+  value: decimal("value", { precision: 15, scale: 6 }).notNull(),
+  threshold: decimal("threshold", { precision: 15, scale: 6 }).notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertAlertSchema = createInsertSchema(alerts).omit({ id: true, createdAt: true });
+export const insertLoteSchema = createInsertSchema(lotes).omit({ id: true, createdAt: true });
+export const insertZoneSchema = createInsertSchema(zones).omit({ id: true, createdAt: true });
+export const insertSensorSchema = createInsertSchema(sensors).omit({ id: true, createdAt: true, deviceId: true, mqttTopic: true, mqttUsername: true, mqttPassword: true });
+export const sensorMqttConfigSchema = createInsertSchema(sensors).pick({ mqttHost: true, mqttPort: true, mqttUsername: true, mqttPassword: true, ttnTopic: true, jsonFields: true, mqttEnabled: true });
 
-export const insertLoteTemplateSchema = createInsertSchema(loteTemplates).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertLoteSchema = createInsertSchema(lotes).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertZoneSchema = createInsertSchema(zones).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertStaySchema = createInsertSchema(stays).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertSensorSchema = createInsertSchema(sensors).omit({
-  id: true,
-  createdAt: true,
-  deviceId: true,
-  mqttTopic: true,
-  mqttUsername: true,
-  mqttPassword: true,
-});
-
-// Schema for MQTT configuration form
-export const sensorMqttConfigSchema = createInsertSchema(sensors).pick({
-  mqttHost: true,
-  mqttPort: true,
-  mqttUsername: true,
-  mqttPassword: true,
-  ttnTopic: true,
-  jsonFields: true,
-  mqttEnabled: true,
-}).extend({
-  mqttHost: z.string().min(1, "Host es requerido"),
-  mqttPort: z.number().min(1, "Puerto debe ser mayor a 0").max(65535, "Puerto debe ser menor a 65536"),
-  mqttUsername: z.string().min(1, "Usuario es requerido"),
-  mqttPassword: z.string().min(1, "Contraseña es requerida"),
-  ttnTopic: z.string().min(1, "Topic es requerido"),
-  jsonFields: z.string().optional(),
-  mqttEnabled: z.boolean().optional(),
-});
-
-export const insertSensorReadingSchema = createInsertSchema(sensorReadings).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertZoneQrSchema = createInsertSchema(zoneQrs).omit({
-  id: true,
-  createdAt: true,
-  publicToken: true,
-});
-
-export const insertQrSnapshotSchema = createInsertSchema(qrSnapshots).omit({
-  id: true,
-  createdAt: true,
-  publicToken: true,
-  scanCount: true,
-});
-
-export const insertAuditLogSchema = createInsertSchema(auditLog).omit({
-  id: true,
-  timestamp: true,
-});
-
-// Types
 export type Organization = typeof organizations.$inferSelect;
 export type User = typeof users.$inferSelect;
-export type LoteTemplate = typeof loteTemplates.$inferSelect;
 export type Lote = typeof lotes.$inferSelect;
 export type Zone = typeof zones.$inferSelect;
 export type Stay = typeof stays.$inferSelect;
@@ -251,17 +152,7 @@ export type Sensor = typeof sensors.$inferSelect;
 export type SensorReading = typeof sensorReadings.$inferSelect;
 export type ZoneQr = typeof zoneQrs.$inferSelect;
 export type QrSnapshot = typeof qrSnapshots.$inferSelect;
+export type LoteTemplate = typeof loteTemplates.$inferSelect;
 export type AuditLog = typeof auditLog.$inferSelect;
-
-export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type InsertLoteTemplate = z.infer<typeof insertLoteTemplateSchema>;
-export type InsertLote = z.infer<typeof insertLoteSchema>;
-export type InsertZone = z.infer<typeof insertZoneSchema>;
-export type InsertStay = z.infer<typeof insertStaySchema>;
-export type InsertSensor = z.infer<typeof insertSensorSchema>;
-export type SensorMqttConfig = z.infer<typeof sensorMqttConfigSchema>;
-export type InsertSensorReading = z.infer<typeof insertSensorReadingSchema>;
-export type InsertZoneQr = z.infer<typeof insertZoneQrSchema>;
-export type InsertQrSnapshot = z.infer<typeof insertQrSnapshotSchema>;
-export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type Alert = typeof alerts.$inferSelect;
+export type InsertAlert = z.infer<typeof insertAlertSchema>;

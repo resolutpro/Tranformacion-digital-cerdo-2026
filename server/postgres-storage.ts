@@ -4,7 +4,18 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { randomUUID } from "crypto";
 import type { Store } from "express-session";
-import { eq, and, desc, gte, lte, sql, isNull, isNotNull, or, inArray } from "drizzle-orm";
+import {
+  eq,
+  and,
+  desc,
+  gte,
+  lte,
+  sql,
+  isNull,
+  isNotNull,
+  or,
+  inArray,
+} from "drizzle-orm";
 import {
   type User,
   type InsertUser,
@@ -28,6 +39,8 @@ import {
   type InsertLoteTemplate,
   type AuditLog,
   type InsertAuditLog,
+  type Alert,
+  type InsertAlert,
   organizations,
   users,
   lotes,
@@ -39,12 +52,12 @@ import {
   qrSnapshots,
   loteTemplates,
   auditLog,
+  alerts, // Asegúrate de que esto esté en shared/schema.ts
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 
 const PostgresSessionStore = connectPg(session);
 
-// Helper: elimina claves con valor undefined para no pisar columnas en UPDATE/INSERT
 function cleanUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined),
@@ -71,7 +84,41 @@ export class PostgresStorage implements IStorage {
     });
   }
 
-  // Organizations
+  // --- Alertas ---
+  async getAlerts(organizationId: string): Promise<Alert[]> {
+    return await this.db
+      .select()
+      .from(alerts)
+      .where(eq(alerts.organizationId, organizationId))
+      .orderBy(desc(alerts.createdAt));
+  }
+
+  async getUnreadAlertsCount(organizationId: string): Promise<number> {
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(alerts)
+      .where(
+        and(
+          eq(alerts.organizationId, organizationId),
+          eq(alerts.isRead, false),
+        ),
+      );
+    return Number(result[0]?.count || 0);
+  }
+
+  async createAlert(alert: InsertAlert): Promise<Alert> {
+    const result = await this.db.insert(alerts).values(alert).returning();
+    return result[0];
+  }
+
+  async markAlertAsRead(id: string, organizationId: string): Promise<void> {
+    await this.db
+      .update(alerts)
+      .set({ isRead: true })
+      .where(and(eq(alerts.id, id), eq(alerts.organizationId, organizationId)));
+  }
+
+  // --- Organizations ---
   async getOrganization(id: string): Promise<Organization | undefined> {
     const result = await this.db
       .select()
@@ -86,7 +133,7 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  // Users
+  // --- Users ---
   async getUser(id: string): Promise<User | undefined> {
     const result = await this.db
       .select()
@@ -126,7 +173,7 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  // Lotes
+  // --- Lotes ---
   async getLotesByOrganization(organizationId: string): Promise<Lote[]> {
     return await this.db
       .select()
@@ -184,19 +231,15 @@ export class PostgresStorage implements IStorage {
     return result.length > 0;
   }
 
-  // Lote Templates
+  // --- Lote Templates ---
   async getLoteTemplate(
     organizationId: string,
   ): Promise<LoteTemplate | undefined> {
-    // Devuelve siempre la última versión (updatedAt si existe, si no createdAt)
-    const orderColumn =
-      (loteTemplates as any).updatedAt ?? (loteTemplates as any).createdAt;
-
     const result = await this.db
       .select()
       .from(loteTemplates)
       .where(eq(loteTemplates.organizationId, organizationId))
-      .orderBy(desc(orderColumn))
+      .orderBy(desc(loteTemplates.createdAt))
       .limit(1);
     return result[0];
   }
@@ -204,40 +247,24 @@ export class PostgresStorage implements IStorage {
   async updateLoteTemplate(
     template: InsertLoteTemplate,
   ): Promise<LoteTemplate> {
-    // Busca la última plantilla de la organización
     const existing = await this.getLoteTemplate(template.organizationId);
-
-    // Prepara set seguro: no pisa columnas con undefined y siempre actualiza updatedAt
-    const toSet = cleanUndefined({
-      ...(template as any),
-      updatedAt: new Date(),
-    });
-
     if (existing) {
-      // Actualiza por PK para evitar tocar varias filas si existieran duplicados
       const result = await this.db
         .update(loteTemplates)
-        .set(toSet as any)
-        .where(eq(loteTemplates.id, (existing as any).id))
+        .set(template)
+        .where(eq(loteTemplates.id, existing.id))
         .returning();
       return result[0];
     } else {
-      // Crea nueva plantilla; añade timestamps si existen en el schema
-      const insertValues = cleanUndefined({
-        ...(template as any),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
       const result = await this.db
         .insert(loteTemplates)
-        .values([insertValues as any])
+        .values(template)
         .returning();
       return result[0];
     }
   }
 
-  // Zones
+  // --- Zones ---
   async getZonesByOrganization(organizationId: string): Promise<Zone[]> {
     return await this.db
       .select()
@@ -266,21 +293,20 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async getActiveStaysByZone(zoneId: string): Promise<Stay[]> {
-    return await this.db
-      .select()
-      .from(stays)
-      .where(and(eq(stays.zoneId, zoneId), isNull(stays.exitTime)))
-      .orderBy(desc(stays.entryTime));
-  }
-
+  // CORRECCIÓN PARA "Zona no encontrada":
+  // Nos aseguramos de que el ID sea tratado como UUID y que el organizationId coincida estrictamente.
   async getZone(id: string, organizationId: string): Promise<Zone | undefined> {
-    const result = await this.db
-      .select()
-      .from(zones)
-      .where(and(eq(zones.id, id), eq(zones.organizationId, organizationId)))
-      .limit(1);
-    return result[0];
+    try {
+      const result = await this.db
+        .select()
+        .from(zones)
+        .where(and(eq(zones.id, id), eq(zones.organizationId, organizationId)))
+        .limit(1);
+      return result[0];
+    } catch (e) {
+      console.error(`Error en getZone para ID ${id}:`, e);
+      return undefined;
+    }
   }
 
   async createZone(zone: InsertZone): Promise<Zone> {
@@ -309,7 +335,7 @@ export class PostgresStorage implements IStorage {
     return result.length > 0;
   }
 
-  // Stays
+  // --- Stays ---
   async getStaysByLote(loteId: string): Promise<Stay[]> {
     return await this.db
       .select()
@@ -325,6 +351,13 @@ export class PostgresStorage implements IStorage {
       .where(and(eq(stays.loteId, loteId), isNull(stays.exitTime)))
       .limit(1);
     return result[0];
+  }
+
+  async getActiveStaysByZone(zoneId: string): Promise<Stay[]> {
+    return await this.db
+      .select()
+      .from(stays)
+      .where(and(eq(stays.zoneId, zoneId), isNull(stays.exitTime)));
   }
 
   async getStaysByZone(zoneId: string): Promise<Stay[]> {
@@ -361,7 +394,7 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  // Sensors
+  // --- Sensors ---
   async getSensorsByZone(zoneId: string): Promise<Sensor[]> {
     return await this.db
       .select()
@@ -370,46 +403,17 @@ export class PostgresStorage implements IStorage {
   }
 
   async getSensorsByOrganization(organizationId: string): Promise<Sensor[]> {
-    const results = await this.db
-      .select({ sensor: sensors })
+    return await this.db
+      .select()
       .from(sensors)
-      .innerJoin(zones, eq(sensors.zoneId, zones.id))
-      .where(eq(zones.organizationId, organizationId));
-    return results.map((r) => r.sensor);
+      .where(eq(sensors.organizationId, organizationId));
   }
 
   async getAllMqttEnabledSensors(): Promise<Sensor[]> {
-    const result = await this.db
+    return await this.db
       .select()
       .from(sensors)
-      .where(
-        and(
-          eq(sensors.isActive, true),
-          eq(sensors.mqttEnabled, true),
-          isNotNull(sensors.mqttHost),
-          isNotNull(sensors.mqttPort),
-          isNotNull(sensors.ttnTopic),
-          isNotNull(sensors.mqttUsername),
-          isNotNull(sensors.mqttPassword)
-        )
-      )
-      .orderBy(sensors.createdAt);
-    
-    console.log(`[POSTGRES-STORAGE] Found ${result.length} MQTT-enabled sensors:`, 
-      result.map(s => ({
-        id: s.id,
-        name: s.name,
-        mqttEnabled: s.mqttEnabled,
-        isActive: s.isActive,
-        mqttHost: s.mqttHost,
-        mqttPort: s.mqttPort,
-        ttnTopic: s.ttnTopic,
-        jsonFields: s.jsonFields,
-        hasCredentials: !!(s.mqttUsername && s.mqttPassword)
-      }))
-    );
-    
-    return result;
+      .where(and(eq(sensors.isActive, true), eq(sensors.mqttEnabled, true)));
   }
 
   async getSensor(id: string): Promise<Sensor | undefined> {
@@ -454,78 +458,66 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async updateSensorMqttConfig(
+    id: string,
+    config: Partial<
+      Pick<
+        Sensor,
+        | "mqttHost"
+        | "mqttPort"
+        | "mqttUsername"
+        | "mqttPassword"
+        | "ttnTopic"
+        | "jsonFields"
+        | "mqttEnabled"
+      >
+    >,
+  ): Promise<Sensor | undefined> {
+    const result = await this.db
+      .update(sensors)
+      .set(config)
+      .where(eq(sensors.id, id))
+      .returning();
+    return result[0];
+  }
+
   async rotateSensorCredentials(
     id: string,
   ): Promise<{ username: string; password: string } | undefined> {
-    const newUsername = `sensor_${randomUUID().slice(0, 8)}`;
-    const newPassword = randomUUID();
-
+    const u = `sensor_${randomUUID().slice(0, 8)}`;
+    const p = randomUUID();
     const result = await this.db
       .update(sensors)
-      .set({
-        mqttUsername: newUsername,
-        mqttPassword: newPassword,
-      })
+      .set({ mqttUsername: u, mqttPassword: p })
       .where(eq(sensors.id, id))
       .returning();
-
-    if (result.length > 0) {
-      return { username: newUsername, password: newPassword };
-    }
-    return undefined;
-  }
-
-  async updateSensorMqttConfig(
-    id: string,
-    config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>,
-  ): Promise<Sensor | undefined> {
-    const cleanConfig = cleanUndefined(config);
-    
-    const result = await this.db
-      .update(sensors)
-      .set(cleanConfig)
-      .where(eq(sensors.id, id))
-      .returning();
-
-    return result[0];
+    return result.length > 0 ? { username: u, password: p } : undefined;
   }
 
   async deleteSensor(id: string): Promise<boolean> {
     const result = await this.db
-      .delete(sensors)
+      .update(sensors)
+      .set({ isActive: false })
       .where(eq(sensors.id, id))
       .returning();
     return result.length > 0;
   }
 
-  // Sensor Readings
+  // --- Readings ---
   async getSensorReadings(
     sensorId: string,
-    startTime?: Date,
-    endTime?: Date,
-    includeSimulated?: boolean,
+    start?: Date,
+    end?: Date,
+    incSim?: boolean,
   ): Promise<SensorReading[]> {
-    let query = this.db
-      .select()
-      .from(sensorReadings)
-      .where(eq(sensorReadings.sensorId, sensorId));
-
-    const conditions = [eq(sensorReadings.sensorId, sensorId)];
-
-    if (startTime) {
-      conditions.push(gte(sensorReadings.timestamp, startTime));
-    }
-    if (endTime) {
-      conditions.push(lte(sensorReadings.timestamp, endTime));
-    }
-    if (includeSimulated === false) {
-      conditions.push(eq(sensorReadings.isSimulated, false));
-    }
-
+    let conds = [eq(sensorReadings.sensorId, sensorId)];
+    if (start) conds.push(gte(sensorReadings.timestamp, start));
+    if (end) conds.push(lte(sensorReadings.timestamp, end));
+    if (incSim === false) conds.push(eq(sensorReadings.isSimulated, false));
     return await this.db
       .select()
       .from(sensorReadings)
-      .where(and(...conditions))
+      .where(and(...conds))
       .orderBy(desc(sensorReadings.timestamp));
   }
 
@@ -545,147 +537,88 @@ export class PostgresStorage implements IStorage {
     zoneId: string,
     today?: Date,
   ): Promise<Array<SensorReading & { sensor: Sensor }>> {
-    const zoneSensors = await this.getSensorsByZone(zoneId);
-    const results: Array<SensorReading & { sensor: Sensor }> = [];
-
-    for (const sensor of zoneSensors) {
-      const reading = await this.getLatestReadingBySensor(sensor.id);
-      if (reading) {
-        results.push({ ...reading, sensor });
-      }
+    const sList = await this.getSensorsByZone(zoneId);
+    const results: any[] = [];
+    for (const s of sList) {
+      const r = await this.getLatestReadingBySensor(s.id);
+      if (r) results.push({ ...r, sensor: s });
     }
-
     return results;
   }
 
   async createSensorReading(
     reading: InsertSensorReading,
   ): Promise<SensorReading> {
-    // Store everything in UTC - conversion to Madrid time happens at display
-    const readingWithTimezone = {
-      ...reading,
-      createdAt: new Date(), // UTC time
-    };
-    
     const result = await this.db
       .insert(sensorReadings)
-      .values([readingWithTimezone])
+      .values(reading)
       .returning();
     return result[0];
   }
 
-  // Zone QR Codes
-  async getZoneQr(zoneId: string): Promise<ZoneQr | undefined> {
-    const result = await this.db
+  // --- QR & Snapshots ---
+  async getZoneQr(zoneId: string) {
+    const r = await this.db
       .select()
       .from(zoneQrs)
       .where(eq(zoneQrs.zoneId, zoneId))
       .limit(1);
-    return result[0];
+    return r[0];
   }
-
-  async getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined> {
-    const result = await this.db
+  async getZoneQrByToken(t: string) {
+    const r = await this.db
       .select()
       .from(zoneQrs)
-      .where(eq(zoneQrs.publicToken, publicToken))
+      .where(eq(zoneQrs.publicToken, t))
       .limit(1);
-    return result[0];
+    return r[0];
   }
-
-  async createZoneQr(
-    zoneQr: InsertZoneQr & { publicToken: string },
-  ): Promise<ZoneQr> {
-    const result = await this.db.insert(zoneQrs).values([zoneQr]).returning();
-    return result[0];
+  async createZoneQr(q: any) {
+    const r = await this.db.insert(zoneQrs).values(q).returning();
+    return r[0];
   }
-
-  // QR Snapshots
-  async getQrSnapshotsByOrganization(
-    organizationId: string,
-  ): Promise<QrSnapshot[]> {
-    const results = await this.db
+  async getQrSnapshotsByOrganization(orgId: string) {
+    return await this.db
       .select({ qrSnapshot: qrSnapshots })
       .from(qrSnapshots)
       .innerJoin(lotes, eq(qrSnapshots.loteId, lotes.id))
-      .where(eq(lotes.organizationId, organizationId));
-    return results.map((r) => r.qrSnapshot);
+      .where(eq(lotes.organizationId, orgId))
+      .then((rows) => rows.map((r) => r.qrSnapshot));
   }
-
-  async getQrSnapshot(id: string): Promise<QrSnapshot | undefined> {
-    const result = await this.db
-      .select()
-      .from(qrSnapshots)
-      .where(eq(qrSnapshots.id, id))
-      .limit(1);
-    return result[0];
-  }
-
-  async getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined> {
-    const result = await this.db
+  async getQrSnapshotByToken(t: string) {
+    const r = await this.db
       .select()
       .from(qrSnapshots)
       .where(
-        and(eq(qrSnapshots.publicToken, token), eq(qrSnapshots.isActive, true)),
+        and(eq(qrSnapshots.publicToken, t), eq(qrSnapshots.isActive, true)),
       )
       .limit(1);
-    return result[0];
+    return r[0];
   }
-
-  async createQrSnapshot(
-    snapshot: InsertQrSnapshot & { publicToken: string },
-  ): Promise<QrSnapshot> {
-    const result = await this.db
-      .insert(qrSnapshots)
-      .values([snapshot])
-      .returning();
-    return result[0];
+  async getQrSnapshot(id: string) {
+    const r = await this.db
+      .select()
+      .from(qrSnapshots)
+      .where(eq(qrSnapshots.id, id))
+      .limit(1);
+    return r[0];
   }
-
-  async updateQrSnapshot(
-    id: string,
-    snapshot: Partial<QrSnapshot>,
-  ): Promise<QrSnapshot | undefined> {
-    const result = await this.db
+  async updateQrSnapshot(id: string, data: any) {
+    const r = await this.db
       .update(qrSnapshots)
-      .set(snapshot as any)
+      .set(data)
       .where(eq(qrSnapshots.id, id))
       .returning();
-    return result[0];
+    return r[0];
   }
-
-  async incrementScanCount(token: string): Promise<void> {
+  async incrementScanCount(t: string) {
     await this.db
       .update(qrSnapshots)
       .set({ scanCount: sql`${qrSnapshots.scanCount} + 1` })
-      .where(eq(qrSnapshots.publicToken, token));
+      .where(eq(qrSnapshots.publicToken, t));
   }
-
-  // Audit Logs
-  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
-    const result = await this.db.insert(auditLog).values(log).returning();
-    return result[0];
-  }
-
-  async getAuditLogsByEntity(
-    entityType: string,
-    entityId: string,
-  ): Promise<AuditLog[]> {
-    return await this.db
-      .select()
-      .from(auditLog)
-      .where(
-        and(
-          eq(auditLog.entityType, entityType),
-          eq(auditLog.entityId, entityId),
-        ),
-      )
-      .orderBy(desc(auditLog.timestamp));
-  }
-
-  // Missing method to implement IStorage interface
-  async revokeQrSnapshot(id: string, organizationId: string): Promise<boolean> {
-    const result = await this.db
+  async revokeQrSnapshot(id: string, orgId: string) {
+    const r = await this.db
       .update(qrSnapshots)
       .set({ isActive: false })
       .from(lotes)
@@ -693,98 +626,63 @@ export class PostgresStorage implements IStorage {
         and(
           eq(qrSnapshots.id, id),
           eq(qrSnapshots.loteId, lotes.id),
-          eq(lotes.organizationId, organizationId),
+          eq(lotes.organizationId, orgId),
         ),
       )
       .returning();
-    return result.length > 0;
+    return r.length > 0;
+  }
+  async createQrSnapshot(snapshot: any): Promise<QrSnapshot> {
+    const result = await this.db
+      .insert(qrSnapshots)
+      .values(snapshot)
+      .returning();
+    return result[0];
   }
 
-  // Added missing function from IStorage interface
+  // --- Audit & Traceability ---
+  async createAuditLog(log: InsertAuditLog) {
+    const r = await this.db.insert(auditLog).values(log).returning();
+    return r[0];
+  }
+  async getAuditLogsByEntity(type: string, id: string) {
+    return await this.db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityType, type), eq(auditLog.entityId, id)))
+      .orderBy(desc(auditLog.timestamp));
+  }
   async getSensorDataByLoteAndStage(
     loteId: string,
     stage: string,
-    startTime: Date,
-    endTime: Date,
-  ): Promise<any[]> {
-    try {
-      // First get all stays for this lote in this stage during the time period
-      const relevantStays = await this.db
-        .select({
-          zoneId: stays.zoneId,
-          entryTime: stays.entryTime,
-          exitTime: stays.exitTime,
-        })
-        .from(stays)
-        .innerJoin(zones, eq(zones.id, stays.zoneId))
-        .where(
-          and(
-            eq(stays.loteId, loteId),
-            eq(zones.stage, stage),
-            // Stay overlaps with the time period
-            or(
-              and(
-                gte(stays.entryTime, startTime),
-                lte(stays.entryTime, endTime)
-              ),
-              and(
-                stays.exitTime ? gte(stays.exitTime, startTime) : sql`${stays.exitTime} IS NOT NULL`,
-                stays.exitTime ? lte(stays.exitTime, endTime) : sql`1=0`
-              ),
-              and(
-                lte(stays.entryTime, startTime),
-                or(
-                  stays.exitTime ? gte(stays.exitTime, endTime) : sql`${stays.exitTime} IS NULL`,
-                  isNull(stays.exitTime)
-                )
-              )
-            )
-          )
-        );
-
-      if (relevantStays.length === 0) {
-        console.log(`No relevant stays found for lote ${loteId} in stage ${stage}`);
-        return [];
-      }
-
-      // Get sensor readings for all relevant zones during the time period
-      const zoneIds = relevantStays.map(stay => stay.zoneId).filter(Boolean);
-
-      if (zoneIds.length === 0) {
-        console.log(`No valid zone IDs found for lote ${loteId} in stage ${stage}`);
-        return [];
-      }
-
-      const result = await this.db
-        .select({
-          id: sensorReadings.id,
-          sensorType: sensors.sensorType,
-          value: sensorReadings.value,
-          timestamp: sensorReadings.timestamp,
-        })
-        .from(sensorReadings)
-        .innerJoin(sensors, eq(sensors.id, sensorReadings.sensorId))
-        .where(
-          and(
-            inArray(sensors.zoneId, zoneIds),
-            gte(sensorReadings.timestamp, startTime),
-            lte(sensorReadings.timestamp, endTime),
-          )
-        )
-        .orderBy(sensorReadings.timestamp);
-
-      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage} across ${zoneIds.length} zones`);
-      return result;
-    } catch (error) {
-      console.error("Error fetching sensor data by lote and stage:", error);
-      console.error("Error details:", {
-        loteId,
-        stage,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        error: error.message
-      });
-      return [];
-    }
+    start: Date,
+    end: Date,
+  ) {
+    const relevantStays = await this.db
+      .select({ zoneId: stays.zoneId })
+      .from(stays)
+      .innerJoin(zones, eq(zones.id, stays.zoneId))
+      .where(and(eq(stays.loteId, loteId), eq(zones.stage, stage)));
+    if (relevantStays.length === 0) return [];
+    const zIds = relevantStays
+      .map((s) => s.zoneId)
+      .filter((id): id is string => !!id);
+    return await this.db
+      .select({
+        id: sensorReadings.id,
+        sensorType: sensors.sensorType,
+        value: sensorReadings.value,
+        timestamp: sensorReadings.timestamp,
+      })
+      .from(sensorReadings)
+      .innerJoin(sensors, eq(sensors.id, sensorReadings.sensorId))
+      .where(
+        and(
+          inArray(sensors.zoneId, zIds),
+          gte(sensorReadings.timestamp, start),
+          lte(sensorReadings.timestamp, end),
+        ),
+      )
+      .orderBy(sensorReadings.timestamp);
   }
 }

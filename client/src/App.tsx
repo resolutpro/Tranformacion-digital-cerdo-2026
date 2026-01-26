@@ -20,6 +20,7 @@ import MataderoPage from "@/pages/matadero";
 import SecaderoPage from "@/pages/secadero";
 import DistribucionPage from "@/pages/distribucion";
 import ZoneMovementPage from "@/pages/zona-movimiento";
+import AlertasPage from "@/pages/alertas"; // Nueva página
 
 function Router() {
   return (
@@ -38,6 +39,7 @@ function Router() {
       <ProtectedRoute path="/zona/:id" component={ZoneDetail} />
       <ProtectedRoute path="/seguimiento" component={Seguimiento} />
       <ProtectedRoute path="/trazabilidad" component={Trazabilidad} />
+      <ProtectedRoute path="/alertas" component={AlertasPage} />
       <Route component={NotFound} />
     </Switch>
   );

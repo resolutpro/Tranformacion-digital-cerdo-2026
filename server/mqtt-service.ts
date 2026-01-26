@@ -26,8 +26,6 @@ const logger = {
 
 interface MqttConnection {
   client: mqtt.MqttClient;
-  host: string;
-  port: number;
   sensors: Set<string>; // sensor IDs using this connection
   lastConnected?: Date;
   reconnectCount: number;
@@ -45,20 +43,14 @@ class MqttService {
       return;
     }
 
-    logger.info("Initializing MQTT Service...");
-
     try {
-      // Load all sensors with MQTT enabled
       await this.refreshMqttConnections();
       this.initialized = true;
-      logger.info("MQTT Service initialized successfully");
-
-      // Start periodic refresh of connections
       setInterval(() => {
         this.refreshMqttConnections().catch((error) => {
           logger.error("Error refreshing MQTT connections", error);
         });
-      }, 60000); // Check every minute
+      }, 60000);
     } catch (error) {
       logger.error("Failed to initialize MQTT Service", error);
       throw error;
@@ -67,115 +59,35 @@ class MqttService {
 
   async refreshMqttConnections(): Promise<void> {
     try {
-      logger.info("Refreshing MQTT connections...");
+      const mqttEnabledSensors = await storage.getAllMqttEnabledSensors();
+      const validSensors = mqttEnabledSensors.filter((sensor) => {
+        return !!(
+          sensor.mqttEnabled &&
+          sensor.isActive &&
+          sensor.mqttHost &&
+          sensor.mqttPort &&
+          sensor.ttnTopic &&
+          sensor.mqttUsername &&
+          sensor.mqttPassword
+        );
+      });
 
-      // Import storage to get sensors
-      const { storage } = await import("./storage");
-      
-      // Get all sensors that have MQTT enabled from the database
-      logger.info("Loading MQTT-enabled sensors from database...");
-      
-      try {
-        const mqttEnabledSensors = await storage.getAllMqttEnabledSensors();
-        logger.info("🔍🔍🔍 DETAILED MQTT SENSORS ANALYSIS", {
-          totalSensorsFound: mqttEnabledSensors.length,
-          sensorsDetail: mqttEnabledSensors.map(s => ({
-            id: s.id,
-            name: s.name,
-            mqttEnabled: s.mqttEnabled,
-            isActive: s.isActive,
-            mqttHost: s.mqttHost,
-            mqttPort: s.mqttPort,
-            ttnTopic: s.ttnTopic,
-            jsonFields: s.jsonFields,
-            mqttUsername: s.mqttUsername ? `${s.mqttUsername.substring(0, 8)}...` : 'MISSING',
-            hasPassword: !!s.mqttPassword,
-            shouldConnect: !!(s.mqttEnabled && s.isActive && s.mqttHost && s.mqttPort && s.ttnTopic && s.mqttUsername && s.mqttPassword)
-          })),
-        });
-
-        // Filter out sensors that don't have complete configuration
-        const validSensors = mqttEnabledSensors.filter(sensor => {
-          const isValid = !!(sensor.mqttEnabled && sensor.isActive && sensor.mqttHost && sensor.mqttPort && sensor.ttnTopic && sensor.mqttUsername && sensor.mqttPassword);
-          
-          if (!isValid) {
-            logger.warn("⚠️⚠️⚠️ SENSOR WITH INCOMPLETE MQTT CONFIG", {
-              sensorId: sensor.id,
-              name: sensor.name,
-              mqttEnabled: sensor.mqttEnabled,
-              isActive: sensor.isActive,
-              hasHost: !!sensor.mqttHost,
-              hasPort: !!sensor.mqttPort,
-              hasTopic: !!sensor.ttnTopic,
-              hasUsername: !!sensor.mqttUsername,
-              hasPassword: !!sensor.mqttPassword,
-            });
-          }
-          
-          return isValid;
-        });
-
-        logger.info("✅✅✅ VALID SENSORS FOR MQTT CONNECTION", {
-          validSensorsCount: validSensors.length,
-          totalSensorsCount: mqttEnabledSensors.length,
-          invalidSensorsCount: mqttEnabledSensors.length - validSensors.length,
-        });
-
-        // Group sensors by connection key (host:port:username)
-        const sensorsByConnection = new Map<string, Sensor[]>();
-        
-        for (const sensor of validSensors) {
-          const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
-          if (!sensorsByConnection.has(connectionKey)) {
-            sensorsByConnection.set(connectionKey, []);
-          }
-          sensorsByConnection.get(connectionKey)!.push(sensor);
+      const sensorsByConnection = new Map<string, Sensor[]>();
+      for (const sensor of validSensors) {
+        const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
+        if (!sensorsByConnection.has(connectionKey)) {
+          sensorsByConnection.set(connectionKey, []);
         }
-
-        logger.info("🗂️🗂️🗂️ SENSOR GROUPS BY CONNECTION", {
-          connectionGroups: Array.from(sensorsByConnection.entries()).map(([key, sensors]) => ({
-            connectionKey: key,
-            sensorsCount: sensors.length,
-            sensors: sensors.map(s => ({
-              id: s.id,
-              name: s.name,
-              topic: s.ttnTopic,
-              jsonFields: s.jsonFields,
-            })),
-          })),
-        });
-
-        // Connect each group of sensors
-        for (const [connectionKey, sensors] of sensorsByConnection.entries()) {
-          logger.info("🚀🚀🚀 CONNECTING SENSOR GROUP", {
-            connectionKey,
-            sensorsCount: sensors.length,
-            sensors: sensors.map(s => ({ id: s.id, name: s.name, topic: s.ttnTopic })),
-          });
-          
-          try {
-            await this.ensureConnection(connectionKey, sensors);
-            logger.info("✅✅✅ SENSOR GROUP CONNECTION SUCCESS", { 
-              connectionKey,
-              sensorsConnected: sensors.length,
-            });
-          } catch (connectionError) {
-            logger.error("❌❌❌ SENSOR GROUP CONNECTION FAILED", {
-              connectionKey,
-              sensorsCount: sensors.length,
-              error: connectionError.message,
-              errorStack: connectionError.stack,
-            });
-          }
-        }
-      } catch (storageError) {
-        logger.error("💥💥💥 ERROR LOADING MQTT SENSORS FROM STORAGE", {
-          error: storageError.message,
-          errorStack: storageError.stack,
-        });
+        sensorsByConnection.get(connectionKey)!.push(sensor);
       }
-      
-      logger.info("MQTT connections refresh completed");
+
+      for (const [connectionKey, sensors] of sensorsByConnection.entries()) {
+        try {
+          await this.ensureConnection(connectionKey, sensors);
+        } catch (connectionError) {
+          logger.error("Sensor group connection failed", connectionError);
+        }
+      }
     } catch (error) {
       logger.error("Error refreshing MQTT connections", error);
     }
@@ -187,481 +99,60 @@ class MqttService {
   ): Promise<void> {
     const existingConnection = this.connections.get(connectionKey);
 
-    // If connection exists and is connected, just update sensor list
     if (existingConnection && existingConnection.client.connected) {
-      // Update sensor list
       existingConnection.sensors.clear();
       sensors.forEach((s) => existingConnection.sensors.add(s.id));
-
-      // Get unique topics to avoid duplicate subscriptions
       const uniqueTopics = new Set<string>();
       sensors.forEach((s) => {
-        if (s.ttnTopic) {
-          uniqueTopics.add(s.ttnTopic);
-        }
+        if (s.ttnTopic) uniqueTopics.add(s.ttnTopic);
       });
-
-      // Subscribe to any new topics only once per unique topic
       for (const topic of uniqueTopics) {
-        existingConnection.client.subscribe(topic, { qos: 0 }, (err) => {
-          if (err) {
-            logger.error(
-              `Failed to subscribe to topic ${topic}`,
-              err,
-            );
-          } else {
-            logger.info(`Subscribed to topic: ${topic}`, {
-              sensorsCount: sensors.filter(s => s.ttnTopic === topic).length,
-            });
-          }
-        });
+        existingConnection.client.subscribe(topic);
       }
       return;
     }
 
-    // Create new connection or reconnect
     const firstSensor = sensors[0];
-    if (
-      !firstSensor.mqttHost ||
-      !firstSensor.mqttPort ||
-      !firstSensor.mqttUsername ||
-      !firstSensor.mqttPassword
-    ) {
-      logger.warn("Incomplete MQTT credentials for sensor", {
-        sensorId: firstSensor.id,
-      });
-      return;
-    }
-
-    logger.info("Creating MQTT connection", {
-      connectionKey,
-      host: firstSensor.mqttHost,
-      port: firstSensor.mqttPort,
-      sensorsCount: sensors.length,
-    });
-
-    const connectOptions: mqtt.IClientOptions = {
-      host: firstSensor.mqttHost,
-      port: firstSensor.mqttPort,
+    const client = mqtt.connect({
+      host: firstSensor.mqttHost!,
+      port: firstSensor.mqttPort!,
       username: firstSensor.mqttUsername,
       password: firstSensor.mqttPassword,
       protocol: "mqtts",
-      keepalive: 60,
       reconnectPeriod: this.reconnectInterval,
       connectTimeout: 30000,
-      clean: true,
-      rejectUnauthorized: true, // Enable TLS verification for security
-    };
-
-    const client = mqtt.connect(connectOptions);
+    });
 
     const connection: MqttConnection = {
       client,
-      host: firstSensor.mqttHost,
-      port: firstSensor.mqttPort,
       sensors: new Set(sensors.map((s) => s.id)),
       reconnectCount: 0,
     };
 
     this.connections.set(connectionKey, connection);
 
-    // Set up event handlers
-    client.on("connect", async () => {
-      logger.info("🟢 MQTT CONNECTED SUCCESSFULLY", {
-        connectionKey,
-        host: firstSensor.mqttHost,
-        port: firstSensor.mqttPort,
-        username: firstSensor.mqttUsername,
-        sensorsToSubscribe: sensors.length,
+    client.on("connect", () => {
+      logger.info(`Connected to ${firstSensor.mqttHost}`);
+      sensors.forEach((s) => {
+        if (s.ttnTopic) client.subscribe(s.ttnTopic);
       });
-      connection.lastConnected = new Date();
-      connection.reconnectCount = 0;
-
-      // Get unique topics to avoid duplicate subscriptions
-      const topicSensorMap = new Map<string, Sensor[]>();
-      sensors.forEach(sensor => {
-        if (sensor.ttnTopic) {
-          if (!topicSensorMap.has(sensor.ttnTopic)) {
-            topicSensorMap.set(sensor.ttnTopic, []);
-          }
-          topicSensorMap.get(sensor.ttnTopic)!.push(sensor);
-        } else {
-          logger.warn("⚠️⚠️⚠️ SENSOR MISSING TTN TOPIC", {
-            sensorId: sensor.id,
-            sensorName: sensor.name,
-            connectionKey,
-            sensorConfig: {
-              mqttHost: sensor.mqttHost,
-              mqttPort: sensor.mqttPort,
-              ttnTopic: sensor.ttnTopic,
-              jsonFields: sensor.jsonFields,
-            },
-          });
-        }
-      });
-
-      // Subscribe to all unique topics
-      const subscriptionPromises: Promise<void>[] = [];
-      
-      for (const [topic, topicSensors] of topicSensorMap.entries()) {
-        logger.info("📡📡📡 ATTEMPTING TOPIC SUBSCRIPTION", {
-          topic,
-          sensorsCount: topicSensors.length,
-          sensors: topicSensors.map(s => ({ id: s.id, name: s.name, jsonFields: s.jsonFields })),
-          connectionKey,
-        });
-
-        const subscriptionPromise = new Promise<void>((resolve, reject) => {
-          client.subscribe(topic, { qos: 0 }, (err, granted) => {
-            if (err) {
-              logger.error("❌❌❌ SUBSCRIPTION FAILED", {
-                topic,
-                sensorsCount: topicSensors.length,
-                error: err.message,
-                errorCode: err.name,
-                connectionKey,
-              });
-              reject(err);
-            } else {
-              logger.info("✅✅✅ SUBSCRIPTION SUCCESS", {
-                topic,
-                sensorsCount: topicSensors.length,
-                sensors: topicSensors.map(s => ({ id: s.id, name: s.name })),
-                granted: granted,
-                qos: granted?.[0]?.qos,
-                connectionKey,
-              });
-              resolve();
-            }
-          });
-        });
-        
-        subscriptionPromises.push(subscriptionPromise);
-      }
-
-      // Wait for all subscriptions to complete
-      try {
-        await Promise.all(subscriptionPromises);
-        logger.info("🎉🎉🎉 ALL SUBSCRIPTIONS COMPLETED", {
-          connectionKey,
-          totalUniqueTopics: topicSensorMap.size,
-          totalSensors: sensors.length,
-          sensorsWithTopics: sensors.filter(s => s.ttnTopic).length,
-        });
-      } catch (subscriptionError) {
-        logger.error("💥💥💥 SOME SUBSCRIPTIONS FAILED", {
-          connectionKey,
-          error: subscriptionError.message,
-        });
-      }
     });
 
     client.on("message", async (topic, message) => {
-      logger.info("📨📨📨 MQTT MESSAGE EVENT TRIGGERED - RAW EVENT", {
-        topic,
-        topicLength: topic?.length,
-        messageSize: message.length,
-        messagePreview: message.toString().substring(0, 100),
-        connectionKey,
-        sensorsInConnection: sensors.map((s) => ({
-          id: s.id,
-          name: s.name,
-          topic: s.ttnTopic,
-        })),
-        timestamp: new Date().toISOString(),
-        eventType: "mqtt-message-received",
-      });
-
       try {
-        logger.info("🔄🔄🔄 CALLING handleMqttMessage FROM MESSAGE EVENT", {
-          topic,
-          messageLength: message.length,
-          sensorsCount: sensors.length,
-          callStartTime: new Date().toISOString(),
-        });
-
-        await this.handleMqttMessage(topic, message, sensors);
-
-        logger.info("✅✅✅ handleMqttMessage COMPLETED SUCCESSFULLY", {
-          topic,
-          callEndTime: new Date().toISOString(),
-        });
-      } catch (error) {
-        logger.error("💥💥💥 ERROR in message handler - HANDLER FAILED", {
-          topic,
-          error: error.message,
-          stack: error.stack,
-          errorType: error.constructor.name,
-          handlerFailedAt: new Date().toISOString(),
-        });
-      }
-    });
-
-    client.on("error", (error) => {
-      logger.error("🔴 MQTT CONNECTION ERROR", {
-        connectionKey,
-        error: error.message,
-        errorCode: error.code,
-        errorStack: error.stack,
-        host: firstSensor.mqttHost,
-        port: firstSensor.mqttPort,
-      });
-    });
-
-    client.on("offline", () => {
-      logger.warn("🟡 MQTT CONNECTION OFFLINE", {
-        connectionKey,
-        lastConnected: connection.lastConnected,
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    client.on("close", () => {
-      logger.warn("🔵 MQTT CONNECTION CLOSED", {
-        connectionKey,
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    client.on("disconnect", () => {
-      logger.warn("🟠 MQTT DISCONNECTED", {
-        connectionKey,
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    client.on("reconnect", () => {
-      connection.reconnectCount++;
-      logger.info("🔄 MQTT RECONNECTING", {
-        connectionKey,
-        attempt: connection.reconnectCount,
-        maxAttempts: this.maxReconnectAttempts,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (connection.reconnectCount > this.maxReconnectAttempts) {
-        logger.error("❌ MAX RECONNECT ATTEMPTS REACHED", {
-          connectionKey,
-          finalAttempt: connection.reconnectCount,
-        });
-        client.end();
-      }
-    });
-  }
-
-  private async handleMqttMessage(
-    topic: string,
-    message: Buffer,
-    sensors: Sensor[],
-  ): Promise<void> {
-    try {
-      logger.info("🔔🔔🔔 MQTT MESSAGE RECEIVED - STARTING PROCESSING", {
-        topic,
-        messageLength: message.length,
-        bufferPreview: message.toString().substring(0, 100),
-        availableSensors: sensors.length,
-        sensorTopics: sensors.map((s) => ({
-          id: s.id,
-          name: s.name,
-          topic: s.ttnTopic,
-        })),
-        timestamp: new Date().toISOString(),
-        threadId: process.pid,
-      });
-
-      const messageStr = message.toString();
-      logger.info("📄📄📄 MESSAGE STRING CONVERSION", {
-        topic,
-        messageStr: messageStr.substring(0, 1000), // Show even more characters
-        fullLength: messageStr.length,
-        encoding: "utf8",
-        firstChars: messageStr.substring(0, 50),
-        lastChars: messageStr.substring(Math.max(0, messageStr.length - 50)),
-      });
-
-      let messageData: any;
-
-      try {
-        logger.info("🔍🔍🔍 ATTEMPTING JSON PARSE", {
-          topic,
-          messageToParseLength: messageStr.length,
-          messageToParsePreview: messageStr.substring(0, 200),
-        });
-
+        const messageStr = message.toString();
         const fullMessageData = JSON.parse(messageStr);
-
-        // Extraer uplink_message.decoded_payload si existe
-        messageData =
+        const messageData =
           fullMessageData.uplink_message?.decoded_payload || fullMessageData;
 
-        logger.info("✅✅✅ JSON PARSE SUCCESS - DATA EXTRACTED", {
-          topic,
-          fullMessageKeys: Object.keys(fullMessageData),
-          hasUplinkMessage: !!fullMessageData.uplink_message,
-          hasDecodedPayload: !!fullMessageData.uplink_message?.decoded_payload,
-          extractedDataKeys: Object.keys(messageData),
-          extractedData: messageData,
-          dataType: typeof messageData,
-          isObject: typeof messageData === "object",
-          hasKeys: Object.keys(messageData).length > 0,
-          dataSource: fullMessageData.uplink_message?.decoded_payload
-            ? "uplink_message.decoded_payload"
-            : "root",
-        });
-      } catch (parseError) {
-        logger.error("❌❌❌ JSON PARSE FAILED - CRITICAL ERROR", {
-          topic,
-          message: messageStr,
-          parseError: parseError.message,
-          parseErrorStack: parseError.stack,
-          messageType: typeof messageStr,
-          isValidString: typeof messageStr === "string",
-          stringLength: messageStr.length,
-        });
-        return;
-      }
-
-      // Find sensors that match this topic
-      logger.info("🔍🔍🔍 SEARCHING FOR MATCHING SENSORS - COMPREHENSIVE", {
-        receivedTopic: topic,
-        receivedTopicLength: topic?.length,
-        receivedTopicType: typeof topic,
-        availableSensorsCount: sensors.length,
-        allSensorData: sensors.map((s) => ({
-          id: s.id,
-          name: s.name,
-          ttnTopic: s.ttnTopic,
-          ttnTopicLength: s.ttnTopic?.length,
-          ttnTopicType: typeof s.ttnTopic,
-          exactMatch: s.ttnTopic === topic,
-          trimmedMatch: s.ttnTopic?.trim() === topic?.trim(),
-          bothExist: !!(s.ttnTopic && topic),
-          jsonFields: s.jsonFields,
-          mqttEnabled: s.mqttEnabled,
-          isActive: s.isActive,
-        })),
-      });
-
-      const matchingSensors = sensors.filter((s) => {
-        const matches = s.ttnTopic === topic;
-        
-        if (matches) {
-          logger.info("🎯🎯🎯 SENSOR MATCHED FOR TOPIC", {
-            sensorId: s.id,
-            sensorName: s.name,
-            sensorTopic: s.ttnTopic,
-            receivedTopic: topic,
-            jsonFields: s.jsonFields,
-          });
-        }
-        
-        return matches;
-      });
-
-      logger.info("🎯🎯🎯 TOPIC MATCHING RESULTS - DETAILED", {
-        topic,
-        matchingSensorsCount: matchingSensors.length,
-        matchingSensors: matchingSensors.map((s) => ({
-          id: s.id,
-          name: s.name,
-          expectedTopic: s.ttnTopic,
-          jsonFields: s.jsonFields,
-          mqttEnabled: s.mqttEnabled,
-          isActive: s.isActive,
-        })),
-        allSensorTopics: sensors.map((s) => ({
-          topic: s.ttnTopic,
-          sensorId: s.id,
-          name: s.name,
-        })),
-        exactTopicComparison: sensors.map((s) => ({
-          sensorId: s.id,
-          sensorName: s.name,
-          sensorTopic: `"${s.ttnTopic}"`,
-          receivedTopic: `"${topic}"`,
-          matches: s.ttnTopic === topic,
-          exactMatch: s.ttnTopic?.trim() === topic?.trim(),
-          lengthMatch: s.ttnTopic?.length === topic?.length,
-        })),
-      });
-
-      if (matchingSensors.length === 0) {
-        logger.warn("⚠️⚠️⚠️ NO MATCHING SENSORS FOUND - WILL NOT PROCESS", {
-          receivedTopic: topic,
-          receivedTopicLength: topic.length,
-          availableTopics: sensors.map((s) => s.ttnTopic),
-          detailedComparison: sensors.map((s) => ({
-            sensorId: s.id,
-            sensorName: s.name,
-            sensorTopic: s.ttnTopic,
-            sensorTopicLength: s.ttnTopic?.length,
-            matches: s.ttnTopic === topic,
-            exactMatch: s.ttnTopic?.trim() === topic?.trim(),
-            charByCharComparison: topic
-              .split("")
-              .map((char, idx) => ({
-                index: idx,
-                received: char,
-                expected: s.ttnTopic?.[idx] || "undefined",
-                match: char === s.ttnTopic?.[idx],
-              }))
-              .slice(0, 20), // First 20 chars
-          })),
-        });
-        return;
-      }
-
-      logger.info("🚀🚀🚀 STARTING SENSOR PROCESSING LOOP", {
-        matchingSensorsCount: matchingSensors.length,
-        sensorsToProcess: matchingSensors.map((s) => ({
-          id: s.id,
-          name: s.name,
-        })),
-      });
-
-      for (const sensor of matchingSensors) {
-        logger.info(`🔄🔄🔄 PROCESSING INDIVIDUAL SENSOR: ${sensor.name}`, {
-          sensorId: sensor.id,
-          sensorName: sensor.name,
-          sensorTopic: sensor.ttnTopic,
-          jsonFields: sensor.jsonFields,
-          sensorType: sensor.sensorType,
-          isActive: sensor.isActive,
-          processingStartTime: new Date().toISOString(),
-        });
-
-        try {
+        const matchingSensors = sensors.filter((s) => s.ttnTopic === topic);
+        for (const sensor of matchingSensors) {
           await this.processSensorMessage(sensor, messageData);
-          logger.info(`✅✅✅ SENSOR PROCESSING COMPLETED: ${sensor.name}`, {
-            sensorId: sensor.id,
-            processingEndTime: new Date().toISOString(),
-          });
-        } catch (processingError) {
-          logger.error(`❌❌❌ SENSOR PROCESSING FAILED: ${sensor.name}`, {
-            sensorId: sensor.id,
-            error: processingError.message,
-            stack: processingError.stack,
-          });
         }
+      } catch (error) {
+        logger.error("Error in message handler", error);
       }
-
-      logger.info("🏁🏁🏁 MQTT MESSAGE PROCESSING COMPLETED", {
-        topic,
-        processedSensors: matchingSensors.length,
-        totalProcessingTime: new Date().toISOString(),
-      });
-    } catch (error) {
-      logger.error(
-        "💥💥💥 CRITICAL ERROR in handleMqttMessage - TOTAL FAILURE",
-        {
-          topic,
-          error: error.message,
-          stack: error.stack,
-          errorType: error.constructor.name,
-          timestamp: new Date().toISOString(),
-        },
-      );
-    }
+    });
   }
 
   private async processSensorMessage(
@@ -669,478 +160,79 @@ class MqttService {
     messageData: any,
   ): Promise<void> {
     try {
-      logger.info(`🚀🚀🚀 STARTING SENSOR MESSAGE PROCESSING - DETAILED`, {
+      const field = sensor.jsonFields?.split(",")[0].trim();
+      if (!field) return;
+
+      const value = this.extractNestedValue(messageData, field);
+      if (value === undefined) return;
+
+      const readingValue = value.toString();
+      const numericValue = Number(value);
+      const timestamp = messageData.timestamp
+        ? new Date(messageData.timestamp)
+        : new Date();
+
+      await storage.createSensorReading({
         sensorId: sensor.id,
-        sensorName: sensor.name,
-        sensorType: sensor.sensorType,
-        zoneId: sensor.zoneId,
-        jsonFields: sensor.jsonFields,
-        messageDataKeys: Object.keys(messageData),
-        messageDataType: typeof messageData,
-        fullMessageData: messageData,
-        processingStartTime: new Date().toISOString(),
-      });
-
-      // Extract the specified JSON fields
-      const fieldsToRead = sensor.jsonFields
-        ? sensor.jsonFields.split(",").map((f) => f.trim())
-        : [];
-
-      logger.info("📋📋📋 FIELDS TO EXTRACT - DETAILED ANALYSIS", {
-        sensorId: sensor.id,
-        rawJsonFields: sensor.jsonFields,
-        rawJsonFieldsType: typeof sensor.jsonFields,
-        rawJsonFieldsLength: sensor.jsonFields?.length,
-        parsedFields: fieldsToRead,
-        fieldsCount: fieldsToRead.length,
-        fieldsArray: fieldsToRead.map((f, idx) => ({
-          index: idx,
-          field: f,
-          fieldLength: f.length,
-        })),
-      });
-
-      if (fieldsToRead.length === 0) {
-        logger.error("❌❌❌ NO JSON FIELDS SPECIFIED - CANNOT PROCEED", {
-          sensorId: sensor.id,
-          sensorName: sensor.name,
-          jsonFieldsValue: sensor.jsonFields,
-          jsonFieldsIsNull: sensor.jsonFields === null,
-          jsonFieldsIsUndefined: sensor.jsonFields === undefined,
-          jsonFieldsIsEmptyString: sensor.jsonFields === "",
-        });
-        return;
-      }
-
-      // Extract values from message data
-      const extractedValues: Record<string, any> = {};
-
-      logger.info("🔍🔍🔍 STARTING FIELD EXTRACTION LOOP", {
-        sensorId: sensor.id,
-        fieldsToProcess: fieldsToRead,
-        messageDataAvailable: !!messageData,
-        messageDataKeys: Object.keys(messageData || {}),
-      });
-
-      for (const field of fieldsToRead) {
-        logger.info(`🔍🔍🔍 EXTRACTING FIELD: "${field}" - DETAILED`, {
-          sensorId: sensor.id,
-          field,
-          fieldIndex: fieldsToRead.indexOf(field),
-          fieldLength: field.length,
-          messageDataStructure: this.getDataStructure(messageData),
-          availableTopLevelKeys: Object.keys(messageData || {}),
-        });
-
-        const value = this.extractNestedValue(messageData, field);
-
-        logger.info(`📊📊📊 FIELD EXTRACTION RESULT - DETAILED`, {
-          sensorId: sensor.id,
-          field,
-          extractedValue: value,
-          valueType: typeof value,
-          isUndefined: value === undefined,
-          isNull: value === null,
-          isNumber: typeof value === "number",
-          isString: typeof value === "string",
-          isObject: typeof value === "object",
-          valueStringified: JSON.stringify(value),
-          extractionSuccessful: value !== undefined,
-        });
-
-        if (value !== undefined) {
-          extractedValues[field] = value;
-          logger.info(`✅✅✅ FIELD EXTRACTED SUCCESSFULLY: "${field}"`, {
-            sensorId: sensor.id,
-            field,
-            value,
-            extractedValueCount: Object.keys(extractedValues).length,
-          });
-        } else {
-          logger.warn(`⚠️⚠️⚠️ FIELD NOT FOUND: "${field}"`, {
-            sensorId: sensor.id,
-            field,
-            availableFields: Object.keys(messageData || {}),
-            messageDataSample: JSON.stringify(messageData).substring(0, 200),
-          });
-        }
-      }
-
-      logger.info("🎯🎯🎯 EXTRACTION SUMMARY - COMPREHENSIVE", {
-        sensorId: sensor.id,
-        sensorName: sensor.name,
-        requestedFields: fieldsToRead,
-        requestedFieldsCount: fieldsToRead.length,
-        extractedFields: Object.keys(extractedValues),
-        extractedFieldsCount: Object.keys(extractedValues).length,
-        extractedValues,
-        extractionSuccessRate: `${Object.keys(extractedValues).length}/${fieldsToRead.length}`,
-        availableTopLevelFields: Object.keys(messageData || {}),
-        messageDataSample: JSON.stringify(messageData).substring(0, 500),
-        fullMessageStructure: this.getDataStructure(messageData, 5),
-      });
-
-      if (Object.keys(extractedValues).length === 0) {
-        logger.error("❌❌❌ NO MATCHING FIELDS FOUND - ABORTING SAVE", {
-          sensorId: sensor.id,
-          sensorName: sensor.name,
-          requestedFields: fieldsToRead,
-          requestedFieldsDetailed: fieldsToRead.map((f) => ({
-            field: f,
-            searched: true,
-            found: false,
-          })),
-          availableFields: Object.keys(messageData || {}),
-          messageStructure: this.getDataStructure(messageData, 5),
-          fullMessage: messageData,
-          possibleReasons: [
-            "Field names do not match exactly",
-            "Data is nested deeper than expected",
-            "Message format has changed",
-            "Sensor jsonFields configuration is incorrect",
-          ],
-        });
-        return;
-      }
-
-      // Extract the actual numeric value from the first field
-      // For single field sensors, use the first extracted value
-      // For multiple field sensors, we could extend this logic
-      const firstField = fieldsToRead[0];
-      const actualValue = extractedValues[firstField];
-      const readingValue = actualValue.toString();
-
-      // Extract timestamp from the message data, keep in UTC
-      let messageTimestamp = new Date(); // fallback to current time in UTC
-      
-      if (messageData.timestamp) {
-        try {
-          const timestampValue = messageData.timestamp;
-          logger.info("🕒🕒🕒 PROCESSING TIMESTAMP FROM MESSAGE", {
-            sensorId: sensor.id,
-            rawTimestamp: timestampValue,
-            timestampType: typeof timestampValue,
-          });
-          
-          // Parse the timestamp from the message and keep it in UTC
-          const parsedTime = new Date(timestampValue);
-          
-          if (!isNaN(parsedTime.getTime())) {
-            // Keep timestamp in UTC for storage
-            messageTimestamp = parsedTime;
-            
-            logger.info("✅✅✅ TIMESTAMP PARSED AND KEPT IN UTC", {
-              sensorId: sensor.id,
-              originalTimestamp: timestampValue,
-              parsedUTCTime: parsedTime.toISOString(),
-              storedUTCTime: messageTimestamp.toISOString(),
-              timezoneNote: "Stored in UTC, conversion to Madrid time happens at display",
-            });
-          } else {
-            logger.warn("⚠️⚠️⚠️ INVALID TIMESTAMP IN MESSAGE - USING CURRENT UTC TIME", {
-              sensorId: sensor.id,
-              invalidTimestamp: timestampValue,
-              fallbackTime: messageTimestamp.toISOString(),
-            });
-          }
-        } catch (timestampError) {
-          logger.error("❌❌❌ ERROR PARSING TIMESTAMP - USING CURRENT UTC TIME", {
-            sensorId: sensor.id,
-            timestampError: timestampError.message,
-            rawTimestamp: messageData.timestamp,
-            fallbackTime: messageTimestamp.toISOString(),
-          });
-        }
-      } else {
-        // Use current UTC time
-        messageTimestamp = new Date();
-        logger.warn("⚠️⚠️⚠️ NO TIMESTAMP IN MESSAGE - USING CURRENT UTC TIME", {
-          sensorId: sensor.id,
-          availableFields: Object.keys(messageData || {}),
-          fallbackTime: messageTimestamp.toISOString(),
-        });
-      }
-
-      logger.info("💾💾💾 PREPARING TO SAVE SENSOR READING", {
-        sensorId: sensor.id,
-        sensorName: sensor.name,
-        extractedField: firstField,
-        actualValue,
-        readingValue,
-        readingValueLength: readingValue.length,
-        extractedFieldsCount: Object.keys(extractedValues).length,
-        messageTimestamp: messageTimestamp.toISOString(),
+        value: readingValue,
+        timestamp,
         isSimulated: false,
-        databaseCallStartTime: new Date().toISOString(),
       });
 
-      try {
-        logger.info("🔄🔄🔄 CALLING STORAGE.createSensorReading", {
-          sensorId: sensor.id,
-          parameters: {
-            sensorId: sensor.id,
-            value: readingValue,
-            timestamp: messageTimestamp,
-            isSimulated: false,
-            extractedFrom: firstField,
-            originalExtractedValues: extractedValues,
-          },
-        });
+      // --- Alertas Preventivas ---
+      const min = sensor.validationMin ? Number(sensor.validationMin) : null;
+      const max = sensor.validationMax ? Number(sensor.validationMax) : null;
 
-        const savedReading = await storage.createSensorReading({
+      if (min !== null && numericValue < min) {
+        await storage.createAlert({
+          organizationId: sensor.organizationId,
           sensorId: sensor.id,
+          zoneId: sensor.zoneId,
+          type: "min_breach",
           value: readingValue,
-          timestamp: messageTimestamp, // UTC timestamp for storage
-          isSimulated: false,
+          threshold: sensor.validationMin!.toString(),
+          isRead: false,
         });
-
-        logger.info(
-          "✅✅✅ SENSOR READING SAVED SUCCESSFULLY - DATABASE CONFIRMED",
-          {
-            sensorId: sensor.id,
-            sensorName: sensor.name,
-            readingId: savedReading.id,
-            extractedField: firstField,
-            extractedFields: Object.keys(extractedValues),
-            actualValue,
-            value: readingValue,
-            timestamp: savedReading.timestamp,
-            createdAt: savedReading.createdAt,
-            isSimulated: savedReading.isSimulated,
-            databaseSaveTime: new Date().toISOString(),
-            savedReadingObject: savedReading,
-            allExtractedValues: extractedValues,
-          },
-        );
-      } catch (saveError) {
-        logger.error("💥💥💥 DATABASE SAVE FAILED - CRITICAL ERROR", {
+      } else if (max !== null && numericValue > max) {
+        await storage.createAlert({
+          organizationId: sensor.organizationId,
           sensorId: sensor.id,
-          sensorName: sensor.name,
-          extractedField: firstField,
-          actualValue,
-          readingValue,
-          allExtractedValues: extractedValues,
-          saveError: saveError.message,
-          saveErrorStack: saveError.stack,
-          saveErrorType: saveError.constructor.name,
+          zoneId: sensor.zoneId,
+          type: "max_breach",
+          value: readingValue,
+          threshold: sensor.validationMax!.toString(),
+          isRead: false,
         });
-        throw saveError;
       }
     } catch (error) {
-      logger.error(
-        "💥💥💥 CRITICAL ERROR in processSensorMessage - COMPLETE FAILURE",
-        {
-          sensorId: sensor.id,
-          sensorName: sensor.name,
-          error: error.message,
-          stack: error.stack,
-          errorType: error.constructor.name,
-          messageData,
-          processingFailedAt: new Date().toISOString(),
-        },
-      );
+      logger.error(`Error processing message for sensor ${sensor.id}`, error);
     }
   }
 
   private extractNestedValue(obj: any, path: string): any {
-    logger.info(`🔍🔍🔍 EXTRACTING NESTED VALUE - START`, {
-      path,
-      pathType: typeof path,
-      pathLength: path?.length,
-      startingObject: typeof obj === "object" ? Object.keys(obj) : obj,
-      startingObjectType: typeof obj,
-      pathSegments: path.split("."),
-      segmentsCount: path.split(".").length,
-    });
-
-    const pathSegments = path.split(".");
+    const segments = path.split(".");
     let current = obj;
-
-    for (let index = 0; index < pathSegments.length; index++) {
-      const key = pathSegments[index];
-
-      logger.info(`📍📍📍 PATH STEP ${index + 1}/${pathSegments.length}`, {
-        currentKey: key,
-        keyIndex: index,
-        keyType: typeof key,
-        keyLength: key?.length,
-        currentObjectType: typeof current,
-        currentObjectIsNull: current === null,
-        currentObjectIsUndefined: current === undefined,
-        currentObjectKeys:
-          current && typeof current === "object"
-            ? Object.keys(current)
-            : "not-object",
-        currentObjectKeysCount:
-          current && typeof current === "object"
-            ? Object.keys(current).length
-            : 0,
-        hasKey: current && current[key] !== undefined,
-        keyValue: current && current[key],
-        keyValueType:
-          current && current[key] ? typeof current[key] : "undefined",
-        exactKeyMatch: current && typeof current === "object" && key in current,
-        allKeysInCurrent:
-          current && typeof current === "object" ? Object.keys(current) : [],
-        keyComparison:
-          current && typeof current === "object"
-            ? Object.keys(current).map((k) => ({
-                availableKey: k,
-                searchingFor: key,
-                exactMatch: k === key,
-                caseInsensitiveMatch: k.toLowerCase() === key.toLowerCase(),
-              }))
-            : [],
-      });
-
+    for (const key of segments) {
       if (current && current[key] !== undefined) {
         current = current[key];
-        logger.info(`✅✅✅ KEY FOUND - MOVING DEEPER`, {
-          key,
-          newCurrent: current,
-          newCurrentType: typeof current,
-          remainingSteps: pathSegments.length - index - 1,
-        });
       } else {
-        logger.warn(`❌❌❌ KEY NOT FOUND - EXTRACTION FAILED`, {
-          key,
-          pathSoFar: pathSegments.slice(0, index + 1).join("."),
-          remainingPath: pathSegments.slice(index + 1).join("."),
-          currentWas: current,
-          availableKeysWere:
-            current && typeof current === "object"
-              ? Object.keys(current)
-              : "not-an-object",
-        });
         return undefined;
       }
     }
-
-    logger.info(`🎯🎯🎯 EXTRACTION COMPLETE - FINAL RESULT`, {
-      path,
-      finalResult: current,
-      resultType: typeof current,
-      resultIsNull: current === null,
-      resultIsUndefined: current === undefined,
-      wasSuccessful: current !== undefined,
-      resultStringified: JSON.stringify(current),
-    });
-
     return current;
   }
 
-  private getDataStructure(
-    obj: any,
-    maxDepth: number = 2,
-    currentDepth: number = 0,
-  ): any {
-    if (currentDepth >= maxDepth || obj === null || typeof obj !== "object") {
-      return typeof obj;
-    }
-
-    if (Array.isArray(obj)) {
-      return `Array[${obj.length}]`;
-    }
-
-    const structure: any = {};
-    for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        structure[key] = this.getDataStructure(
-          obj[key],
-          maxDepth,
-          currentDepth + 1,
-        );
-      }
-    }
-    return structure;
-  }
-
-  // Public method to connect a specific sensor to MQTT
-  async connectSensor(sensor: Sensor): Promise<void> {
-    logger.info("🚀 CONNECT SENSOR REQUEST", {
-      sensorId: sensor.id,
-      sensorName: sensor.name,
-      mqttEnabled: sensor.mqttEnabled,
-      mqttHost: sensor.mqttHost,
-      mqttPort: sensor.mqttPort,
-      ttnTopic: sensor.ttnTopic,
-      jsonFields: sensor.jsonFields,
-      hasUsername: !!sensor.mqttUsername,
-      hasPassword: !!sensor.mqttPassword,
-    });
-
-    if (
-      !sensor.mqttEnabled ||
-      !sensor.mqttHost ||
-      !sensor.mqttPort ||
-      !sensor.ttnTopic
-    ) {
-      logger.error("❌ SENSOR MISSING REQUIRED MQTT CONFIGURATION", {
-        sensorId: sensor.id,
-        sensorName: sensor.name,
-        mqttEnabled: sensor.mqttEnabled,
-        mqttHost: sensor.mqttHost,
-        mqttPort: sensor.mqttPort,
-        ttnTopic: sensor.ttnTopic,
-        missingFields: [
-          !sensor.mqttEnabled && "mqttEnabled",
-          !sensor.mqttHost && "mqttHost",
-          !sensor.mqttPort && "mqttPort",
-          !sensor.ttnTopic && "ttnTopic",
-        ].filter(Boolean),
-      });
-      return;
-    }
-
-    const connectionKey = `${sensor.mqttHost}:${sensor.mqttPort}:${sensor.mqttUsername}`;
-    logger.info("🔑 CONNECTION KEY GENERATED", {
-      connectionKey,
-      sensorId: sensor.id,
-    });
-
-    await this.ensureConnection(connectionKey, [sensor]);
-  }
-
-  // Public method to disconnect a sensor from MQTT
-  async disconnectSensor(sensorId: string): Promise<void> {
-    // Find and remove sensor from all connections
-    for (const [connectionKey, connection] of this.connections.entries()) {
-      if (connection.sensors.has(sensorId)) {
-        connection.sensors.delete(sensorId);
-        logger.info("Removed sensor from MQTT connection", {
-          sensorId,
-          connectionKey,
-        });
-
-        // If no sensors left for this connection, close it
-        if (connection.sensors.size === 0) {
-          logger.info("Closing unused MQTT connection", { connectionKey });
-          connection.client.end();
-          this.connections.delete(connectionKey);
-        }
-      }
-    }
-  }
-
   async shutdown(): Promise<void> {
-    logger.info("Shutting down MQTT Service...");
-
-    for (const [connectionKey, connection] of this.connections.entries()) {
-      logger.info("Closing MQTT connection", { connectionKey });
+    for (const [key, connection] of this.connections.entries()) {
       connection.client.end();
     }
-
     this.connections.clear();
     this.initialized = false;
-    logger.info("MQTT Service shutdown complete");
   }
 
-  // Public method to manually refresh connections (useful for testing)
   async forceRefresh(): Promise<void> {
-    logger.info("Forcing MQTT connections refresh");
     await this.refreshMqttConnections();
   }
 }
 
-// Export singleton instance
 export const mqttService = new MqttService();
