@@ -1,13 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle 
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,10 +14,11 @@ import {
   Trash2, 
   Key, 
   MessageSquare, 
-  Wifi,
-  Shield,
-  Eye,
-  EyeOff
+  Wifi, 
+  Eye, 
+  EyeOff, 
+  Save, 
+  Loader2 
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -37,6 +35,40 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
   const [showCredentials, setShowCredentials] = useState(false);
   const { toast } = useToast();
 
+  const [mqttData, setMqttData] = useState({
+    mqttHost: "",
+    mqttPort: "8883",
+    ttnTopic: "",
+    jsonFields: "",
+    mqttEnabled: true
+  });
+
+  useEffect(() => {
+    if (sensor) {
+      setMqttData({
+        mqttHost: sensor.mqttHost || "eu1.cloud.thethings.network",
+        mqttPort: sensor.mqttPort?.toString() || "8883",
+        ttnTopic: sensor.ttnTopic || "",
+        jsonFields: sensor.jsonFields || "",
+        mqttEnabled: sensor.mqttEnabled ?? true
+      });
+    }
+  }, [sensor, isOpen]);
+
+  const updateMqttMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PUT", `/api/sensors/${sensor?.id}/mqtt-config`, {
+        ...data,
+        mqttPort: parseInt(data.mqttPort)
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/zones"] });
+      toast({ title: "Configuración actualizada", description: "Los datos MQTT se han guardado correctamente" });
+    }
+  });
+
   const rotateMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("PUT", `/api/sensors/${sensor?.id}/rotate-credentials`);
@@ -44,281 +76,123 @@ export function SensorInfoModal({ isOpen, onClose, sensor, latestReading }: Sens
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/zones"] });
-      toast({
-        title: "Credenciales rotadas",
-        description: "Se han generado nuevas credenciales MQTT para este sensor",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudieron rotar las credenciales",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const revokeMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("DELETE", `/api/sensors/${sensor?.id}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/zones"] });
-      toast({
-        title: "Sensor revocado",
-        description: "Las credenciales del sensor han sido revocadas",
-        variant: "destructive",
-      });
-      onClose();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo revocar el sensor",
-        variant: "destructive",
-      });
-    },
+      toast({ title: "Credenciales rotadas", description: "Se han generado nuevas credenciales MQTT" });
+    }
   });
 
   if (!sensor) return null;
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast({
-      title: "Copiado",
-      description: `${label} copiado al portapapeles`,
-    });
+    toast({ title: "Copiado", description: `${label} copiado al portapapeles` });
   };
-
-  const getExamplePayload = (sensorType: string) => {
-    let value;
-    if (sensorType === 'temperature') {
-      value = 22.5;
-    } else if (sensorType === 'humidity') {
-      value = 65.2;
-    } else if (sensorType === 'location') {
-      value = JSON.stringify({ lat: 40.4168, lon: -3.7038 });
-    } else {
-      value = 42.0;
-    }
-    
-    const basePayload = {
-      deviceId: sensor.deviceId,
-      timestamp: new Date().toISOString(),
-      value
-    };
-    return JSON.stringify(basePayload, null, 2);
-  };
-
-  const mqttTopic = `devices/${sensor.deviceId}/readings`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh]" data-testid="modal-sensor-info">
+      <DialogContent className="sm:max-w-[650px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Wifi className="h-4 w-4 text-primary" />
-            </div>
-            Información del Sensor: {sensor.name}
+          <DialogTitle className="flex items-center gap-2">
+            <Wifi className="h-5 w-5 text-primary" />
+            Configuración y Estado: {sensor.name}
           </DialogTitle>
         </DialogHeader>
-        
-        <div className="space-y-6 overflow-y-auto max-h-[calc(80vh-120px)]">
-          {/* Sensor Details */}
-          <div>
-            <h3 className="font-medium mb-3 flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Detalles del Dispositivo
-            </h3>
-            <div className="space-y-2 bg-muted/30 p-4 rounded-lg">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Device ID:</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-sm bg-background px-2 py-1 rounded">{sensor.deviceId}</code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => copyToClipboard(sensor.deviceId, "Device ID")}
-                    data-testid="button-copy-device-id"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Tipo:</span>
-                <Badge variant="outline">{sensor.sensorType}</Badge>
-              </div>
-              {sensor.unit && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Unidad:</span>
-                  <span className="text-sm">{sensor.unit}</span>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* MQTT Configuration */}
-          <div>
-            <h3 className="font-medium mb-2 flex items-center gap-2 text-sm">
-              <Wifi className="h-3 w-3" />
-              MQTT
+        <div className="space-y-6 py-4">
+          <div className="space-y-4 border p-4 rounded-lg bg-muted/5">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" /> Conexión de Red (TTN / MQTT)
             </h3>
-            <div className="space-y-2 bg-muted/30 p-3 rounded-lg text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Topic:</span>
-                <div className="flex items-center gap-1">
-                  <code className="bg-background px-1 py-0.5 rounded">{mqttTopic}</code>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => copyToClipboard(mqttTopic, "Topic MQTT")}
-                    data-testid="button-copy-topic"
-                    className="h-6 w-6 p-0"
-                  >
-                    <Copy className="h-2 w-2" />
-                  </Button>
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs">Host Broker</Label>
+                <Input 
+                  value={mqttData.mqttHost} 
+                  onChange={e => setMqttData({...mqttData, mqttHost: e.target.value})}
+                  placeholder="eu1.cloud.thethings.network" 
+                />
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Broker:</span>
-                <span>broker.replit.dev:8883</span>
+              <div className="space-y-1">
+                <Label className="text-xs">Puerto</Label>
+                <Input 
+                  type="number" 
+                  value={mqttData.mqttPort} 
+                  onChange={e => setMqttData({...mqttData, mqttPort: e.target.value})}
+                />
               </div>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Topic de Suscripción (Uplink)</Label>
+              <Input 
+                value={mqttData.ttnTopic} 
+                onChange={e => setMqttData({...mqttData, ttnTopic: e.target.value})}
+                placeholder="v3/app-id@ttn/devices/dev-id/up" 
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Campo JSON del valor (ej: temperature)</Label>
+              <Input 
+                value={mqttData.jsonFields} 
+                onChange={e => setMqttData({...mqttData, jsonFields: e.target.value})}
+                placeholder="decoded_payload.temperature" 
+              />
+            </div>
+            <Button 
+              className="w-full" 
+              size="sm"
+              disabled={updateMqttMutation.isPending}
+              onClick={() => updateMqttMutation.mutate(mqttData)}
+            >
+              {updateMqttMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Guardar Configuración MQTT
+            </Button>
           </div>
 
-          {/* MQTT Credentials */}
-          <div>
-            <h3 className="font-medium mb-2 flex items-center gap-2 text-sm">
-              <Key className="h-3 w-3" />
-              Credenciales
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowCredentials(!showCredentials)}
-                data-testid="button-toggle-credentials"
-                className="h-6 w-6 p-0"
-              >
-                {showCredentials ? <EyeOff className="h-2 w-2" /> : <Eye className="h-2 w-2" />}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2"><Key className="h-4 w-4" /> Credenciales Locales</h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowCredentials(!showCredentials)}>
+                {showCredentials ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
-            </h3>
-            <div className="space-y-2 bg-muted/30 p-3 rounded-lg text-xs">
-              <div className="flex justify-between items-center">
+            </div>
+            <div className="bg-muted p-3 rounded text-xs font-mono space-y-2">
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Usuario:</span>
-                <div className="flex items-center gap-1">
-                  <code className="bg-background px-1 py-0.5 rounded">
-                    {showCredentials ? sensor.mqttUsername : '••••••••'}
-                  </code>
-                  {showCredentials && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => copyToClipboard(sensor.mqttUsername || '', "Usuario MQTT")}
-                      data-testid="button-copy-username"
-                      className="h-6 w-6 p-0"
-                    >
-                      <Copy className="h-2 w-2" />
-                    </Button>
-                  )}
-                </div>
+                <span className="flex items-center gap-2">
+                  {showCredentials ? sensor.mqttUsername : "••••••••"}
+                  {showCredentials && <Copy className="h-3 w-3 cursor-pointer" onClick={() => copyToClipboard(sensor.mqttUsername!, "Usuario")} />}
+                </span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Contraseña:</span>
-                <div className="flex items-center gap-1">
-                  <code className="bg-background px-1 py-0.5 rounded">
-                    {showCredentials ? sensor.mqttPassword : '••••••••'}
-                  </code>
-                  {showCredentials && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => copyToClipboard(sensor.mqttPassword || '', "Contraseña MQTT")}
-                      data-testid="button-copy-password"
-                      className="h-6 w-6 p-0"
-                    >
-                      <Copy className="h-2 w-2" />
-                    </Button>
-                  )}
-                </div>
+                <span className="flex items-center gap-2">
+                  {showCredentials ? sensor.mqttPassword : "••••••••"}
+                  {showCredentials && <Copy className="h-3 w-3 cursor-pointer" onClick={() => copyToClipboard(sensor.mqttPassword!, "Contraseña")} />}
+                </span>
               </div>
             </div>
+            <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => rotateMutation.mutate()}>
+              <RotateCcw className="h-3 w-3 mr-2" /> Rotar Credenciales
+            </Button>
           </div>
 
-          {/* Example Payload */}
-          <div>
-            <h3 className="font-medium mb-3">Payload JSON de Ejemplo</h3>
-            <div className="bg-muted/30 p-4 rounded-lg">
-              <pre className="text-sm overflow-x-auto">
-                <code>{getExamplePayload(sensor.sensorType)}</code>
-              </pre>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="mt-2"
-                onClick={() => copyToClipboard(getExamplePayload(sensor.sensorType), "Payload de ejemplo")}
-                data-testid="button-copy-payload"
-              >
-                <Copy className="h-3 w-3 mr-2" />
-                Copiar payload
-              </Button>
-            </div>
-          </div>
+          <Separator />
 
-          {/* Latest Reading */}
           {latestReading && (
-            <div>
-              <h3 className="font-medium mb-3">Última Lectura</h3>
-              <div className="bg-muted/30 p-4 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Valor:</span>
-                  <span className="font-medium">
-                    {Number(latestReading.value).toFixed(1)} {sensor.unit || ''}
-                  </span>
+            <div className="p-4 bg-primary/5 rounded-lg border border-primary/10">
+              <p className="text-xs text-muted-foreground uppercase font-bold mb-2">Última actividad</p>
+              <div className="flex justify-between items-end">
+                <div className="text-2xl font-bold">
+                  {Number(latestReading.value).toFixed(1)} {sensor.unit}
                 </div>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-sm text-muted-foreground">Timestamp:</span>
-                  <span className="text-sm">
+                <div className="text-right">
+                  <Badge variant="outline" className="mb-1">{latestReading.isSimulated ? "Simulado" : "Dato Real"}</Badge>
+                  <p className="text-[10px] text-muted-foreground">
                     {formatDistanceToNow(new Date(latestReading.timestamp), { addSuffix: true, locale: es })}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-sm text-muted-foreground">Fuente:</span>
-                  <Badge variant={latestReading.isSimulated ? "outline" : "default"} 
-                         className={latestReading.isSimulated ? "border-orange-300 text-orange-600" : ""}>
-                    {latestReading.isSimulated ? "Simulado" : "Real"}
-                  </Badge>
+                  </p>
                 </div>
               </div>
             </div>
           )}
-
-          <Separator />
-
-          {/* Actions */}
-          <div className="flex justify-between">
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => rotateMutation.mutate()}
-                disabled={rotateMutation.isPending}
-                data-testid="button-rotate-credentials"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Rotar Credenciales
-              </Button>
-            </div>
-            <Button
-              variant="destructive"
-              onClick={() => revokeMutation.mutate()}
-              disabled={revokeMutation.isPending}
-              data-testid="button-revoke-sensor"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Revocar Sensor
-            </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
