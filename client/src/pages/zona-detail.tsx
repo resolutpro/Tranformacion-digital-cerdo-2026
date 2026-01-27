@@ -192,16 +192,14 @@ export default function ZoneDetail() {
                       </Button>
                     </div>
 
-                    {!hasThresholds && (
-                      <Button 
-                        variant="secondary" 
-                        className="w-full h-8 text-xs bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100"
-                        onClick={() => { setSelectedSensor(sensor); setIsThresholdModalOpen(true); }}
-                      >
-                        <Settings className="h-3 w-3 mr-2" />
-                        Configurar Umbrales
-                      </Button>
-                    )}
+                    <Button 
+                      variant={hasThresholds ? "outline" : "secondary"} 
+                      className={`w-full h-8 text-xs ${!hasThresholds ? "bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100" : ""}`}
+                      onClick={() => { setSelectedSensor(sensor); setIsThresholdModalOpen(true); }}
+                    >
+                      <Settings className="h-3 w-3 mr-2" />
+                      {hasThresholds ? "Ver/Editar Umbrales" : "Configurar Umbrales"}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
