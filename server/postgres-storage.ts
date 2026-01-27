@@ -60,7 +60,7 @@ const PostgresSessionStore = connectPg(session);
 
 function cleanUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined),
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== "")
   ) as Partial<T>;
 }
 
@@ -465,11 +465,13 @@ export class PostgresStorage implements IStorage {
     sensor: Partial<InsertSensor>,
   ): Promise<Sensor | undefined> {
     const dataToUpdate = cleanUndefined(sensor);
+    console.log(`[STORAGE] Actualizando sensor ${id} con datos:`, dataToUpdate);
     const result = await this.db
       .update(sensors)
       .set(dataToUpdate)
       .where(eq(sensors.id, id))
       .returning();
+    console.log(`[STORAGE] Resultado de actualización:`, result[0]);
     return result[0];
   }
 

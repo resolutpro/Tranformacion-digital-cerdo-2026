@@ -38,10 +38,12 @@ export function ThresholdModal({
   const mutation = useMutation({
     mutationFn: async () => {
       // Usamos PATCH hacia la ruta general de sensores
-      await apiRequest("PATCH", `/api/sensors/${sensor?.id}`, {
-        validationMin: min ? min : null,
-        validationMax: max ? max : null,
-      });
+      const data = {
+        validationMin: min !== "" ? parseFloat(min) : null,
+        validationMax: max !== "" ? parseFloat(max) : null,
+      };
+      console.log("Enviando umbrales:", data);
+      await apiRequest("PATCH", `/api/sensors/${sensor?.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/zones"] });
