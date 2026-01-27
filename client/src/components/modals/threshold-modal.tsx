@@ -29,7 +29,7 @@ export function ThresholdModal({
   const { toast } = useToast();
 
   useEffect(() => {
-    if (sensor) {
+    if (sensor && isOpen) {
       setMin(sensor.validationMin?.toString() || "");
       setMax(sensor.validationMax?.toString() || "");
     }
@@ -45,6 +45,7 @@ export function ThresholdModal({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/zones"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/zones", sensor?.zoneId, "sensors"] });
       toast({ title: "Umbrales guardados" });
       onClose();
     },

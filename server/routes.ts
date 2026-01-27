@@ -131,6 +131,20 @@ export function registerRoutes(app: Express): Server {
     }),
   );
 
+  app.get(
+    "/api/sensors/:id",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const sensor = await storage.getSensor(req.params.id);
+      if (!sensor) return res.status(404).json({ message: "Sensor no encontrado" });
+      
+      const zone = await storage.getZone(sensor.zoneId, req.organizationId);
+      if (!zone) return res.status(403).json({ message: "No autorizado" });
+      
+      res.json(sensor);
+    }),
+  );
+
   app.post(
     "/api/sensors",
     requireAuth,
@@ -147,6 +161,23 @@ export function registerRoutes(app: Express): Server {
         mqttPassword: randomUUID(),
       });
       res.status(201).json(sensor);
+    }),
+  );
+
+  app.patch(
+    "/api/sensors/:id",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const sensor = await storage.getSensor(req.params.id);
+      if (!sensor)
+        return res.status(404).json({ message: "Sensor no encontrado" });
+
+      // Verificamos que el sensor pertenezca a la zona de la organización
+      const zone = await storage.getZone(sensor.zoneId, req.organizationId);
+      if (!zone) return res.status(403).json({ message: "No autorizado" });
+
+      const updated = await storage.updateSensor(req.params.id, req.body);
+      res.json(updated);
     }),
   );
 
@@ -168,37 +199,3 @@ export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
   return httpServer;
 }
-
-// --- Sensors API ---
-// NUEVA RUTA: Permite guardar cualquier cambio parcial (como los umbrales)
-app.patch(
-  "/api/sensors/:id",
-  requireAuth,
-  asyncHandler(async (req: any, res) => {
-    const sensor = await storage.getSensor(req.params.id);
-    if (!sensor)
-      return res.status(404).json({ message: "Sensor no encontrado" });
-
-    // Verificamos que el sensor pertenezca a la zona de la organización
-    const zone = await storage.getZone(sensor.zoneId, req.organizationId);
-    if (!zone) return res.status(403).json({ message: "No autorizado" });
-
-    const updated = await storage.updateSensor(req.params.id, req.body);
-    res.json(updated);
-  }),
-);
-
-app.put(
-  "/api/sensors/:id/mqtt-config",
-  requireAuth,
-  asyncHandler(async (req: any, res) => {
-    const mqttConfig = sensorMqttConfigSchema.parse(req.body);
-    const updated = await storage.updateSensorMqttConfig(
-      req.params.id,
-      mqttConfig,
-    );
-    if (!updated) return res.status(404).json({ message: "No encontrado" });
-    await mqttService.forceRefresh();
-    res.json(updated);
-  }),
-);
