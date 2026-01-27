@@ -464,9 +464,10 @@ export class PostgresStorage implements IStorage {
     id: string,
     sensor: Partial<InsertSensor>,
   ): Promise<Sensor | undefined> {
+    const dataToUpdate = cleanUndefined(sensor);
     const result = await this.db
       .update(sensors)
-      .set(sensor)
+      .set(dataToUpdate)
       .where(eq(sensors.id, id))
       .returning();
     return result[0];
