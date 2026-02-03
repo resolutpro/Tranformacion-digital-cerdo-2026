@@ -269,7 +269,14 @@ export function registerRoutes(app: Express): Server {
 
       const createdReadings = [];
       for (const r of readings) {
-        createdReadings.push(await storage.createSensorReading(r));
+        const created = await storage.createSensorReading(r);
+        createdReadings.push(created);
+        
+        // Si el dato es marcado como real (isSimulated: false) o si el usuario quiere alertas
+        // El usuario pidió que si el dato se marca como real, salte la alerta.
+        if (r.isSimulated === false) {
+          await storage.checkAndCreateAlerts(sensor, r.value);
+        }
       }
 
       res.json({ message: "Simulación completada", count: createdReadings.length });

@@ -180,30 +180,7 @@ class MqttService {
       });
 
       // --- Alertas Preventivas ---
-      const min = sensor.validationMin ? Number(sensor.validationMin) : null;
-      const max = sensor.validationMax ? Number(sensor.validationMax) : null;
-
-      if (min !== null && numericValue < min) {
-        await storage.createAlert({
-          organizationId: sensor.organizationId,
-          sensorId: sensor.id,
-          zoneId: sensor.zoneId,
-          type: "min_breach",
-          value: readingValue,
-          threshold: sensor.validationMin!.toString(),
-          isRead: false,
-        });
-      } else if (max !== null && numericValue > max) {
-        await storage.createAlert({
-          organizationId: sensor.organizationId,
-          sensorId: sensor.id,
-          zoneId: sensor.zoneId,
-          type: "max_breach",
-          value: readingValue,
-          threshold: sensor.validationMax!.toString(),
-          isRead: false,
-        });
-      }
+      await storage.checkAndCreateAlerts(sensor, readingValue);
     } catch (error) {
       logger.error(`Error processing message for sensor ${sensor.id}`, error);
     }

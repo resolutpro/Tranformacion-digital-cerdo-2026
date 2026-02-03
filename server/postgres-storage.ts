@@ -111,6 +111,34 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async checkAndCreateAlerts(sensor: Sensor, readingValue: string): Promise<void> {
+    const numericValue = Number(readingValue);
+    const min = sensor.validationMin ? Number(sensor.validationMin) : null;
+    const max = sensor.validationMax ? Number(sensor.validationMax) : null;
+
+    if (min !== null && numericValue < min) {
+      await this.createAlert({
+        organizationId: sensor.organizationId,
+        sensorId: sensor.id,
+        zoneId: sensor.zoneId,
+        type: "min_breach",
+        value: readingValue,
+        threshold: sensor.validationMin!.toString(),
+        isRead: false,
+      });
+    } else if (max !== null && numericValue > max) {
+      await this.createAlert({
+        organizationId: sensor.organizationId,
+        sensorId: sensor.id,
+        zoneId: sensor.zoneId,
+        type: "max_breach",
+        value: readingValue,
+        threshold: sensor.validationMax!.toString(),
+        isRead: false,
+      });
+    }
+  }
+
   async markAlertAsRead(id: string, organizationId: string): Promise<void> {
     await this.db
       .update(alerts)

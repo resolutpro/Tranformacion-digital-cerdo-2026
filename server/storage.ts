@@ -88,6 +88,7 @@ export interface IStorage {
   getAlerts(organizationId: string): Promise<Alert[]>;
   getUnreadAlertsCount(organizationId: string): Promise<number>;
   createAlert(alert: InsertAlert): Promise<Alert>;
+  checkAndCreateAlerts(sensor: Sensor, readingValue: string): Promise<void>;
   markAlertAsRead(id: string, organizationId: string): Promise<void>;
 }
 
