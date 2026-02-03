@@ -232,30 +232,35 @@ export function registerRoutes(app: Express): Server {
       const now = new Date();
       const baseTime = useRealtime ? now.getTime() : now.getTime();
 
+      // Ensure values are numbers
+      const baseValue = parseFloat(value) || 0;
+      const minVal = parseFloat(minValue) || 0;
+      const maxVal = parseFloat(maxValue) || 0;
+
       if (mode === 'single') {
-        const val = addNoise ? value + (Math.random() - 0.5) * (value * 0.05) : value;
+        const val = addNoise ? baseValue + (Math.random() - 0.5) * (baseValue * 0.05) : baseValue;
         readings.push({
           sensorId,
-          value: val.toString(),
+          value: val.toFixed(2),
           timestamp: new Date(baseTime),
           isSimulated: markAsSimulated
         });
       } else if (mode === 'range') {
-        const val = Math.random() * (maxValue - minValue) + minValue;
+        const val = Math.random() * (maxVal - minVal) + minVal;
         readings.push({
           sensorId,
-          value: val.toString(),
+          value: val.toFixed(2),
           timestamp: new Date(baseTime),
           isSimulated: markAsSimulated
         });
       } else if (mode === 'burst') {
-        const totalReadings = count || 10;
-        const timeGap = (interval || 30) * 1000;
+        const totalReadings = parseInt(count) || 10;
+        const timeGap = (parseInt(interval) || 30) * 1000;
         for (let i = 0; i < totalReadings; i++) {
-          const val = value + (Math.random() - 0.5) * (value * 0.1);
+          const val = baseValue + (Math.random() - 0.5) * (baseValue * 0.1);
           readings.push({
             sensorId,
-            value: val.toString(),
+            value: val.toFixed(2),
             timestamp: new Date(baseTime - (totalReadings - 1 - i) * timeGap),
             isSimulated: markAsSimulated
           });
