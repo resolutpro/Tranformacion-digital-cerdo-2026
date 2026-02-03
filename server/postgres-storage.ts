@@ -112,28 +112,32 @@ export class PostgresStorage implements IStorage {
   }
 
   async checkAndCreateAlerts(sensor: Sensor, readingValue: string): Promise<void> {
-    const numericValue = Number(readingValue);
-    const min = sensor.validationMin ? Number(sensor.validationMin) : null;
-    const max = sensor.validationMax ? Number(sensor.validationMax) : null;
+    const numericValue = parseFloat(readingValue);
+    const min = sensor.validationMin ? parseFloat(sensor.validationMin.toString()) : null;
+    const max = sensor.validationMax ? parseFloat(sensor.validationMax.toString()) : null;
+    
+    console.log(`[ALERT-CHECK] Sensor: ${sensor.id}, Value: ${numericValue}, Min: ${min}, Max: ${max}`);
 
-    if (min !== null && numericValue < min) {
+    if (min !== null && !isNaN(numericValue) && numericValue < min) {
+      console.log(`[ALERT-CHECK] MIN BREACH: ${numericValue} < ${min}`);
       await this.createAlert({
         organizationId: sensor.organizationId,
         sensorId: sensor.id,
         zoneId: sensor.zoneId,
         type: "min_breach",
         value: readingValue,
-        threshold: sensor.validationMin!.toString(),
+        threshold: min.toString(),
         isRead: false,
       });
-    } else if (max !== null && numericValue > max) {
+    } else if (max !== null && !isNaN(numericValue) && numericValue > max) {
+      console.log(`[ALERT-CHECK] MAX BREACH: ${numericValue} > ${max}`);
       await this.createAlert({
         organizationId: sensor.organizationId,
         sensorId: sensor.id,
         zoneId: sensor.zoneId,
         type: "max_breach",
         value: readingValue,
-        threshold: sensor.validationMax!.toString(),
+        threshold: max.toString(),
         isRead: false,
       });
     }

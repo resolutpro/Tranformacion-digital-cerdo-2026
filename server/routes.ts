@@ -274,7 +274,11 @@ export function registerRoutes(app: Express): Server {
         
         // Si el dato es marcado como real (isSimulated: false) o si el usuario quiere alertas
         // El usuario pidió que si el dato se marca como real, salte la alerta.
-        if (r.isSimulated === false) {
+        console.log(`[SIMULATE] Reading data:`, JSON.stringify(r));
+        const isSimulated = r.isSimulated === true || r.isSimulated === 'true';
+
+        if (!isSimulated) {
+          console.log(`[SIMULATE] Real data detected, checking alerts for sensor ${sensor.id}`);
           await storage.checkAndCreateAlerts(sensor, r.value);
         }
       }
