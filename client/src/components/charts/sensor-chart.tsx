@@ -6,10 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
-import { Loader2 } from "lucide-react";
+import { Loader2, Calendar as CalendarIcon } from "lucide-react";
 import type { Sensor, SensorReading } from "@shared/schema";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 // Assume apiRequest is defined elsewhere, e.g.:
 // import { apiRequest } from "@/lib/api"; 
@@ -57,6 +60,7 @@ const getDateRanges = () => {
 export function SensorChart({ sensors }: SensorChartProps) {
   const [selectedSensorId, setSelectedSensorId] = useState<string>("all");
   const [timeRange, setTimeRange] = useState("today");
+  const [customDate, setCustomDate] = useState<Date | undefined>(new Date());
   const [includeSimulated, setIncludeSimulated] = useState(true);
   const [isLive, setIsLive] = useState(false);
 
@@ -66,9 +70,13 @@ export function SensorChart({ sensors }: SensorChartProps) {
       case "today":
         return { start: startOfDay(now), end: endOfDay(now) };
       case "7days":
-        return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) }; // Include today + 6 days = 7 days total
+        return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) };
       case "30days":
-        return { start: startOfDay(subDays(now, 29)), end: endOfDay(now) }; // Include today + 29 days = 30 days total
+        return { start: startOfDay(subDays(now, 29)), end: endOfDay(now) };
+      case "custom":
+        return customDate 
+          ? { start: startOfDay(customDate), end: endOfDay(customDate) }
+          : { start: startOfDay(now), end: endOfDay(now) };
       default:
         return { start: startOfDay(now), end: endOfDay(now) };
     }
@@ -223,6 +231,34 @@ export function SensorChart({ sensors }: SensorChartProps) {
             >
               30d
             </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={timeRange === "custom" ? "default" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "rounded-l-none border-l flex-1 sm:flex-none font-normal",
+                    !customDate && "text-muted-foreground"
+                  )}
+                  data-testid="button-range-custom"
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                  <span className="sr-only">Seleccionar fecha</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={customDate}
+                  onSelect={(date) => {
+                    setCustomDate(date);
+                    setTimeRange("custom");
+                  }}
+                  initialFocus
+                  locale={es}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 

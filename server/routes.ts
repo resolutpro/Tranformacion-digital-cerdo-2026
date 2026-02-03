@@ -196,6 +196,81 @@ export function registerRoutes(app: Express): Server {
     }),
   );
 
+  app.get(
+    "/api/sensors/:id/readings/latest",
+    requireAuth,
+    asyncHandler(async (req: any, res: any) => {
+      const reading = await storage.getLatestReadingBySensor(req.params.id);
+      if (!reading) return res.status(404).json({ message: "No hay lecturas" });
+      res.json(reading);
+    }),
+  );
+
+  app.get(
+    "/api/sensors/:id/readings",
+    requireAuth,
+    asyncHandler(async (req: any, res: any) => {
+      const startTime = req.query.startTime ? new Date(req.query.startTime as string) : undefined;
+      const endTime = req.query.endTime ? new Date(req.query.endTime as string) : undefined;
+      const includeSimulated = req.query.includeSimulated === 'true';
+      const readings = await storage.getSensorReadings(req.params.id, startTime, endTime, includeSimulated);
+      res.json(readings);
+    }),
+  );
+
+  app.post(
+    "/api/sensors/:id/simulate",
+    requireAuth,
+    asyncHandler(async (req: any, res: any) => {
+      const sensorId = req.params.id;
+      const sensor = await storage.getSensor(sensorId);
+      if (!sensor) return res.status(404).json({ message: "Sensor no encontrado" });
+
+      const { mode, value, minValue, maxValue, interval, duration, count, addNoise, markAsSimulated, useRealtime } = req.body;
+
+      const readings = [];
+      const now = new Date();
+      const baseTime = useRealtime ? now.getTime() : now.getTime();
+
+      if (mode === 'single') {
+        const val = addNoise ? value + (Math.random() - 0.5) * (value * 0.05) : value;
+        readings.push({
+          sensorId,
+          value: val.toString(),
+          timestamp: new Date(baseTime),
+          isSimulated: markAsSimulated
+        });
+      } else if (mode === 'range') {
+        const val = Math.random() * (maxValue - minValue) + minValue;
+        readings.push({
+          sensorId,
+          value: val.toString(),
+          timestamp: new Date(baseTime),
+          isSimulated: markAsSimulated
+        });
+      } else if (mode === 'burst') {
+        const totalReadings = count || 10;
+        const timeGap = (interval || 30) * 1000;
+        for (let i = 0; i < totalReadings; i++) {
+          const val = value + (Math.random() - 0.5) * (value * 0.1);
+          readings.push({
+            sensorId,
+            value: val.toString(),
+            timestamp: new Date(baseTime - (totalReadings - 1 - i) * timeGap),
+            isSimulated: markAsSimulated
+          });
+        }
+      }
+
+      const createdReadings = [];
+      for (const r of readings) {
+        createdReadings.push(await storage.createSensorReading(r));
+      }
+
+      res.json({ message: "Simulación completada", count: createdReadings.length });
+    }),
+  );
+
   const httpServer = createServer(app);
   return httpServer;
 }
