@@ -20,7 +20,7 @@ export function Header() {
         <Button 
           variant="ghost" 
           size="sm" 
-          className="md:hidden p-0 h-8 w-8"
+          className="lg:hidden p-0 h-8 w-8"
           onClick={() => setCollapsed(!collapsed)}
         >
           <Menu className="h-5 w-5" />

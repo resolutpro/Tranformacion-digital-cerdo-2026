@@ -134,6 +134,10 @@ export default function Dashboard() {
     );
   }
 
+  const hasLotes = dashboardData ? Object.values(dashboardData.loteCounts).some(
+    (count) => count > 0,
+  ) : false;
+
   if (!dashboardData || (!hasLotes && dashboardData.zoneActivity.length === 0)) {
     return (
       <MainLayout>
@@ -149,9 +153,6 @@ export default function Dashboard() {
     );
   }
 
-  const hasLotes = Object.values(dashboardData.loteCounts).some(
-    (count) => count > 0,
-  );
   const totalActiveLotes = Object.entries(dashboardData.loteCounts)
     .filter(([key]) => key !== "unassigned" && key !== "finished")
     .reduce((sum, [_, count]) => sum + count, 0);
