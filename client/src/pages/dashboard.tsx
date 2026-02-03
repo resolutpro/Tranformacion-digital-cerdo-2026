@@ -134,23 +134,16 @@ export default function Dashboard() {
     );
   }
 
-  if (!dashboardData) {
+  if (!dashboardData || (!hasLotes && dashboardData.zoneActivity.length === 0)) {
     return (
       <MainLayout>
         <div className="text-center py-12">
           <p className="text-muted-foreground">
-            No hay datos de lotes y zonas disponibles
+            No hay zonas ni lotes creados todavía.
           </p>
-          <div className="flex gap-4 justify-center mt-6">
-            <Link href="/lotes">
-              <Button data-testid="link-add-lotes">Añadir lotes</Button>
-            </Link>
-            <Link href="/zona/cria">
-              <Button variant="outline" data-testid="link-add-zones">
-                Añadir zonas
-              </Button>
-            </Link>
-          </div>
+          <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+            Para comenzar, vaya al menú a <strong>Lotes</strong> para crear lotes o a <strong>Cría, Engorde, Matadero o Secadero</strong> para crear una nueva zona.
+          </p>
         </div>
       </MainLayout>
     );
@@ -245,21 +238,14 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!hasLotes ? (
+        {!hasLotes && dashboardData.zoneActivity.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-6">
-              Añade lotes y zonas para visualizar información
+            <p className="text-muted-foreground mb-2">
+              No hay zonas ni lotes creados todavía.
             </p>
-            <div className="flex gap-4 justify-center">
-              <Link href="/lotes">
-                <Button data-testid="link-add-lotes">Añadir lotes</Button>
-              </Link>
-              <Link href="/zona/cria">
-                <Button variant="outline" data-testid="link-add-zones">
-                  Añadir zonas
-                </Button>
-              </Link>
-            </div>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Para comenzar, vaya al menú a <strong>Lotes</strong> para crear lotes o a <strong>Cría, Engorde, Matadero o Secadero</strong> para crear una nueva zona.
+            </p>
           </div>
         ) : (
           <>

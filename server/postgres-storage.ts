@@ -85,10 +85,24 @@ export class PostgresStorage implements IStorage {
   }
 
   // --- Alertas ---
-  async getAlerts(organizationId: string): Promise<Alert[]> {
+  async getAlerts(organizationId: string): Promise<any[]> {
     return await this.db
-      .select()
+      .select({
+        id: alerts.id,
+        organizationId: alerts.organizationId,
+        sensorId: alerts.sensorId,
+        zoneId: alerts.zoneId,
+        type: alerts.type,
+        value: alerts.value,
+        threshold: alerts.threshold,
+        isRead: alerts.isRead,
+        createdAt: alerts.createdAt,
+        zoneName: zones.name,
+        sensorName: sensors.name,
+      })
       .from(alerts)
+      .innerJoin(zones, eq(alerts.zoneId, zones.id))
+      .innerJoin(sensors, eq(alerts.sensorId, sensors.id))
       .where(eq(alerts.organizationId, organizationId))
       .orderBy(desc(alerts.createdAt));
   }

@@ -41,8 +41,8 @@ export function Sidebar({ className }: SidebarProps) {
     <div 
       className={cn(
         "fixed left-0 top-0 z-50 h-full bg-card border-r border-border transition-all duration-300",
-        "hidden md:block", // Hide on mobile
-        collapsed ? "w-16" : "w-64",
+        collapsed ? "w-0 md:w-16" : "w-64",
+        collapsed ? "-translate-x-full md:translate-x-0" : "translate-x-0",
         className
       )}
       data-testid="sidebar"

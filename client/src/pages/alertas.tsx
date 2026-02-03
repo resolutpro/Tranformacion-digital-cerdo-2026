@@ -66,7 +66,8 @@ export default function AlertasPage() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="w-[180px]">Fecha</TableHead>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Zona / Sensor</TableHead>
                   <TableHead>Tipo de Alerta</TableHead>
                   <TableHead className="text-center">Valor</TableHead>
                   <TableHead className="text-center">Límite</TableHead>
@@ -95,6 +96,12 @@ export default function AlertasPage() {
                     >
                       <TableCell className="text-sm font-medium">
                         {format(new Date(alert.createdAt), "dd MMM, HH:mm", { locale: es })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-semibold">{(alert as any).zoneName}</span>
+                          <span className="text-xs text-muted-foreground">{(alert as any).sensorName}</span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">

@@ -23,19 +23,26 @@ export const useSidebarState = () => {
 };
 
 export function MainLayout({ children }: MainLayoutProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   return (
     <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
       <div className="min-h-screen bg-background">
         <Sidebar />
-        <div className={`transition-all duration-300 ${collapsed ? 'md:pl-16' : 'md:pl-64'} pl-0`}>
+        <div className={`transition-all duration-300 ${collapsed ? 'md:pl-16' : 'md:pl-64'} pl-0 overflow-x-hidden`}>
           <Header />
           <main className="p-4 md:p-6">
             {children}
           </main>
           <Footer />
         </div>
+        {/* Overlay for mobile when sidebar is open */}
+        {!collapsed && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden" 
+            onClick={() => setCollapsed(true)}
+          />
+        )}
       </div>
     </SidebarContext.Provider>
   );
