@@ -20,7 +20,8 @@ import MataderoPage from "@/pages/matadero";
 import SecaderoPage from "@/pages/secadero";
 import DistribucionPage from "@/pages/distribucion";
 import ZoneMovementPage from "@/pages/zona-movimiento";
-import AlertasPage from "@/pages/alertas"; // Nueva página
+import AlertasPage from "@/pages/alertas";
+import AiPredictionPage from "@/pages/ai-prediction";
 
 function Router() {
   return (
@@ -43,6 +44,7 @@ function Router() {
       <ProtectedRoute path="/seguimiento" component={Seguimiento} />
       <ProtectedRoute path="/trazabilidad" component={Trazabilidad} />
       <ProtectedRoute path="/alertas" component={AlertasPage} />
+      <ProtectedRoute path="/ia-prediccion" component={AiPredictionPage} />
       <Route component={NotFound} />
     </Switch>
   );

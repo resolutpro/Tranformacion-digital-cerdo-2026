@@ -15,6 +15,7 @@ import {
   QrCode,
   Menu,
   ChevronLeft,
+  BrainCircuit,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ const navigationItems = [
   { icon: Truck, label: "Distribución", href: "/distribucion" },
   { icon: Route, label: "Seguimiento de Lotes", href: "/seguimiento" },
   { icon: QrCode, label: "Trazabilidad Pública", href: "/trazabilidad" },
+  { icon: BrainCircuit, label: "IA y Análisis", href: "/ia-prediccion" },
 ];
 
 export function Sidebar({ className }: SidebarProps) {

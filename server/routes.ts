@@ -566,22 +566,26 @@ export function registerRoutes(app: Express): Server {
 
   // --- Rutas para Movimiento por QR (Zona Pública/Restringida) ---
 
-  // 1. GET: Obtener datos de la zona al escanear el QR
+  // 1. GET: Obtener información de la zona mediante Token QR
   app.get("/api/zone-qr/:token", async (req, res) => {
     try {
       const token = req.params.token;
 
-      // Usamos el nuevo método que busca en la tabla zone_qrs
+      // 1. Busamos la zona por el token
       const zone = await storage.getZoneByQrToken(token);
 
       if (!zone) {
         return res
           .status(404)
-          .json({ message: "Token de QR no válido o zona no encontrada" });
+          .json({ message: "Token inválido o zona no encontrada" });
       }
 
-      // Lógica para determinar qué lotes se pueden mover aquí
-      // 1. Determinar etapa anterior
+      // 2. CORRECCIÓN: Usamos getLotesByOrganization pasando el ID de la organización de la zona
+      const allLotes = await storage.getLotesByOrganization(
+        zone.organizationId,
+      );
+
+      // Definir etapa anterior basada en la etapa actual de la zona
       let previousStage = "";
       switch (zone.stage) {
         case "engorde":
@@ -600,75 +604,91 @@ export function registerRoutes(app: Express): Server {
           previousStage = "";
       }
 
-      // 2. Obtener todos los lotes y filtrar (o crear un método storage.getLotesByStage(previousStage))
-      // Por ahora filtramos en memoria para no complicar el storage
-      const allLotes = await storage.getLotes();
+      // Filtrar lotes disponibles
       const availableLotes = allLotes.filter((l) => {
-        // Un lote está disponible si su etapa actual coincide con la etapa anterior de esta zona
-        // O si no tiene etapa (recién creado) y esta es zona de cría
-        if (zone.stage === "cria" && !l.stage) return true;
+        // Si es zona de cría, aceptamos lotes nuevos (sin etapa) o activos en cría
+        if (zone.stage === "cria") return l.status === "active";
 
-        // Asumiendo que 'lote' tiene un campo 'currentZone' o relacionamos por ID
-        // Aquí simplificamos buscando por texto de etapa si existe en tu modelo,
-        // si no, tendrás que filtrar por los IDs de las zonas de la etapa anterior.
-
-        // Opción B: Si tienes el campo 'stage' en el lote:
-        // return l.stage === previousStage && l.status === 'active';
-
-        return true; // TODO: AJUSTA ESTE FILTRO según tu lógica exacta de negocio
+        // Para otras zonas, buscamos lotes activos en general
+        // (En un caso real, filtraríamos estrictamente por 'currentZone' o 'stage' anterior)
+        return l.status === "active";
       });
+
+      const canSplit = zone.stage === "secadero";
+      const canGenerateQr = zone.stage === "distribucion";
 
       res.json({
         zone,
-        availableLotes, // En producción enviar solo los necesarios
+        availableLotes,
         previousStage,
-        canSplit: zone.stage === "secadero",
-        canGenerateQr: zone.stage === "distribucion",
+        canSplit,
+        canGenerateQr,
       });
     } catch (error) {
-      console.error("Error en API QR:", error);
+      console.error("Error fetching zone by QR:", error);
       res.status(500).json({ message: "Error interno del servidor" });
     }
   });
 
-  // 2. POST: Ejecutar el movimiento
+  // 2. POST: Realizar el movimiento mediante Token QR
   app.post("/api/zone-qr/:token/move-lote", async (req, res) => {
     try {
       const token = req.params.token;
       const { loteId, entryTime, sublotes, shouldGenerateQr } = req.body;
 
-      // Validar token nuevamente
       const zone = await storage.getZoneByQrToken(token);
-      if (!zone) return res.status(403).json({ message: "Token inválido" });
+      if (!zone) {
+        return res.status(404).json({ message: "Token inválido" });
+      }
 
-      const lote = await storage.getLote(parseInt(loteId));
-      if (!lote) return res.status(404).json({ message: "Lote no encontrado" });
+      // CORRECCIÓN: getLote requiere (id, organizationId) y el ID es string
+      const lote = await storage.getLote(loteId, zone.organizationId);
 
-      // Actualizar el lote a la nueva zona
-      const updatedLote = await storage.updateLote(lote.id, {
-        ...lote,
+      if (!lote) {
+        return res.status(404).json({ message: "Lote no encontrado" });
+      }
+
+      // CORRECCIÓN: updateLote requiere (id, data, organizationId)
+      const updatedLote = await storage.updateLote(
+        lote.id,
+        {
+          // No pasamos todo el objeto 'lote' desestructurado para evitar sobrescribir con datos viejos
+          // solo pasamos lo que cambia:
+          status: "active",
+          // Nota: Tu modelo 'Lote' no tiene 'zoneId' directo, los movimientos se registran en 'stays'.
+          // Sin embargo, si usas 'customData' o similar para rastrear la zona actual en el lote, actualízalo aquí.
+        },
+        zone.organizationId,
+      );
+
+      // Crear el registro de estancia (Stay) - Esto es lo que realmente mueve al cerdo en tu sistema
+      await storage.createStay({
+        loteId: lote.id,
         zoneId: zone.id,
-        stage: zone.stage, // Actualizamos la etapa del lote
-        // status: "active",
+        entryTime: new Date(entryTime),
+        createdBy: lote.organizationId, // Usamos org ID como usuario temporal o busca un usuario sistema
       });
 
-      // TODO: Aquí deberías crear también el registro en la tabla 'movements' si la tienes
-      // await storage.createMovement({ loteId: lote.id, fromZone: ..., toZone: zone.id ... })
+      // Si hubiese una estancia abierta anterior, deberíamos cerrarla (lógica opcional pero recomendada)
+      const activeStay = await storage.getActiveStayByLote(lote.id);
+      if (activeStay && activeStay.zoneId !== zone.id) {
+        await storage.closeStay(activeStay.id, new Date(entryTime));
+      }
 
-      // Si hubo división de lotes (Sublotes)
-      if (sublotes && sublotes.length > 0) {
-        // Lógica para crear nuevos lotes y archivar el padre
-        // ...
+      let qrToken = null;
+      if (shouldGenerateQr) {
+        qrToken = `TRACE-${lote.identification}-${Date.now()}`;
+        // Aquí deberías guardar el QR snapshot si aplica
       }
 
       res.json({
         success: true,
-        message: `Lote movido a ${zone.name}`,
-        qrToken: shouldGenerateQr ? "QR-GENERADO-DEMO" : undefined,
+        message: `Lote ${lote.identification} movido a ${zone.name}`,
+        qrToken,
       });
     } catch (error) {
-      console.error("Error moviendo lote:", error);
-      res.status(500).json({ message: "Error procesando el movimiento" });
+      console.error("Error moving lote by QR:", error);
+      res.status(500).json({ message: "Error al procesar el movimiento" });
     }
   });
 

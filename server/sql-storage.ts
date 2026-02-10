@@ -1342,20 +1342,34 @@ export class SqlStorage implements IStorage {
   }
 
   async getZoneByQrToken(token: string): Promise<Zone | undefined> {
-      // Realizamos un JOIN: Seleccionamos la zona donde el zone_qrs coincida con el token
-      const result = await db
-        .select({
-          zone: zones,
-        })
-        .from(zoneQrs)
-        .innerJoin(zones, eq(zoneQrs.zoneId, zones.id))
-        .where(eq(zoneQrs.publicToken, token))
-        .limit(1);
+    // Hacemos un JOIN para obtener la zona directamente desde el token
+    const stmt = this.db.prepare(`
+      SELECT z.* FROM zones z
+      JOIN zone_qrs zq ON z.id = zq.zone_id
+      WHERE zq.public_token = ?
+    `);
+    const row = stmt.get(token) as any;
+    return row ? this.mapZone(row) : undefined;
+  }
+  async getZoneQr(zoneId: string): Promise<ZoneQr | undefined> {
+    const stmt = this.db.prepare("SELECT * FROM zone_qrs WHERE zone_id = ?");
+    const row = stmt.get(zoneId) as any;
+    return row ? this.mapZoneQr(row) : undefined;
+  }
+  async createZoneQr(
+    zoneQr: InsertZoneQr & { publicToken: string },
+  ): Promise<ZoneQr> {
+    const id = randomUUID();
+    const stmt = this.db.prepare(
+      "INSERT INTO zone_qrs (id, zone_id, public_token) VALUES (?, ?, ?)",
+    );
+    stmt.run(id, zoneQr.zoneId, zoneQr.publicToken);
 
-      if (result.length === 0) return undefined;
-
-      // Retornamos solo la parte de la zona
-      return result[0].zone;
-    }
+    return {
+      id,
+      zoneId: zoneQr.zoneId,
+      publicToken: zoneQr.publicToken,
+      createdAt: new Date(),
+    };
   }
 }

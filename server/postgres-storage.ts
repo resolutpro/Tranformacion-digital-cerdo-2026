@@ -60,7 +60,7 @@ const PostgresSessionStore = connectPg(session);
 
 function cleanUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined && v !== "")
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== ""),
   ) as Partial<T>;
 }
 
@@ -125,12 +125,21 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
-  async checkAndCreateAlerts(sensor: Sensor, readingValue: string): Promise<void> {
+  async checkAndCreateAlerts(
+    sensor: Sensor,
+    readingValue: string,
+  ): Promise<void> {
     const numericValue = parseFloat(readingValue);
-    const min = sensor.validationMin ? parseFloat(sensor.validationMin.toString()) : null;
-    const max = sensor.validationMax ? parseFloat(sensor.validationMax.toString()) : null;
-    
-    console.log(`[ALERT-CHECK] Sensor: ${sensor.id}, Value: ${numericValue}, Min: ${min}, Max: ${max}`);
+    const min = sensor.validationMin
+      ? parseFloat(sensor.validationMin.toString())
+      : null;
+    const max = sensor.validationMax
+      ? parseFloat(sensor.validationMax.toString())
+      : null;
+
+    console.log(
+      `[ALERT-CHECK] Sensor: ${sensor.id}, Value: ${numericValue}, Min: ${min}, Max: ${max}`,
+    );
 
     if (min !== null && !isNaN(numericValue) && numericValue < min) {
       console.log(`[ALERT-CHECK] MIN BREACH: ${numericValue} < ${min}`);
@@ -345,21 +354,24 @@ export class PostgresStorage implements IStorage {
       const result = await this.db
         .select()
         .from(zones)
-        .where(
-          and(
-            eq(zones.id, id),
-            eq(zones.organizationId, organizationId)
-          )
-        )
+        .where(and(eq(zones.id, id), eq(zones.organizationId, organizationId)))
         .limit(1);
-      
+
       if (!result[0]) {
         // Búsqueda de respaldo solo por ID para depuración
-        const backup = await this.db.select().from(zones).where(eq(zones.id, id)).limit(1);
+        const backup = await this.db
+          .select()
+          .from(zones)
+          .where(eq(zones.id, id))
+          .limit(1);
         if (backup[0]) {
-          console.warn(`[STORAGE] Zona encontrada por ID ${id} pero pertenece a otra org: ${backup[0].organizationId} (esperada: ${organizationId})`);
+          console.warn(
+            `[STORAGE] Zona encontrada por ID ${id} pero pertenece a otra org: ${backup[0].organizationId} (esperada: ${organizationId})`,
+          );
         } else {
-          console.warn(`[STORAGE] Zona no encontrada ni siquiera por ID: ${id}`);
+          console.warn(
+            `[STORAGE] Zona no encontrada ni siquiera por ID: ${id}`,
+          );
         }
       }
       return result[0];
@@ -747,5 +759,17 @@ export class PostgresStorage implements IStorage {
         ),
       )
       .orderBy(sensorReadings.timestamp);
+  }
+
+  async getZoneByQrToken(token: string): Promise<Zone | undefined> {
+    const result = await this.db
+      .select({ zone: zones })
+      .from(zones)
+      .innerJoin(zoneQrs, eq(zones.id, zoneQrs.zoneId))
+      .where(eq(zoneQrs.publicToken, token))
+      .limit(1);
+
+    if (result.length === 0) return undefined;
+    return result[0].zone;
   }
 }
