@@ -9,6 +9,8 @@ import {
   decimal,
   json,
   uuid,
+  serial,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -221,6 +223,18 @@ export const alerts = pgTable("alerts", {
   threshold: decimal("threshold", { precision: 15, scale: 6 }).notNull(),
   isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const blockchain = pgTable("blockchain", {
+  id: serial("id").primaryKey(),
+  index: integer("index").notNull(),
+  timestamp: text("timestamp").notNull(), // Fecha ISO
+  actionType: text("action_type").notNull(), // Ej: "REGISTRO_PESO", "CERTIFICACION_CALIDAD"
+  data: jsonb("data").notNull(), // Los datos: { peso: 150, loteId: 1 }
+  previousHash: text("previous_hash").notNull(), // El hash del bloque anterior
+  hash: text("hash").notNull(), // El hash de este bloque (ID único criptográfico)
+  loteId: integer("lote_id"), // Para filtrar por lote
+  isValid: boolean("is_valid").default(true), // Estado de verificación
 });
 
 export const insertAlertSchema = createInsertSchema(alerts).omit({

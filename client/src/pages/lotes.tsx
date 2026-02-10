@@ -21,6 +21,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import type { Lote } from "@shared/schema";
+import QRCode from "react-qr-code";
 
 export default function Lotes() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -436,6 +437,74 @@ export default function Lotes() {
         />
       </div>
     </MainLayout>
+  );
+}
+
+export function BlockchainTab({ loteId }) {
+  const { data } = useQuery({ queryKey: [`/api/blockchain/${loteId}`] });
+  const publicUrl = `${window.location.origin}/public-trace/${loteId}`;
+
+  return (
+    <div className="grid md:grid-cols-2 gap-8">
+      {/* Columna 1: El Ledger Inmutable */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Registro Blockchain Inmutable</CardTitle>
+          <CardDescription>
+            Estado de Integridad:{" "}
+            {data?.isIntegrityVerified ? (
+              <span className="text-green-600 font-bold">
+                VERIFICADO (Seguro)
+              </span>
+            ) : (
+              <span className="text-red-600 font-bold">CORRUPTO</span>
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[400px]">
+            {data?.chain.map((block) => (
+              <div
+                key={block.hash}
+                className="mb-4 p-3 border rounded bg-muted/50 text-xs font-mono"
+              >
+                <div className="flex justify-between text-primary font-bold">
+                  <span>Block #{block.index}</span>
+                  <span>{new Date(block.timestamp).toLocaleDateString()}</span>
+                </div>
+                <div className="my-1 text-blue-600">{block.actionType}</div>
+                <div className="truncate text-muted-foreground">
+                  Prev: {block.previousHash}
+                </div>
+                <div className="truncate font-bold text-green-700">
+                  Hash: {block.hash}
+                </div>
+              </div>
+            ))}
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      {/* Columna 2: Consumidor Final (QR) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Etiquetado Inteligente</CardTitle>
+          <CardDescription>Escanea para verificar origen</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col items-center justify-center space-y-4">
+          <div className="bg-white p-4 rounded shadow-lg">
+            <QRCode value={publicUrl} size={200} />
+          </div>
+          <p className="text-sm text-center text-muted-foreground">
+            Este código QR permite a distribuidores y consumidores auditar la
+            cadena de frío y alimentación sin intermediarios.
+          </p>
+          <Button onClick={() => window.open(publicUrl, "_blank")}>
+            Simular Vista Cliente
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

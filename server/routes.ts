@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { mqttService } from "./mqtt-service";
+import { BlockchainService, SmartContracts } from "./blockchain";
 
 function requireAuth(req: any, res: any, next: any) {
   if (!req.isAuthenticated || !req.isAuthenticated()) {
@@ -634,42 +635,43 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/zone-qr/:token/move-lote", async (req, res) => {
     try {
       const token = req.params.token;
-      const { loteId, entryTime, sublotes, shouldGenerateQr } = req.body;
+      const { loteId, entryTime, shouldGenerateQr } = req.body;
 
       const zone = await storage.getZoneByQrToken(token);
-      if (!zone) {
-        return res.status(404).json({ message: "Token inválido" });
-      }
+      if (!zone) return res.status(404).json({ message: "Token inválido" });
 
-      // CORRECCIÓN: getLote requiere (id, organizationId) y el ID es string
       const lote = await storage.getLote(loteId, zone.organizationId);
+      if (!lote) return res.status(404).json({ message: "Lote no encontrado" });
 
-      if (!lote) {
-        return res.status(404).json({ message: "Lote no encontrado" });
-      }
-
-      // CORRECCIÓN: updateLote requiere (id, data, organizationId)
-      const updatedLote = await storage.updateLote(
-        lote.id,
-        {
-          // No pasamos todo el objeto 'lote' desestructurado para evitar sobrescribir con datos viejos
-          // solo pasamos lo que cambia:
-          status: "active",
-          // Nota: Tu modelo 'Lote' no tiene 'zoneId' directo, los movimientos se registran en 'stays'.
-          // Sin embargo, si usas 'customData' o similar para rastrear la zona actual en el lote, actualízalo aquí.
-        },
+      // CORRECCIÓN: Buscamos un usuario real de la organización
+      const systemUser = await storage.getFirstUserByOrganization(
         zone.organizationId,
       );
 
-      // Crear el registro de estancia (Stay) - Esto es lo que realmente mueve al cerdo en tu sistema
+      if (!systemUser) {
+        return res
+          .status(500)
+          .json({
+            message: "Error: La organización no tiene usuarios válidos.",
+          });
+      }
+
+      // Actualizar lote
+      await storage.updateLote(
+        lote.id,
+        { status: "active" },
+        zone.organizationId,
+      );
+
+      // Crear estancia usando el ID del usuario encontrado
       await storage.createStay({
         loteId: lote.id,
         zoneId: zone.id,
         entryTime: new Date(entryTime),
-        createdBy: lote.organizationId, // Usamos org ID como usuario temporal o busca un usuario sistema
+        createdBy: systemUser.id, // <--- ID de usuario real (Foreign Key válida)
       });
 
-      // Si hubiese una estancia abierta anterior, deberíamos cerrarla (lógica opcional pero recomendada)
+      // Cerrar estancia anterior
       const activeStay = await storage.getActiveStayByLote(lote.id);
       if (activeStay && activeStay.zoneId !== zone.id) {
         await storage.closeStay(activeStay.id, new Date(entryTime));
@@ -678,19 +680,336 @@ export function registerRoutes(app: Express): Server {
       let qrToken = null;
       if (shouldGenerateQr) {
         qrToken = `TRACE-${lote.identification}-${Date.now()}`;
-        // Aquí deberías guardar el QR snapshot si aplica
+      }
+
+      res.json({ success: true, message: `Movido a ${zone.name}`, qrToken });
+    } catch (error: any) {
+      console.error("Error moving lote by QR:", error);
+      res
+        .status(500)
+        .json({
+          message: "Error al procesar movimiento",
+          details: error.message,
+        });
+    }
+  });
+
+  // --- AI & BI API ---
+  app.get(
+    "/api/ai/analysis",
+    requireAuth,
+    asyncHandler(async (req: any, res: any) => {
+      const organizationId = req.organizationId;
+
+      // 1. Obtener datos reales de la BD
+      const lotes = await storage.getLotesByOrganization(organizationId);
+      const zones = await storage.getZonesByOrganization(organizationId);
+
+      const predictions = [];
+      const sensorCorrelation = [];
+      const feedOptimizationData = []; // Empezamos vacío, nada de datos falsos
+
+      let totalAnimalsInitial = 0;
+      let totalAnimalsCurrent = 0;
+      let activeLotesCount = 0;
+      let globalScoreSum = 0;
+      let alertsCount = 0;
+
+      // 2. Procesar solo si hay lotes
+      for (const lote of lotes) {
+        // Solo nos interesan lotes activos para la predicción actual
+        if (lote.status === "active") {
+          activeLotesCount++;
+          totalAnimalsInitial += lote.initialAnimals;
+          // Si finalAnimals es null, asumimos que siguen todos vivos por ahora (o usar lógica de bajas si tienes tabla de bajas)
+          const currentAnimals = lote.finalAnimals ?? lote.initialAnimals;
+          totalAnimalsCurrent += currentAnimals;
+
+          // Buscar estancia activa
+          const activeStay = await storage.getActiveStayByLote(lote.id);
+
+          let score = 100;
+          let action = "Monitoreo estándar";
+          let status = "success";
+          let avgTemp = 0;
+
+          if (activeStay) {
+            const zone = zones.find((z) => z.id === activeStay.zoneId);
+            if (zone) {
+              // Obtener lecturas REALES de las últimas 24h
+              const readings = await storage.getLatestReadingsByZone(zone.id);
+
+              if (readings.length > 0) {
+                const tempReadings = readings.filter(
+                  (r) => r.sensor.sensorType === "temperature",
+                );
+                if (tempReadings.length > 0) {
+                  const sum = tempReadings.reduce(
+                    (acc, curr) => acc + Number(curr.value),
+                    0,
+                  );
+                  avgTemp = sum / tempReadings.length;
+
+                  // Agregar punto al gráfico solo si hay lectura real
+                  sensorCorrelation.push({
+                    time: new Date().toLocaleTimeString("es-ES", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                    temp: Number(avgTemp.toFixed(1)),
+                    // Crecimiento estimado simple basado en confort térmico (real)
+                    growthRate: Math.max(
+                      0,
+                      100 -
+                        Math.abs(
+                          avgTemp - (zone.temperatureTarget?.max || 20),
+                        ) *
+                          5,
+                    ),
+                  });
+
+                  // Penalizaciones reales
+                  if (zone.temperatureTarget) {
+                    if (avgTemp > zone.temperatureTarget.max) {
+                      score -= 20;
+                      action = "Ventilar: Tª Alta";
+                      status = "warning";
+                      alertsCount++;
+                    } else if (avgTemp < zone.temperatureTarget.min) {
+                      score -= 10;
+                      action = "Calefactar: Tª Baja";
+                      status = "warning";
+                      alertsCount++;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Penalización por mortalidad real (si se registraron bajas)
+          if (
+            lote.finalAnimals !== null &&
+            lote.finalAnimals < lote.initialAnimals
+          ) {
+            const mortality =
+              (lote.initialAnimals - lote.finalAnimals) / lote.initialAnimals;
+            if (mortality > 0.02) {
+              score -= 30;
+              status = "destructive";
+              action = "Alerta: Mortalidad alta";
+            }
+          }
+
+          globalScoreSum += score;
+
+          predictions.push({
+            id: lote.identification,
+            stage: lote.pieceType || "General",
+            animals: currentAnimals,
+            score: Math.max(0, Math.round(score)),
+            action,
+            status,
+            avgTemp: avgTemp > 0 ? avgTemp.toFixed(1) : "N/A",
+          });
+        }
+      }
+
+      // 3. Generar estadísticas globales (BI) solo si hay datos
+      const hasData = activeLotesCount > 0;
+
+      const biStats = {
+        efficiency: hasData
+          ? parseFloat(
+              ((totalAnimalsCurrent / totalAnimalsInitial) * 100).toFixed(1),
+            )
+          : 0,
+        quality: hasData
+          ? globalScoreSum / activeLotesCount > 90
+            ? "Alta"
+            : "Media"
+          : "Sin Datos",
+        feedSaved: 0, // Se calcularía con datos de ingesta reales
+        alertsCount,
+      };
+
+      // 4. Datos de alimentación (BI): Solo generar el mes actual si hay animales comiendo
+      if (hasData) {
+        // Estimación basada en datos actuales (Un cerdo come ~3% de su peso o 1-2kg/día según fase)
+        // Esto es una proyección del mes en curso basada en la carga animal REAL actual
+        const consumoEstimado = totalAnimalsCurrent * 1.5 * 30; // 1.5kg * 30 días (ejemplo)
+        feedOptimizationData.push({
+          month: "Mes Actual (Est.)",
+          consumoReal: consumoEstimado, // Proyección
+          consumoOptimo: consumoEstimado * 0.95, // Meta de optimización del 5%
+          desperdicio: 0,
+        });
       }
 
       res.json({
-        success: true,
-        message: `Lote ${lote.identification} movido a ${zone.name}`,
-        qrToken,
+        predictions,
+        biStats,
+        sensorCorrelation: sensorCorrelation.slice(-15), // Limitar puntos
+        feedOptimizationData,
+        hasData, // Flag útil para el frontend
       });
-    } catch (error) {
-      console.error("Error moving lote by QR:", error);
-      res.status(500).json({ message: "Error al procesar el movimiento" });
-    }
+    }),
+  );
+
+  // --- BLOCKCHAIN API ---
+
+  // 1. Obtener la cadena de bloques de un lote (Trazabilidad Transparente)
+  app.get("/api/blockchain/:loteId", async (req, res) => {
+    const chain = await storage.getBlockchainHistory(req.params.loteId); // Necesitas agregar esto a storage.ts o usar db directo
+    // O usando DB directa aquí si prefieres:
+    // const chain = await db.select().from(blockchain).where(eq(blockchain.loteId, req.params.loteId));
+
+    // Verificar integridad en tiempo real antes de enviar
+    const isSecure = await BlockchainService.verifyChain(
+      Number(req.params.loteId),
+    );
+
+    res.json({ chain, isIntegrityVerified: isSecure });
   });
+
+  // 2. Ejecutar Smart Contract: Certificar Peso (Manual o IoT)
+  app.post(
+    "/api/blockchain/smart-contract/weight",
+    requireAuth,
+    async (req, res) => {
+      const { loteId, weight } = req.body;
+      const result = await SmartContracts.certifyWeight(loteId, weight);
+      res.json({ status: "success", certificate: result });
+    },
+  );
+
+  // 3. Endpoint Público para QR (Sin autenticación para el consumidor final)
+  app.get("/api/public/trace/:loteId", async (req, res) => {
+    // Solo devuelve datos seguros/públicos
+    const chain = await db
+      .select({
+        timestamp: blockchain.timestamp,
+        action: blockchain.actionType,
+        hash: blockchain.hash,
+      })
+      .from(blockchain)
+      .where(eq(blockchain.loteId, req.params.loteId));
+
+    res.json(chain);
+  });
+
+  app.get(
+    "/api/tracking/board",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      // 1. Obtener todos los datos necesarios
+      const lotes = await storage.getLotesByOrganization(req.organizationId);
+      const zones = await storage.getZonesByOrganization(req.organizationId);
+
+      // 2. Inicializar la estructura del tablero
+      const board: any = {
+        sinUbicacion: { zones: [], lotes: [] },
+        cria: { zones: [], lotes: [] },
+        engorde: { zones: [], lotes: [] },
+        matadero: { zones: [], lotes: [] },
+        secadero: { zones: [], lotes: [] },
+        distribucion: { zones: [], lotes: [] },
+        finalizado: { zones: [], lotes: [] },
+      };
+
+      // 3. Clasificar las zonas en sus columnas
+      zones.forEach((zone) => {
+        // Aseguramos que el stage coincida con las claves del objeto board
+        // (asumiendo que en BD se guardan como 'cria', 'engorde', etc.)
+        const stage = zone.stage.toLowerCase();
+        if (board[stage]) {
+          board[stage].zones.push(zone);
+        }
+      });
+
+      // 4. Clasificar los lotes según su ubicación actual
+      for (const lote of lotes) {
+        // Si el lote está finalizado, va directo a la columna finalizado
+        if (lote.status === "finished") {
+          board.finalizado.lotes.push({ ...lote, totalDays: 0 });
+          continue;
+        }
+
+        // Buscamos dónde está el lote ahora mismo
+        const activeStay = await storage.getActiveStayByLote(lote.id);
+
+        if (activeStay) {
+          const zone = zones.find((z) => z.id === activeStay.zoneId);
+          if (zone) {
+            const stage = zone.stage.toLowerCase();
+            if (board[stage]) {
+              // Calcular días en la etapa actual
+              const entry = new Date(activeStay.entryTime);
+              const now = new Date();
+              const diffTime = Math.abs(now.getTime() - entry.getTime());
+              const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              board[stage].lotes.push({
+                ...lote,
+                currentZone: zone,
+                totalDays: totalDays,
+              });
+            } else {
+              // Si la etapa de la zona no es válida, lo mandamos a sin ubicación por seguridad
+              board.sinUbicacion.lotes.push(lote);
+            }
+          } else {
+            // Si tiene estancia pero la zona no existe (error de datos), sin ubicación
+            board.sinUbicacion.lotes.push(lote);
+          }
+        } else {
+          // Si no tiene estancia activa, está sin ubicación
+          board.sinUbicacion.lotes.push(lote);
+        }
+      }
+
+      res.json(board);
+    }),
+  );
+
+  app.post(
+    "/api/lotes/:id/move",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const loteId = req.params.id;
+      const { zoneId, entryTime } = req.body;
+
+      // 1. Validaciones
+      const lote = await storage.getLote(loteId, req.organizationId);
+      if (!lote) return res.status(404).json({ message: "Lote no encontrado" });
+
+      const zone = await storage.getZone(zoneId, req.organizationId);
+      if (!zone) return res.status(404).json({ message: "Zona no encontrada" });
+
+      // 2. Cerrar estancia anterior
+      const activeStay = await storage.getActiveStayByLote(lote.id);
+      if (activeStay && activeStay.zoneId !== zone.id) {
+        await storage.closeStay(activeStay.id, new Date(entryTime));
+      }
+
+      // 3. Crear nueva estancia (Usando el usuario logueado)
+      await storage.createStay({
+        loteId: lote.id,
+        zoneId: zone.id,
+        entryTime: new Date(entryTime),
+        createdBy: req.user.id, // <--- Aquí usamos el usuario autenticado
+      });
+
+      // 4. Actualizar estado del lote
+      await storage.updateLote(
+        lote.id,
+        { status: "active" },
+        req.organizationId,
+      );
+
+      res.json({ success: true, message: "Movimiento registrado" });
+    }),
+  );
 
   const httpServer = createServer(app);
   return httpServer;

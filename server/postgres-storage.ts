@@ -772,4 +772,15 @@ export class PostgresStorage implements IStorage {
     if (result.length === 0) return undefined;
     return result[0].zone;
   }
+
+  async getFirstUserByOrganization(
+    organizationId: string,
+  ): Promise<User | undefined> {
+    const result = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.organizationId, organizationId))
+      .limit(1);
+    return result[0];
+  }
 }
