@@ -125,6 +125,7 @@ export interface IStorage {
   createSensorReading(reading: InsertSensorReading): Promise<SensorReading>;
 
   getZoneQr(zoneId: string): Promise<ZoneQr | undefined>;
+  getZoneByQrToken(token: string): Promise<Zone | undefined>;
   getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined>;
   createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr>;
   getZoneUnsafe(id: number): Promise<Zone | undefined>;

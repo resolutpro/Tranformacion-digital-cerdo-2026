@@ -564,6 +564,114 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // --- Rutas para Movimiento por QR (Zona Pública/Restringida) ---
+
+  // 1. GET: Obtener datos de la zona al escanear el QR
+  app.get("/api/zone-qr/:token", async (req, res) => {
+    try {
+      const token = req.params.token;
+
+      // Usamos el nuevo método que busca en la tabla zone_qrs
+      const zone = await storage.getZoneByQrToken(token);
+
+      if (!zone) {
+        return res
+          .status(404)
+          .json({ message: "Token de QR no válido o zona no encontrada" });
+      }
+
+      // Lógica para determinar qué lotes se pueden mover aquí
+      // 1. Determinar etapa anterior
+      let previousStage = "";
+      switch (zone.stage) {
+        case "engorde":
+          previousStage = "cria";
+          break;
+        case "matadero":
+          previousStage = "engorde";
+          break;
+        case "secadero":
+          previousStage = "matadero";
+          break;
+        case "distribucion":
+          previousStage = "secadero";
+          break;
+        default:
+          previousStage = "";
+      }
+
+      // 2. Obtener todos los lotes y filtrar (o crear un método storage.getLotesByStage(previousStage))
+      // Por ahora filtramos en memoria para no complicar el storage
+      const allLotes = await storage.getLotes();
+      const availableLotes = allLotes.filter((l) => {
+        // Un lote está disponible si su etapa actual coincide con la etapa anterior de esta zona
+        // O si no tiene etapa (recién creado) y esta es zona de cría
+        if (zone.stage === "cria" && !l.stage) return true;
+
+        // Asumiendo que 'lote' tiene un campo 'currentZone' o relacionamos por ID
+        // Aquí simplificamos buscando por texto de etapa si existe en tu modelo,
+        // si no, tendrás que filtrar por los IDs de las zonas de la etapa anterior.
+
+        // Opción B: Si tienes el campo 'stage' en el lote:
+        // return l.stage === previousStage && l.status === 'active';
+
+        return true; // TODO: AJUSTA ESTE FILTRO según tu lógica exacta de negocio
+      });
+
+      res.json({
+        zone,
+        availableLotes, // En producción enviar solo los necesarios
+        previousStage,
+        canSplit: zone.stage === "secadero",
+        canGenerateQr: zone.stage === "distribucion",
+      });
+    } catch (error) {
+      console.error("Error en API QR:", error);
+      res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  // 2. POST: Ejecutar el movimiento
+  app.post("/api/zone-qr/:token/move-lote", async (req, res) => {
+    try {
+      const token = req.params.token;
+      const { loteId, entryTime, sublotes, shouldGenerateQr } = req.body;
+
+      // Validar token nuevamente
+      const zone = await storage.getZoneByQrToken(token);
+      if (!zone) return res.status(403).json({ message: "Token inválido" });
+
+      const lote = await storage.getLote(parseInt(loteId));
+      if (!lote) return res.status(404).json({ message: "Lote no encontrado" });
+
+      // Actualizar el lote a la nueva zona
+      const updatedLote = await storage.updateLote(lote.id, {
+        ...lote,
+        zoneId: zone.id,
+        stage: zone.stage, // Actualizamos la etapa del lote
+        // status: "active",
+      });
+
+      // TODO: Aquí deberías crear también el registro en la tabla 'movements' si la tienes
+      // await storage.createMovement({ loteId: lote.id, fromZone: ..., toZone: zone.id ... })
+
+      // Si hubo división de lotes (Sublotes)
+      if (sublotes && sublotes.length > 0) {
+        // Lógica para crear nuevos lotes y archivar el padre
+        // ...
+      }
+
+      res.json({
+        success: true,
+        message: `Lote movido a ${zone.name}`,
+        qrToken: shouldGenerateQr ? "QR-GENERADO-DEMO" : undefined,
+      });
+    } catch (error) {
+      console.error("Error moviendo lote:", error);
+      res.status(500).json({ message: "Error procesando el movimiento" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

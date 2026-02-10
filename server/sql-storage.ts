@@ -1340,4 +1340,22 @@ export class SqlStorage implements IStorage {
     const [zone] = await db.select().from(zones).where(eq(zones.id, id));
     return zone;
   }
+
+  async getZoneByQrToken(token: string): Promise<Zone | undefined> {
+      // Realizamos un JOIN: Seleccionamos la zona donde el zone_qrs coincida con el token
+      const result = await db
+        .select({
+          zone: zones,
+        })
+        .from(zoneQrs)
+        .innerJoin(zones, eq(zoneQrs.zoneId, zones.id))
+        .where(eq(zoneQrs.publicToken, token))
+        .limit(1);
+
+      if (result.length === 0) return undefined;
+
+      // Retornamos solo la parte de la zona
+      return result[0].zone;
+    }
+  }
 }

@@ -31,9 +31,18 @@ interface SubLote {
   quantity: number;
 }
 
-export default function ZoneMovementPage() {
+// Definimos la interfaz para las props que inyecta wouter
+interface ZoneMovementPageProps {
+  params: {
+    token: string;
+  };
+}
+
+export default function ZoneMovementPage({ params }: ZoneMovementPageProps) {
   const queryClient = useQueryClient();
-  const [token, setToken] = useState<string>("");
+  // Usamos el token directamente de los params de la ruta
+  const token = params?.token;
+
   const [selectedLoteId, setSelectedLoteId] = useState<string>("");
   const [entryTime, setEntryTime] = useState<string>("");
   const [shouldSplit, setShouldSplit] = useState<boolean>(false);
@@ -44,13 +53,6 @@ export default function ZoneMovementPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Extraer token de la URL
-    const pathSegments = window.location.pathname.split("/");
-    const tokenFromPath = pathSegments[pathSegments.length - 1];
-    if (tokenFromPath && tokenFromPath !== "zona-movimiento") {
-      setToken(tokenFromPath);
-    }
-
     // Fecha/hora local por defecto (para <input type="datetime-local">)
     const now = new Date();
     const localDateTime = new Date(
@@ -61,9 +63,14 @@ export default function ZoneMovementPage() {
     setEntryTime(localDateTime);
   }, []);
 
-  const { data: zoneData, isLoading: isLoadingZone } = useQuery({
+  const {
+    data: zoneData,
+    isLoading: isLoadingZone,
+    error,
+  } = useQuery({
     queryKey: ["/api/zone-qr", token],
     queryFn: async () => {
+      if (!token) throw new Error("Token no proporcionado");
       const res = await fetch(`/api/zone-qr/${token}`);
       if (!res.ok) {
         throw new Error("Token de QR no válido o expirado");
@@ -173,8 +180,6 @@ export default function ZoneMovementPage() {
         });
         return;
       }
-
-      // La suma de sublotes puede ser mayor al número de animales disponibles
     }
 
     moveLotemutation.mutate({
@@ -186,13 +191,13 @@ export default function ZoneMovementPage() {
   };
 
   const addSublote = () => {
-    const selectedLote = availableLotes.find(
+    const selectedLote = zoneData?.availableLotes?.find(
       (lote: any) => String(lote.id) === String(selectedLoteId),
     );
     const loteId = selectedLote?.identification || "LOTE";
     const subloteNumber = sublotes.length + 1;
     const newSubloteId = `${loteId}-${subloteNumber}`;
-    
+
     setSublotes([...sublotes, { identification: newSubloteId, quantity: 1 }]);
   };
 
@@ -216,6 +221,7 @@ export default function ZoneMovementPage() {
     setSublotes(newSublotes);
   };
 
+  // Validaciones de estado para renderizar UI
   if (!token) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -252,7 +258,7 @@ export default function ZoneMovementPage() {
     );
   }
 
-  if (!zoneData) {
+  if (!zoneData || error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -273,11 +279,17 @@ export default function ZoneMovementPage() {
     );
   }
 
-  const { zone, availableLotes, previousStage, canSplit, canGenerateQr } =
-    zoneData;
-  const selectedLote = availableLotes.find(
-    (lote: any) => String(lote.id) === String(selectedLoteId),
-  );
+  // Destructuración segura
+  const {
+    zone,
+    availableLotes = [],
+    previousStage,
+    canSplit,
+    canGenerateQr,
+  } = zoneData;
+
+  // Validación extra por si zone viene undefined
+  if (!zone) return null;
 
   return (
     <div className="min-h-screen bg-background p-4">
@@ -330,7 +342,9 @@ export default function ZoneMovementPage() {
                           (lote: any) => String(lote.id) === String(value),
                         );
                         const loteId = selectedLote?.identification || "LOTE";
-                        setSublotes([{ identification: `${loteId}-1`, quantity: 1 }]);
+                        setSublotes([
+                          { identification: `${loteId}-1`, quantity: 1 },
+                        ]);
                       }
                     }}
                   >
@@ -442,9 +456,17 @@ export default function ZoneMovementPage() {
                           </div>
                         ))}
 
-                        {selectedLote && (
+                        {selectedLoteId && (
                           <div className="text-sm text-muted-foreground">
-                            Total disponible: {selectedLote.quantity} unidades
+                            {/* Nota: accedemos al lote buscando de nuevo para evitar errores de renderizado */}
+                            Total disponible:{" "}
+                            {
+                              availableLotes.find(
+                                (l: any) =>
+                                  String(l.id) === String(selectedLoteId),
+                              )?.quantity
+                            }{" "}
+                            unidades
                           </div>
                         )}
                       </div>
