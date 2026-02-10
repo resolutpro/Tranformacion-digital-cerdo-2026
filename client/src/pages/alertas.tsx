@@ -36,30 +36,34 @@ export default function AlertasPage() {
     <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-5xl">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link href="/">
+          <Link href="/dashboard">
             <Button variant="outline" size="icon" className="h-9 w-9">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Sistema de Alertas</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Sistema de Alertas
+            </h1>
             <p className="text-sm text-muted-foreground">
               Monitorización de incidencias en tiempo real
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="px-3 py-1">
             <BellRing className="h-3 w-3 mr-2 text-primary" />
-            {alerts?.filter(a => !a.isRead).length || 0} Pendientes
+            {alerts?.filter((a) => !a.isRead).length || 0} Pendientes
           </Badge>
         </div>
       </div>
 
       <Card className="border-border shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-2 py-4">
-          <CardTitle className="text-lg font-medium">Historial de Incidencias</CardTitle>
+          <CardTitle className="text-lg font-medium">
+            Historial de Incidencias
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -79,12 +83,18 @@ export default function AlertasPage() {
                 {isLoading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell colSpan={6} className="h-16 animate-pulse bg-muted/20" />
+                      <TableCell
+                        colSpan={6}
+                        className="h-16 animate-pulse bg-muted/20"
+                      />
                     </TableRow>
                   ))
                 ) : alerts?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    <TableCell
+                      colSpan={6}
+                      className="h-32 text-center text-muted-foreground"
+                    >
                       No hay alertas registradas
                     </TableCell>
                   </TableRow>
@@ -95,31 +105,51 @@ export default function AlertasPage() {
                       className={`group transition-colors ${!alert.isRead ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/50"}`}
                     >
                       <TableCell className="text-sm font-medium">
-                        {format(new Date(alert.createdAt), "dd MMM, HH:mm", { locale: es })}
+                        {format(new Date(alert.createdAt), "dd MMM, HH:mm", {
+                          locale: es,
+                        })}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-sm font-semibold">{(alert as any).zoneName}</span>
-                          <span className="text-xs text-muted-foreground">{(alert as any).sensorName}</span>
+                          <span className="text-sm font-semibold">
+                            {(alert as any).zoneName}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {(alert as any).sensorName}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <AlertTriangle className={`h-4 w-4 ${alert.type === "min_breach" ? "text-amber-500" : "text-destructive"}`} />
+                          <AlertTriangle
+                            className={`h-4 w-4 ${alert.type === "min_breach" ? "text-amber-500" : "text-destructive"}`}
+                          />
                           <span className="text-sm">
-                            {alert.type === "min_breach" ? "Mínimo Superado" : "Máximo Superado"}
+                            {alert.type === "min_breach"
+                              ? "Mínimo Superado"
+                              : "Máximo Superado"}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-center font-bold font-mono">{alert.value}</TableCell>
-                      <TableCell className="text-center font-mono text-muted-foreground">{alert.threshold}</TableCell>
+                      <TableCell className="text-center font-bold font-mono">
+                        {alert.value}
+                      </TableCell>
+                      <TableCell className="text-center font-mono text-muted-foreground">
+                        {alert.threshold}
+                      </TableCell>
                       <TableCell>
                         {alert.isRead ? (
-                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-none">
+                          <Badge
+                            variant="secondary"
+                            className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-none"
+                          >
                             Resuelta
                           </Badge>
                         ) : (
-                          <Badge variant="destructive" className="animate-pulse">
+                          <Badge
+                            variant="destructive"
+                            className="animate-pulse"
+                          >
                             Pendiente
                           </Badge>
                         )}

@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -29,7 +29,10 @@ function Router() {
       <Route path="/trazabilidad/:token" component={PublicTraceability} />
       <Route path="/zona-movimiento/:token" component={ZoneMovementPage} />
       <Route path="/informacion-adicional" component={InformacionAdicional} />
-      <ProtectedRoute path="/" component={Dashboard} />
+      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <Route path="/">
+        <Redirect to="/dashboard" />
+      </Route>
       <ProtectedRoute path="/lotes" component={Lotes} />
       <ProtectedRoute path="/cria" component={CriaPage} />
       <ProtectedRoute path="/engorde" component={EngordePage} />

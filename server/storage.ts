@@ -1,16 +1,28 @@
 import {
-  type User, type InsertUser,
-  type Organization, type InsertOrganization,
-  type Lote, type InsertLote,
-  type Zone, type InsertZone,
-  type Stay, type InsertStay,
-  type Sensor, type InsertSensor,
-  type SensorReading, type InsertSensorReading,
-  type ZoneQr, type InsertZoneQr,
-  type QrSnapshot, type InsertQrSnapshot,
-  type LoteTemplate, type InsertLoteTemplate,
-  type AuditLog, type InsertAuditLog,
-  type Alert, type InsertAlert
+  type User,
+  type InsertUser,
+  type Organization,
+  type InsertOrganization,
+  type Lote,
+  type InsertLote,
+  type Zone,
+  type InsertZone,
+  type Stay,
+  type InsertStay,
+  type Sensor,
+  type InsertSensor,
+  type SensorReading,
+  type InsertSensorReading,
+  type ZoneQr,
+  type InsertZoneQr,
+  type QrSnapshot,
+  type InsertQrSnapshot,
+  type LoteTemplate,
+  type InsertLoteTemplate,
+  type AuditLog,
+  type InsertAuditLog,
+  type Alert,
+  type InsertAlert,
 } from "@shared/schema";
 import session, { Store } from "express-session";
 
@@ -30,7 +42,11 @@ export interface IStorage {
   getSubLotes(parentLoteId: string, organizationId: string): Promise<Lote[]>;
   getLote(id: string, organizationId: string): Promise<Lote | undefined>;
   createLote(lote: InsertLote): Promise<Lote>;
-  updateLote(id: string, lote: Partial<InsertLote>, organizationId: string): Promise<Lote | undefined>;
+  updateLote(
+    id: string,
+    lote: Partial<InsertLote>,
+    organizationId: string,
+  ): Promise<Lote | undefined>;
   deleteLote(id: string, organizationId: string): Promise<boolean>;
 
   getLoteTemplate(organizationId: string): Promise<LoteTemplate | undefined>;
@@ -41,7 +57,11 @@ export interface IStorage {
   getZoneById(id: string): Promise<Zone | undefined>;
   getZone(id: string, organizationId: string): Promise<Zone | undefined>;
   createZone(zone: InsertZone): Promise<Zone>;
-  updateZone(id: string, zone: Partial<InsertZone>, organizationId: string): Promise<Zone | undefined>;
+  updateZone(
+    id: string,
+    zone: Partial<InsertZone>,
+    organizationId: string,
+  ): Promise<Zone | undefined>;
   deleteZone(id: string, organizationId: string): Promise<boolean>;
 
   getStaysByLote(loteId: string): Promise<Stay[]>;
@@ -57,32 +77,80 @@ export interface IStorage {
   getSensor(id: string): Promise<Sensor | undefined>;
   getSensorByDeviceId(deviceId: string): Promise<Sensor | undefined>;
   getAllMqttEnabledSensors(): Promise<Sensor[]>;
-  createSensor(sensor: InsertSensor & { deviceId: string; mqttTopic: string; mqttUsername: string; mqttPassword: string }): Promise<Sensor>;
-  updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined>;
-  updateSensorMqttConfig(id: string, config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>): Promise<Sensor | undefined>;
-  rotateSensorCredentials(id: string): Promise<{ username: string; password: string } | undefined>;
+  createSensor(
+    sensor: InsertSensor & {
+      deviceId: string;
+      mqttTopic: string;
+      mqttUsername: string;
+      mqttPassword: string;
+    },
+  ): Promise<Sensor>;
+  updateSensor(
+    id: string,
+    sensor: Partial<InsertSensor>,
+  ): Promise<Sensor | undefined>;
+  updateSensorMqttConfig(
+    id: string,
+    config: Partial<
+      Pick<
+        Sensor,
+        | "mqttHost"
+        | "mqttPort"
+        | "mqttUsername"
+        | "mqttPassword"
+        | "ttnTopic"
+        | "jsonFields"
+        | "mqttEnabled"
+      >
+    >,
+  ): Promise<Sensor | undefined>;
+  rotateSensorCredentials(
+    id: string,
+  ): Promise<{ username: string; password: string } | undefined>;
   deleteSensor(id: string): Promise<boolean>;
 
-  getSensorReadings(sensorId: string, startTime?: Date, endTime?: Date, includeSimulated?: boolean): Promise<SensorReading[]>;
-  getLatestReadingBySensor(sensorId: string): Promise<SensorReading | undefined>;
-  getLatestReadingsByZone(zoneId: string, today?: Date): Promise<Array<SensorReading & { sensor: Sensor }>>;
+  getSensorReadings(
+    sensorId: string,
+    startTime?: Date,
+    endTime?: Date,
+    includeSimulated?: boolean,
+  ): Promise<SensorReading[]>;
+  getLatestReadingBySensor(
+    sensorId: string,
+  ): Promise<SensorReading | undefined>;
+  getLatestReadingsByZone(
+    zoneId: string,
+    today?: Date,
+  ): Promise<Array<SensorReading & { sensor: Sensor }>>;
   createSensorReading(reading: InsertSensorReading): Promise<SensorReading>;
 
   getZoneQr(zoneId: string): Promise<ZoneQr | undefined>;
   getZoneQrByToken(publicToken: string): Promise<ZoneQr | undefined>;
   createZoneQr(zoneQr: InsertZoneQr & { publicToken: string }): Promise<ZoneQr>;
+  getZoneUnsafe(id: number): Promise<Zone | undefined>;
 
   getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]>;
   getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined>;
   getQrSnapshot(id: string): Promise<QrSnapshot | undefined>;
-  updateQrSnapshot(id: string, data: Partial<Pick<QrSnapshot, 'publicToken' | 'scanCount' | 'isActive'>>): Promise<QrSnapshot | undefined>;
+  updateQrSnapshot(
+    id: string,
+    data: Partial<Pick<QrSnapshot, "publicToken" | "scanCount" | "isActive">>,
+  ): Promise<QrSnapshot | undefined>;
   incrementScanCount(token: string): Promise<void>;
   revokeQrSnapshot(id: string, organizationId: string): Promise<boolean>;
 
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
-  getAuditLogsByEntity(entityType: string, entityId: string): Promise<AuditLog[]>;
+  getAuditLogsByEntity(
+    entityType: string,
+    entityId: string,
+  ): Promise<AuditLog[]>;
 
-  getSensorDataByLoteAndStage(loteId: string, stage: string, startTime: Date, endTime: Date): Promise<any[]>;
+  getSensorDataByLoteAndStage(
+    loteId: string,
+    stage: string,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<any[]>;
 
   // NUEVO: Métodos de Alertas
   getAlerts(organizationId: string): Promise<Alert[]>;

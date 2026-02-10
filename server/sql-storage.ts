@@ -4,20 +4,37 @@ import createMemoryStore from "memorystore";
 import { randomUUID } from "crypto";
 import type { Store } from "express-session";
 import {
-  type User, type InsertUser,
-  type Organization, type InsertOrganization,
-  type Lote, type InsertLote,
-  type Zone, type InsertZone,
-  type Stay, type InsertStay,
-  type Sensor, type InsertSensor,
-  type SensorReading, type InsertSensorReading,
-  type QrSnapshot, type InsertQrSnapshot,
-  type LoteTemplate, type InsertLoteTemplate,
-  type AuditLog, type InsertAuditLog
+  type User,
+  type InsertUser,
+  type Organization,
+  type InsertOrganization,
+  type Lote,
+  type InsertLote,
+  type Zone,
+  type InsertZone,
+  type Stay,
+  type InsertStay,
+  type Sensor,
+  type InsertSensor,
+  type SensorReading,
+  type InsertSensorReading,
+  type QrSnapshot,
+  type InsertQrSnapshot,
+  type LoteTemplate,
+  type InsertLoteTemplate,
+  type AuditLog,
+  type InsertAuditLog,
+  type ZoneQr,
+  type InsertZoneQr,
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 import { eq, gte, lte, and, or, inArray, isNull } from "drizzle-orm";
-import { sensorReadings, sensors, zones, stays } from "@shared/schema/drizzle/schema";
+import {
+  sensorReadings,
+  sensors,
+  zones,
+  stays,
+} from "@shared/schema/drizzle/schema";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -26,11 +43,11 @@ export class SqlStorage implements IStorage {
   public readonly sessionStore: Store;
 
   constructor(dbPath?: string) {
-    this.db = new Database(dbPath || 'livestock.db');
+    this.db = new Database(dbPath || "livestock.db");
 
     // Configure SQLite for better performance and integrity
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
 
     this.initializeTables();
 
@@ -46,12 +63,12 @@ export class SqlStorage implements IStorage {
     });
 
     try {
-      this.db.exec('BEGIN');
+      this.db.exec("BEGIN");
       const result = await callback();
-      this.db.exec('COMMIT');
+      this.db.exec("COMMIT");
       return result;
     } catch (error) {
-      this.db.exec('ROLLBACK');
+      this.db.exec("ROLLBACK");
       throw error;
     }
   }
@@ -133,6 +150,15 @@ export class SqlStorage implements IStorage {
       )
     `);
 
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS zone_qrs (
+        id TEXT PRIMARY KEY,
+        zone_id TEXT NOT NULL REFERENCES zones(id),
+        public_token TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Sensors table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sensors (
@@ -176,7 +202,9 @@ export class SqlStorage implements IStorage {
       // Column already exists
     }
     try {
-      this.db.exec(`ALTER TABLE sensors ADD COLUMN mqtt_enabled INTEGER DEFAULT 0`);
+      this.db.exec(
+        `ALTER TABLE sensors ADD COLUMN mqtt_enabled INTEGER DEFAULT 0`,
+      );
     } catch (e) {
       // Column already exists
     }
@@ -225,7 +253,7 @@ export class SqlStorage implements IStorage {
 
   // Organizations
   async getOrganization(id: string): Promise<Organization | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM organizations WHERE id = ?');
+    const stmt = this.db.prepare("SELECT * FROM organizations WHERE id = ?");
     const row = stmt.get(id) as any;
     return row ? this.mapOrganization(row) : undefined;
   }
@@ -233,67 +261,73 @@ export class SqlStorage implements IStorage {
   async createOrganization(org: InsertOrganization): Promise<Organization> {
     const id = randomUUID();
     const stmt = this.db.prepare(
-      'INSERT INTO organizations (id, name) VALUES (?, ?)'
+      "INSERT INTO organizations (id, name) VALUES (?, ?)",
     );
     stmt.run(id, org.name);
 
     const created: Organization = {
       ...org,
       id,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
   // Users
   async getUser(id: string): Promise<User | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE id = ?');
+    const stmt = this.db.prepare("SELECT * FROM users WHERE id = ?");
     const row = stmt.get(id) as any;
     return row ? this.mapUser(row) : undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE username = ?');
+    const stmt = this.db.prepare("SELECT * FROM users WHERE username = ?");
     const row = stmt.get(username) as any;
     return row ? this.mapUser(row) : undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
+    const stmt = this.db.prepare("SELECT * FROM users WHERE email = ?");
     const row = stmt.get(email) as any;
     return row ? this.mapUser(row) : undefined;
   }
 
   async getUsersByOrganization(organizationId: string): Promise<User[]> {
-    const stmt = this.db.prepare('SELECT * FROM users WHERE organization_id = ?');
+    const stmt = this.db.prepare(
+      "SELECT * FROM users WHERE organization_id = ?",
+    );
     const rows = stmt.all(organizationId) as any[];
-    return rows.map(row => this.mapUser(row));
+    return rows.map((row) => this.mapUser(row));
   }
 
   async createUser(user: InsertUser): Promise<User> {
     const id = randomUUID();
     const stmt = this.db.prepare(
-      'INSERT INTO users (id, organization_id, username, email, password) VALUES (?, ?, ?, ?, ?)'
+      "INSERT INTO users (id, organization_id, username, email, password) VALUES (?, ?, ?, ?, ?)",
     );
     stmt.run(id, user.organizationId, user.username, user.email, user.password);
 
     const created: User = {
       ...user,
       id,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
   // Lotes
   async getLotesByOrganization(organizationId: string): Promise<Lote[]> {
-    const stmt = this.db.prepare('SELECT * FROM lotes WHERE organization_id = ? ORDER BY created_at DESC');
+    const stmt = this.db.prepare(
+      "SELECT * FROM lotes WHERE organization_id = ? ORDER BY created_at DESC",
+    );
     const rows = stmt.all(organizationId) as any[];
-    return rows.map(row => this.mapLote(row));
+    return rows.map((row) => this.mapLote(row));
   }
 
   async getLote(id: string, organizationId: string): Promise<Lote | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM lotes WHERE id = ? AND organization_id = ?');
+    const stmt = this.db.prepare(
+      "SELECT * FROM lotes WHERE id = ? AND organization_id = ?",
+    );
     const row = stmt.get(id, organizationId) as any;
     return row ? this.mapLote(row) : undefined;
   }
@@ -314,9 +348,9 @@ export class SqlStorage implements IStorage {
       lote.finalAnimals || null,
       lote.foodRegime || null,
       lote.customData ? JSON.stringify(lote.customData) : null,
-      lote.status || 'activo',
+      lote.status || "activo",
       lote.parentLoteId || null,
-      lote.pieceType || null
+      lote.pieceType || null,
     );
 
     const created: Lote = {
@@ -325,15 +359,19 @@ export class SqlStorage implements IStorage {
       finalAnimals: lote.finalAnimals || null,
       foodRegime: lote.foodRegime || null,
       customData: lote.customData || null,
-      status: lote.status || 'activo',
+      status: lote.status || "activo",
       parentLoteId: lote.parentLoteId || null,
       pieceType: lote.pieceType || null,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
-  async updateLote(id: string, lote: Partial<InsertLote>, organizationId: string): Promise<Lote | undefined> {
+  async updateLote(
+    id: string,
+    lote: Partial<InsertLote>,
+    organizationId: string,
+  ): Promise<Lote | undefined> {
     const existing = await this.getLote(id, organizationId);
     if (!existing) return undefined;
 
@@ -341,27 +379,27 @@ export class SqlStorage implements IStorage {
     const values = [];
 
     if (lote.identification !== undefined) {
-      updates.push('identification = ?');
+      updates.push("identification = ?");
       values.push(lote.identification);
     }
     if (lote.initialAnimals !== undefined) {
-      updates.push('initial_animals = ?');
+      updates.push("initial_animals = ?");
       values.push(lote.initialAnimals);
     }
     if (lote.finalAnimals !== undefined) {
-      updates.push('final_animals = ?');
+      updates.push("final_animals = ?");
       values.push(lote.finalAnimals);
     }
     if (lote.foodRegime !== undefined) {
-      updates.push('food_regime = ?');
+      updates.push("food_regime = ?");
       values.push(lote.foodRegime);
     }
     if (lote.customData !== undefined) {
-      updates.push('custom_data = ?');
+      updates.push("custom_data = ?");
       values.push(lote.customData ? JSON.stringify(lote.customData) : null);
     }
     if (lote.status !== undefined) {
-      updates.push('status = ?');
+      updates.push("status = ?");
       values.push(lote.status);
     }
 
@@ -369,7 +407,7 @@ export class SqlStorage implements IStorage {
 
     values.push(id, organizationId);
     const stmt = this.db.prepare(
-      `UPDATE lotes SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`
+      `UPDATE lotes SET ${updates.join(", ")} WHERE id = ? AND organization_id = ?`,
     );
     stmt.run(...values);
 
@@ -377,32 +415,44 @@ export class SqlStorage implements IStorage {
   }
 
   async deleteLote(id: string, organizationId: string): Promise<boolean> {
-    const stmt = this.db.prepare('DELETE FROM lotes WHERE id = ? AND organization_id = ?');
+    const stmt = this.db.prepare(
+      "DELETE FROM lotes WHERE id = ? AND organization_id = ?",
+    );
     const result = stmt.run(id, organizationId);
     return result.changes > 0;
   }
 
   // Lote Templates
-  async getLoteTemplate(organizationId: string): Promise<LoteTemplate | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM lote_templates WHERE organization_id = ?');
+  async getLoteTemplate(
+    organizationId: string,
+  ): Promise<LoteTemplate | undefined> {
+    const stmt = this.db.prepare(
+      "SELECT * FROM lote_templates WHERE organization_id = ?",
+    );
     const row = stmt.get(organizationId) as any;
     return row ? this.mapLoteTemplate(row) : undefined;
   }
 
-  async updateLoteTemplate(template: InsertLoteTemplate): Promise<LoteTemplate> {
+  async updateLoteTemplate(
+    template: InsertLoteTemplate,
+  ): Promise<LoteTemplate> {
     const existing = await this.getLoteTemplate(template.organizationId);
 
     if (existing) {
       const stmt = this.db.prepare(
-        'UPDATE lote_templates SET custom_fields = ? WHERE organization_id = ?'
+        "UPDATE lote_templates SET custom_fields = ? WHERE organization_id = ?",
       );
       stmt.run(JSON.stringify(template.customFields), template.organizationId);
     } else {
       const id = randomUUID();
       const stmt = this.db.prepare(
-        'INSERT INTO lote_templates (id, organization_id, custom_fields) VALUES (?, ?, ?)'
+        "INSERT INTO lote_templates (id, organization_id, custom_fields) VALUES (?, ?, ?)",
       );
-      stmt.run(id, template.organizationId, JSON.stringify(template.customFields));
+      stmt.run(
+        id,
+        template.organizationId,
+        JSON.stringify(template.customFields),
+      );
     }
 
     const result = await this.getLoteTemplate(template.organizationId);
@@ -411,19 +461,28 @@ export class SqlStorage implements IStorage {
 
   // Zones
   async getZonesByOrganization(organizationId: string): Promise<Zone[]> {
-    const stmt = this.db.prepare('SELECT * FROM zones WHERE organization_id = ? AND is_active = 1 ORDER BY stage, name');
+    const stmt = this.db.prepare(
+      "SELECT * FROM zones WHERE organization_id = ? AND is_active = 1 ORDER BY stage, name",
+    );
     const rows = stmt.all(organizationId) as any[];
-    return rows.map(row => this.mapZone(row));
+    return rows.map((row) => this.mapZone(row));
   }
 
-  async getZonesByStage(organizationId: string, stage: string): Promise<Zone[]> {
-    const stmt = this.db.prepare('SELECT * FROM zones WHERE organization_id = ? AND stage = ? AND is_active = 1 ORDER BY name');
+  async getZonesByStage(
+    organizationId: string,
+    stage: string,
+  ): Promise<Zone[]> {
+    const stmt = this.db.prepare(
+      "SELECT * FROM zones WHERE organization_id = ? AND stage = ? AND is_active = 1 ORDER BY name",
+    );
     const rows = stmt.all(organizationId, stage) as any[];
-    return rows.map(row => this.mapZone(row));
+    return rows.map((row) => this.mapZone(row));
   }
 
   async getZone(id: string, organizationId: string): Promise<Zone | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM zones WHERE id = ? AND organization_id = ?');
+    const stmt = this.db.prepare(
+      "SELECT * FROM zones WHERE id = ? AND organization_id = ?",
+    );
     const row = stmt.get(id, organizationId) as any;
     return row ? this.mapZone(row) : undefined;
   }
@@ -442,7 +501,7 @@ export class SqlStorage implements IStorage {
       zone.stage,
       zone.fixedInfo ? JSON.stringify(zone.fixedInfo) : null,
       zone.temperatureTarget ? JSON.stringify(zone.temperatureTarget) : null,
-      zone.humidityTarget ? JSON.stringify(zone.humidityTarget) : null
+      zone.humidityTarget ? JSON.stringify(zone.humidityTarget) : null,
     );
 
     const created: Zone = {
@@ -452,12 +511,16 @@ export class SqlStorage implements IStorage {
       temperatureTarget: zone.temperatureTarget || null,
       humidityTarget: zone.humidityTarget || null,
       isActive: true,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
-  async updateZone(id: string, zone: Partial<InsertZone>, organizationId: string): Promise<Zone | undefined> {
+  async updateZone(
+    id: string,
+    zone: Partial<InsertZone>,
+    organizationId: string,
+  ): Promise<Zone | undefined> {
     const existing = await this.getZone(id, organizationId);
     if (!existing) return undefined;
 
@@ -465,31 +528,35 @@ export class SqlStorage implements IStorage {
     const values = [];
 
     if (zone.name !== undefined) {
-      updates.push('name = ?');
+      updates.push("name = ?");
       values.push(zone.name);
     }
     if (zone.stage !== undefined) {
-      updates.push('stage = ?');
+      updates.push("stage = ?");
       values.push(zone.stage);
     }
     if (zone.fixedInfo !== undefined) {
-      updates.push('fixed_info = ?');
+      updates.push("fixed_info = ?");
       values.push(zone.fixedInfo ? JSON.stringify(zone.fixedInfo) : null);
     }
     if (zone.temperatureTarget !== undefined) {
-      updates.push('temperature_target = ?');
-      values.push(zone.temperatureTarget ? JSON.stringify(zone.temperatureTarget) : null);
+      updates.push("temperature_target = ?");
+      values.push(
+        zone.temperatureTarget ? JSON.stringify(zone.temperatureTarget) : null,
+      );
     }
     if (zone.humidityTarget !== undefined) {
-      updates.push('humidity_target = ?');
-      values.push(zone.humidityTarget ? JSON.stringify(zone.humidityTarget) : null);
+      updates.push("humidity_target = ?");
+      values.push(
+        zone.humidityTarget ? JSON.stringify(zone.humidityTarget) : null,
+      );
     }
 
     if (updates.length === 0) return existing;
 
     values.push(id, organizationId);
     const stmt = this.db.prepare(
-      `UPDATE zones SET ${updates.join(', ')} WHERE id = ? AND organization_id = ?`
+      `UPDATE zones SET ${updates.join(", ")} WHERE id = ? AND organization_id = ?`,
     );
     stmt.run(...values);
 
@@ -497,7 +564,9 @@ export class SqlStorage implements IStorage {
   }
 
   async deleteZone(id: string, organizationId: string): Promise<boolean> {
-    const stmt = this.db.prepare('UPDATE zones SET is_active = 0 WHERE id = ? AND organization_id = ?');
+    const stmt = this.db.prepare(
+      "UPDATE zones SET is_active = 0 WHERE id = ? AND organization_id = ?",
+    );
     const result = stmt.run(id, organizationId);
     return result.changes > 0;
   }
@@ -510,8 +579,8 @@ export class SqlStorage implements IStorage {
     return {
       id: row.id,
       name: row.name,
-      email: row.email || '',
-      createdAt: new Date(row.created_at)
+      email: row.email || "",
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -522,7 +591,7 @@ export class SqlStorage implements IStorage {
       username: row.username,
       email: row.email,
       password: row.password,
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -538,7 +607,16 @@ export class SqlStorage implements IStorage {
       status: row.status,
       parentLoteId: row.parent_lote_id,
       pieceType: row.piece_type,
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
+    };
+  }
+
+  private mapZoneQr(row: any): ZoneQr {
+    return {
+      id: row.id,
+      zoneId: row.zone_id,
+      publicToken: row.public_token,
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -547,7 +625,7 @@ export class SqlStorage implements IStorage {
       id: row.id,
       organizationId: row.organization_id,
       customFields: JSON.parse(row.custom_fields),
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -558,30 +636,40 @@ export class SqlStorage implements IStorage {
       name: row.name,
       stage: row.stage,
       fixedInfo: row.fixed_info ? JSON.parse(row.fixed_info) : null,
-      temperatureTarget: row.temperature_target ? JSON.parse(row.temperature_target) : null,
-      humidityTarget: row.humidity_target ? JSON.parse(row.humidity_target) : null,
+      temperatureTarget: row.temperature_target
+        ? JSON.parse(row.temperature_target)
+        : null,
+      humidityTarget: row.humidity_target
+        ? JSON.parse(row.humidity_target)
+        : null,
       isActive: Boolean(row.is_active),
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
   // Stays
   async getStaysByLote(loteId: string): Promise<Stay[]> {
-    const stmt = this.db.prepare('SELECT * FROM stays WHERE lote_id = ? ORDER BY entry_time DESC');
+    const stmt = this.db.prepare(
+      "SELECT * FROM stays WHERE lote_id = ? ORDER BY entry_time DESC",
+    );
     const rows = stmt.all(loteId) as any[];
-    return rows.map(row => this.mapStay(row));
+    return rows.map((row) => this.mapStay(row));
   }
 
   async getActiveStayByLote(loteId: string): Promise<Stay | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM stays WHERE lote_id = ? AND exit_time IS NULL ORDER BY entry_time DESC LIMIT 1');
+    const stmt = this.db.prepare(
+      "SELECT * FROM stays WHERE lote_id = ? AND exit_time IS NULL ORDER BY entry_time DESC LIMIT 1",
+    );
     const row = stmt.get(loteId) as any;
     return row ? this.mapStay(row) : undefined;
   }
 
   async getStaysByZone(zoneId: string): Promise<Stay[]> {
-    const stmt = this.db.prepare('SELECT * FROM stays WHERE zone_id = ? ORDER BY entry_time DESC');
+    const stmt = this.db.prepare(
+      "SELECT * FROM stays WHERE zone_id = ? ORDER BY entry_time DESC",
+    );
     const rows = stmt.all(zoneId) as any[];
-    return rows.map(row => this.mapStay(row));
+    return rows.map((row) => this.mapStay(row));
   }
 
   async createStay(stay: InsertStay): Promise<Stay> {
@@ -597,40 +685,43 @@ export class SqlStorage implements IStorage {
       stay.zoneId,
       stay.entryTime.toISOString(),
       stay.exitTime ? stay.exitTime.toISOString() : null,
-      stay.createdBy
+      stay.createdBy,
     );
 
     const created: Stay = {
       ...stay,
       id,
       exitTime: stay.exitTime || null,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
-  async updateStay(id: string, stay: Partial<InsertStay>): Promise<Stay | undefined> {
+  async updateStay(
+    id: string,
+    stay: Partial<InsertStay>,
+  ): Promise<Stay | undefined> {
     const updates = [];
     const values = [];
 
     if (stay.exitTime !== undefined) {
-      updates.push('exit_time = ?');
+      updates.push("exit_time = ?");
       values.push(stay.exitTime ? stay.exitTime.toISOString() : null);
     }
 
     if (updates.length === 0) {
-      const stmt = this.db.prepare('SELECT * FROM stays WHERE id = ?');
+      const stmt = this.db.prepare("SELECT * FROM stays WHERE id = ?");
       const row = stmt.get(id) as any;
       return row ? this.mapStay(row) : undefined;
     }
 
     values.push(id);
     const stmt = this.db.prepare(
-      `UPDATE stays SET ${updates.join(', ')} WHERE id = ?`
+      `UPDATE stays SET ${updates.join(", ")} WHERE id = ?`,
     );
     stmt.run(...values);
 
-    const updatedStmt = this.db.prepare('SELECT * FROM stays WHERE id = ?');
+    const updatedStmt = this.db.prepare("SELECT * FROM stays WHERE id = ?");
     const row = updatedStmt.get(id) as any;
     return row ? this.mapStay(row) : undefined;
   }
@@ -641,15 +732,19 @@ export class SqlStorage implements IStorage {
 
   // Sensors
   async getSensorsByZone(zoneId: string): Promise<Sensor[]> {
-    const stmt = this.db.prepare('SELECT * FROM sensors WHERE zone_id = ? AND is_active = 1 ORDER BY name');
+    const stmt = this.db.prepare(
+      "SELECT * FROM sensors WHERE zone_id = ? AND is_active = 1 ORDER BY name",
+    );
     const rows = stmt.all(zoneId) as any[];
-    return rows.map(row => this.mapSensor(row));
+    return rows.map((row) => this.mapSensor(row));
   }
 
   async getSensorsByOrganization(organizationId: string): Promise<Sensor[]> {
-    const stmt = this.db.prepare('SELECT * FROM sensors WHERE organization_id = ? AND is_active = 1 ORDER BY name');
+    const stmt = this.db.prepare(
+      "SELECT * FROM sensors WHERE organization_id = ? AND is_active = 1 ORDER BY name",
+    );
     const rows = stmt.all(organizationId) as any[];
-    return rows.map(row => this.mapSensor(row));
+    return rows.map((row) => this.mapSensor(row));
   }
 
   async getAllMqttEnabledSensors(): Promise<Sensor[]> {
@@ -665,22 +760,29 @@ export class SqlStorage implements IStorage {
       ORDER BY name
     `);
     const rows = stmt.all() as any[];
-    return rows.map(row => this.mapSensor(row));
+    return rows.map((row) => this.mapSensor(row));
   }
 
   async getSensor(id: string): Promise<Sensor | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM sensors WHERE id = ?');
+    const stmt = this.db.prepare("SELECT * FROM sensors WHERE id = ?");
     const row = stmt.get(id) as any;
     return row ? this.mapSensor(row) : undefined;
   }
 
   async getSensorByDeviceId(deviceId: string): Promise<Sensor | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM sensors WHERE device_id = ?');
+    const stmt = this.db.prepare("SELECT * FROM sensors WHERE device_id = ?");
     const row = stmt.get(deviceId) as any;
     return row ? this.mapSensor(row) : undefined;
   }
 
-  async createSensor(sensor: InsertSensor & { deviceId: string; mqttTopic: string; mqttUsername: string; mqttPassword: string }): Promise<Sensor> {
+  async createSensor(
+    sensor: InsertSensor & {
+      deviceId: string;
+      mqttTopic: string;
+      mqttUsername: string;
+      mqttPassword: string;
+    },
+  ): Promise<Sensor> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
       INSERT INTO sensors (id, organization_id, zone_id, name, device_id, sensor_type, unit,
@@ -701,7 +803,7 @@ export class SqlStorage implements IStorage {
       sensor.mqttUsername,
       sensor.mqttPassword,
       sensor.validationMin ? parseFloat(sensor.validationMin.toString()) : null,
-      sensor.validationMax ? parseFloat(sensor.validationMax.toString()) : null
+      sensor.validationMax ? parseFloat(sensor.validationMax.toString()) : null,
     );
 
     const created: Sensor = {
@@ -712,25 +814,28 @@ export class SqlStorage implements IStorage {
       validationMax: sensor.validationMax || null,
       isActive: true,
       isPublic: true,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
-  async updateSensor(id: string, sensor: Partial<InsertSensor>): Promise<Sensor | undefined> {
+  async updateSensor(
+    id: string,
+    sensor: Partial<InsertSensor>,
+  ): Promise<Sensor | undefined> {
     const updates = [];
     const values = [];
 
     if (sensor.name !== undefined) {
-      updates.push('name = ?');
+      updates.push("name = ?");
       values.push(sensor.name);
     }
     if (sensor.sensorType !== undefined) {
-      updates.push('sensor_type = ?');
+      updates.push("sensor_type = ?");
       values.push(sensor.sensorType);
     }
     if (sensor.unit !== undefined) {
-      updates.push('unit = ?');
+      updates.push("unit = ?");
       values.push(sensor.unit);
     }
 
@@ -740,14 +845,16 @@ export class SqlStorage implements IStorage {
 
     values.push(id);
     const stmt = this.db.prepare(
-      `UPDATE sensors SET ${updates.join(', ')} WHERE id = ?`
+      `UPDATE sensors SET ${updates.join(", ")} WHERE id = ?`,
     );
     stmt.run(...values);
 
     return this.getSensor(id);
   }
 
-  async rotateSensorCredentials(id: string): Promise<{ username: string; password: string } | undefined> {
+  async rotateSensorCredentials(
+    id: string,
+  ): Promise<{ username: string; password: string } | undefined> {
     const sensor = await this.getSensor(id);
     if (!sensor) return undefined;
 
@@ -755,7 +862,7 @@ export class SqlStorage implements IStorage {
     const newPassword = randomUUID();
 
     const stmt = this.db.prepare(
-      'UPDATE sensors SET mqtt_username = ?, mqtt_password = ? WHERE id = ?'
+      "UPDATE sensors SET mqtt_username = ?, mqtt_password = ? WHERE id = ?",
     );
     stmt.run(newUsername, newPassword, id);
 
@@ -764,37 +871,48 @@ export class SqlStorage implements IStorage {
 
   async updateSensorMqttConfig(
     id: string,
-    config: Partial<Pick<Sensor, 'mqttHost' | 'mqttPort' | 'mqttUsername' | 'mqttPassword' | 'ttnTopic' | 'jsonFields' | 'mqttEnabled'>>,
+    config: Partial<
+      Pick<
+        Sensor,
+        | "mqttHost"
+        | "mqttPort"
+        | "mqttUsername"
+        | "mqttPassword"
+        | "ttnTopic"
+        | "jsonFields"
+        | "mqttEnabled"
+      >
+    >,
   ): Promise<Sensor | undefined> {
     const updates = [];
     const values = [];
 
     if (config.mqttHost !== undefined) {
-      updates.push('mqtt_host = ?');
+      updates.push("mqtt_host = ?");
       values.push(config.mqttHost);
     }
     if (config.mqttPort !== undefined) {
-      updates.push('mqtt_port = ?');
+      updates.push("mqtt_port = ?");
       values.push(config.mqttPort);
     }
     if (config.mqttUsername !== undefined) {
-      updates.push('mqtt_username = ?');
+      updates.push("mqtt_username = ?");
       values.push(config.mqttUsername);
     }
     if (config.mqttPassword !== undefined) {
-      updates.push('mqtt_password = ?');
+      updates.push("mqtt_password = ?");
       values.push(config.mqttPassword);
     }
     if (config.ttnTopic !== undefined) {
-      updates.push('ttn_topic = ?');
+      updates.push("ttn_topic = ?");
       values.push(config.ttnTopic);
     }
     if (config.jsonFields !== undefined) {
-      updates.push('json_fields = ?');
+      updates.push("json_fields = ?");
       values.push(config.jsonFields);
     }
     if (config.mqttEnabled !== undefined) {
-      updates.push('mqtt_enabled = ?');
+      updates.push("mqtt_enabled = ?");
       values.push(config.mqttEnabled ? 1 : 0);
     }
 
@@ -804,7 +922,7 @@ export class SqlStorage implements IStorage {
 
     values.push(id);
     const stmt = this.db.prepare(
-      `UPDATE sensors SET ${updates.join(', ')} WHERE id = ?`
+      `UPDATE sensors SET ${updates.join(", ")} WHERE id = ?`,
     );
     stmt.run(...values);
 
@@ -812,42 +930,56 @@ export class SqlStorage implements IStorage {
   }
 
   async deleteSensor(id: string): Promise<boolean> {
-    const stmt = this.db.prepare('UPDATE sensors SET is_active = 0 WHERE id = ?');
+    const stmt = this.db.prepare(
+      "UPDATE sensors SET is_active = 0 WHERE id = ?",
+    );
     const result = stmt.run(id);
     return result.changes > 0;
   }
 
   // Sensor Readings
-  async getSensorReadings(sensorId: string, startTime?: Date, endTime?: Date, includeSimulated?: boolean): Promise<SensorReading[]> {
-    let query = 'SELECT * FROM sensor_readings WHERE sensor_id = ?';
+  async getSensorReadings(
+    sensorId: string,
+    startTime?: Date,
+    endTime?: Date,
+    includeSimulated?: boolean,
+  ): Promise<SensorReading[]> {
+    let query = "SELECT * FROM sensor_readings WHERE sensor_id = ?";
     const params = [sensorId];
 
     if (startTime) {
-      query += ' AND timestamp >= ?';
+      query += " AND timestamp >= ?";
       params.push(startTime.toISOString());
     }
     if (endTime) {
-      query += ' AND timestamp <= ?';
+      query += " AND timestamp <= ?";
       params.push(endTime.toISOString());
     }
     if (includeSimulated === false) {
-      query += ' AND is_simulated = 0';
+      query += " AND is_simulated = 0";
     }
 
-    query += ' ORDER BY timestamp DESC';
+    query += " ORDER BY timestamp DESC";
 
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as any[];
-    return rows.map(row => this.mapSensorReading(row));
+    return rows.map((row) => this.mapSensorReading(row));
   }
 
-  async getLatestReadingBySensor(sensorId: string): Promise<SensorReading | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM sensor_readings WHERE sensor_id = ? ORDER BY timestamp DESC LIMIT 1');
+  async getLatestReadingBySensor(
+    sensorId: string,
+  ): Promise<SensorReading | undefined> {
+    const stmt = this.db.prepare(
+      "SELECT * FROM sensor_readings WHERE sensor_id = ? ORDER BY timestamp DESC LIMIT 1",
+    );
     const row = stmt.get(sensorId) as any;
     return row ? this.mapSensorReading(row) : undefined;
   }
 
-  async getLatestReadingsByZone(zoneId: string, today?: Date): Promise<Array<SensorReading & { sensor: Sensor }>> {
+  async getLatestReadingsByZone(
+    zoneId: string,
+    today?: Date,
+  ): Promise<Array<SensorReading & { sensor: Sensor }>> {
     let query = `
       SELECT sr.*, s.* FROM sensor_readings sr
       JOIN sensors s ON sr.sensor_id = s.id
@@ -856,22 +988,24 @@ export class SqlStorage implements IStorage {
     const params = [zoneId];
 
     if (today) {
-      query += ' AND DATE(sr.timestamp) = DATE(?)';
+      query += " AND DATE(sr.timestamp) = DATE(?)";
       params.push(today.toISOString());
     }
 
-    query += ' ORDER BY sr.timestamp DESC';
+    query += " ORDER BY sr.timestamp DESC";
 
     const stmt = this.db.prepare(query);
     const rows = stmt.all(...params) as any[];
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       ...this.mapSensorReading(row),
-      sensor: this.mapSensor(row)
+      sensor: this.mapSensor(row),
     }));
   }
 
-  async createSensorReading(reading: InsertSensorReading): Promise<SensorReading> {
+  async createSensorReading(
+    reading: InsertSensorReading,
+  ): Promise<SensorReading> {
     const id = randomUUID();
     // Store everything in UTC - conversion to Madrid time happens at display
     const utcTime = new Date();
@@ -887,14 +1021,16 @@ export class SqlStorage implements IStorage {
       reading.value,
       reading.timestamp.toISOString(),
       reading.isSimulated ? 1 : 0,
-      utcTime.toISOString()
+      utcTime.toISOString(),
     );
 
     return this.getLatestReadingBySensor(reading.sensorId)!;
   }
 
   // QR Snapshots
-  async getQrSnapshotsByOrganization(organizationId: string): Promise<QrSnapshot[]> {
+  async getQrSnapshotsByOrganization(
+    organizationId: string,
+  ): Promise<QrSnapshot[]> {
     const stmt = this.db.prepare(`
       SELECT qs.* FROM qr_snapshots qs
       JOIN lotes l ON qs.lote_id = l.id
@@ -902,16 +1038,20 @@ export class SqlStorage implements IStorage {
       ORDER BY qs.created_at DESC
     `);
     const rows = stmt.all(organizationId) as any[];
-    return rows.map(row => this.mapQrSnapshot(row));
+    return rows.map((row) => this.mapQrSnapshot(row));
   }
 
   async getQrSnapshotByToken(token: string): Promise<QrSnapshot | undefined> {
-    const stmt = this.db.prepare('SELECT * FROM qr_snapshots WHERE public_token = ? AND is_active = 1');
+    const stmt = this.db.prepare(
+      "SELECT * FROM qr_snapshots WHERE public_token = ? AND is_active = 1",
+    );
     const row = stmt.get(token) as any;
     return row ? this.mapQrSnapshot(row) : undefined;
   }
 
-  async createQrSnapshot(snapshot: InsertQrSnapshot & { publicToken: string }): Promise<QrSnapshot> {
+  async createQrSnapshot(
+    snapshot: InsertQrSnapshot & { publicToken: string },
+  ): Promise<QrSnapshot> {
     const id = randomUUID();
     const stmt = this.db.prepare(`
       INSERT INTO qr_snapshots (id, lote_id, public_token, snapshot_data, is_active, scan_count, created_by)
@@ -923,7 +1063,7 @@ export class SqlStorage implements IStorage {
       snapshot.loteId,
       snapshot.publicToken,
       JSON.stringify(snapshot.snapshotData),
-      snapshot.createdBy
+      snapshot.createdBy,
     );
 
     const created: QrSnapshot = {
@@ -931,13 +1071,15 @@ export class SqlStorage implements IStorage {
       id,
       isActive: true,
       scanCount: 0,
-      createdAt: new Date()
+      createdAt: new Date(),
     };
     return created;
   }
 
   async incrementScanCount(token: string): Promise<void> {
-    const stmt = this.db.prepare('UPDATE qr_snapshots SET scan_count = scan_count + 1 WHERE public_token = ?');
+    const stmt = this.db.prepare(
+      "UPDATE qr_snapshots SET scan_count = scan_count + 1 WHERE public_token = ?",
+    );
     stmt.run(token);
   }
 
@@ -968,7 +1110,7 @@ export class SqlStorage implements IStorage {
       log.entityId,
       log.action,
       log.oldData ? JSON.stringify(log.oldData) : null,
-      log.newData ? JSON.stringify(log.newData) : null
+      log.newData ? JSON.stringify(log.newData) : null,
     );
 
     const created: AuditLog = {
@@ -976,15 +1118,20 @@ export class SqlStorage implements IStorage {
       id,
       oldData: log.oldData || null,
       newData: log.newData || null,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
     return created;
   }
 
-  async getAuditLogsByEntity(entityType: string, entityId: string): Promise<AuditLog[]> {
-    const stmt = this.db.prepare('SELECT * FROM audit_log WHERE entity_type = ? AND entity_id = ? ORDER BY timestamp DESC');
+  async getAuditLogsByEntity(
+    entityType: string,
+    entityId: string,
+  ): Promise<AuditLog[]> {
+    const stmt = this.db.prepare(
+      "SELECT * FROM audit_log WHERE entity_type = ? AND entity_id = ? ORDER BY timestamp DESC",
+    );
     const rows = stmt.all(entityType, entityId) as any[];
-    return rows.map(row => this.mapAuditLog(row));
+    return rows.map((row) => this.mapAuditLog(row));
   }
 
   // Additional mapper methods
@@ -996,7 +1143,7 @@ export class SqlStorage implements IStorage {
       entryTime: new Date(row.entry_time),
       exitTime: row.exit_time ? new Date(row.exit_time) : null,
       createdBy: row.created_by,
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -1021,7 +1168,7 @@ export class SqlStorage implements IStorage {
       validationMax: row.validation_max ? row.validation_max.toString() : null,
       isActive: Boolean(row.is_active),
       isPublic: Boolean(row.is_public),
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -1032,7 +1179,7 @@ export class SqlStorage implements IStorage {
       value: row.value,
       timestamp: new Date(row.timestamp),
       isSimulated: Boolean(row.is_simulated),
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -1045,7 +1192,7 @@ export class SqlStorage implements IStorage {
       isActive: Boolean(row.is_active),
       scanCount: row.scan_count,
       createdBy: row.created_by,
-      createdAt: new Date(row.created_at)
+      createdAt: new Date(row.created_at),
     };
   }
 
@@ -1059,12 +1206,16 @@ export class SqlStorage implements IStorage {
       action: row.action,
       oldData: row.old_data ? JSON.parse(row.old_data) : null,
       newData: row.new_data ? JSON.parse(row.new_data) : null,
-      timestamp: new Date(row.timestamp)
+      timestamp: new Date(row.timestamp),
     };
   }
 
   // New function to handle sub-lot naming convention
-  async createSubLote(loteId: string, organizationId: string, identification: string): Promise<Lote> {
+  async createSubLote(
+    loteId: string,
+    organizationId: string,
+    identification: string,
+  ): Promise<Lote> {
     const parentLote = await this.getLote(loteId, organizationId);
     if (!parentLote) {
       throw new Error(`Parent lote with id ${loteId} not found.`);
@@ -1076,7 +1227,7 @@ export class SqlStorage implements IStorage {
       organizationId: organizationId,
       identification: subLoteIdentification,
       initialAnimals: 0, // Assuming 0 initially, or adjust as needed
-      status: 'active',
+      status: "active",
       parentLoteId: loteId,
       pieceType: parentLote.pieceType, // Inherit piece type if applicable
       foodRegime: parentLote.foodRegime, // Inherit food regime if applicable
@@ -1094,7 +1245,9 @@ export class SqlStorage implements IStorage {
     endTime: Date,
   ): Promise<any[]> {
     try {
-      console.log(`Searching sensor data for lote ${loteId}, stage ${stage}, from ${startTime.toISOString()} to ${endTime.toISOString()}`);
+      console.log(
+        `Searching sensor data for lote ${loteId}, stage ${stage}, from ${startTime.toISOString()} to ${endTime.toISOString()}`,
+      );
 
       // First get all stays for this lote in this stage during the time period
       const staysQuery = `
@@ -1111,27 +1264,35 @@ export class SqlStorage implements IStorage {
 
       const staysStmt = this.db.prepare(staysQuery);
       const relevantStays = staysStmt.all(
-        loteId, stage,
-        startTime.toISOString(), endTime.toISOString(),
-        startTime.toISOString(), endTime.toISOString(),
-        startTime.toISOString(), endTime.toISOString()
+        loteId,
+        stage,
+        startTime.toISOString(),
+        endTime.toISOString(),
+        startTime.toISOString(),
+        endTime.toISOString(),
+        startTime.toISOString(),
+        endTime.toISOString(),
       ) as any[];
 
-      console.log(`Found ${relevantStays.length} relevant stays for lote ${loteId} in stage ${stage}`);
+      console.log(
+        `Found ${relevantStays.length} relevant stays for lote ${loteId} in stage ${stage}`,
+      );
 
       if (relevantStays.length === 0) {
         return [];
       }
 
       // Get sensor readings for all relevant zones during the time period
-      const zoneIds = relevantStays.map(stay => stay.zone_id).filter(Boolean);
+      const zoneIds = relevantStays.map((stay) => stay.zone_id).filter(Boolean);
 
       if (zoneIds.length === 0) {
-        console.log(`No valid zone IDs found for lote ${loteId} in stage ${stage}`);
+        console.log(
+          `No valid zone IDs found for lote ${loteId} in stage ${stage}`,
+        );
         return [];
       }
 
-      const placeholders = zoneIds.map(() => '?').join(',');
+      const placeholders = zoneIds.map(() => "?").join(",");
 
       const readingsQuery = `
         SELECT sr.id, s.sensor_type, sr.value, sr.timestamp
@@ -1147,10 +1308,12 @@ export class SqlStorage implements IStorage {
       const result = readingsStmt.all(
         ...zoneIds,
         startTime.toISOString(),
-        endTime.toISOString()
+        endTime.toISOString(),
       ) as any[];
 
-      console.log(`Found ${result.length} sensor readings for lote ${loteId} in stage ${stage} across ${zoneIds.length} zones`);
+      console.log(
+        `Found ${result.length} sensor readings for lote ${loteId} in stage ${stage} across ${zoneIds.length} zones`,
+      );
       return result;
     } catch (error) {
       console.error("Error fetching sensor data by lote and stage:", error);
@@ -1159,9 +1322,22 @@ export class SqlStorage implements IStorage {
         stage,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        error: error.message
+        error: error.message,
       });
       return [];
     }
+  }
+
+  async getZoneQrByToken(token: string): Promise<ZoneQr | undefined> {
+    // Usamos this.db.prepare en lugar de db.select
+    const stmt = this.db.prepare(
+      "SELECT * FROM zone_qrs WHERE public_token = ?",
+    );
+    const row = stmt.get(token) as any;
+    return row ? this.mapZoneQr(row) : undefined;
+  }
+  async getZoneUnsafe(id: number): Promise<Zone | undefined> {
+    const [zone] = await db.select().from(zones).where(eq(zones.id, id));
+    return zone;
   }
 }
