@@ -4,7 +4,13 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +28,7 @@ export default function EngordePage() {
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/zones?stage=engorde");
       return res.json();
-    }
+    },
   });
 
   const createZoneMutation = useMutation({
@@ -30,7 +36,7 @@ export default function EngordePage() {
       const res = await apiRequest("POST", "/api/zones", {
         name,
         stage: "engorde",
-        isActive: true
+        isActive: true,
       });
       return res.json();
     },
@@ -66,7 +72,9 @@ export default function EngordePage() {
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "No se pudo eliminar la zona (puede tener estancias activas)",
+        description:
+          error.message ||
+          "No se pudo eliminar la zona (puede tener estancias activas)",
         variant: "destructive",
       });
     },
@@ -79,7 +87,9 @@ export default function EngordePage() {
   };
 
   const handleDeleteZone = (zone: Zone) => {
-    if (confirm(`¿Estás seguro de que quieres eliminar la zona "${zone.name}"?`)) {
+    if (
+      confirm(`¿Estás seguro de que quieres eliminar la zona "${zone.name}"?`)
+    ) {
       deleteZoneMutation.mutate(zone.id);
     }
   };
@@ -90,7 +100,9 @@ export default function EngordePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground mb-2">Engorde</h1>
-            <p className="text-muted-foreground">Gestiona las zonas de engorde para cerdos en crecimiento</p>
+            <p className="text-muted-foreground">
+              Gestiona las zonas de engorde para cerdos en crecimiento
+            </p>
           </div>
           <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
             <DialogTrigger asChild>
@@ -116,21 +128,25 @@ export default function EngordePage() {
                   />
                 </div>
                 <div className="flex gap-3 pt-4">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => setIsCreateModalOpen(false)}
                     className="flex-1"
                   >
                     Cancelar
                   </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={createZoneMutation.isPending || !newZoneName.trim()}
+                  <Button
+                    type="submit"
+                    disabled={
+                      createZoneMutation.isPending || !newZoneName.trim()
+                    }
                     className="flex-1"
                     data-testid="button-save-zone"
                   >
-                    {createZoneMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {createZoneMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Crear Zona
                   </Button>
                 </div>
@@ -157,8 +173,13 @@ export default function EngordePage() {
           ) : zones.length === 0 ? (
             <Card className="col-span-full">
               <CardContent className="text-center py-12">
-                <p className="text-muted-foreground mb-4">No hay zonas de engorde creadas</p>
-                <Button onClick={() => setIsCreateModalOpen(true)} data-testid="button-create-first-zone">
+                <p className="text-muted-foreground mb-4">
+                  No hay zonas de engorde creadas
+                </p>
+                <Button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  data-testid="button-create-first-zone"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Crear primera zona
                 </Button>
@@ -166,15 +187,22 @@ export default function EngordePage() {
             </Card>
           ) : (
             zones.map((zone) => (
-              <Card key={zone.id} className="relative group" data-testid={`zone-card-${zone.id}`}>
+              <Card
+                key={zone.id}
+                className="relative group"
+                data-testid={`zone-card-${zone.id}`}
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg" data-testid={`zone-name-${zone.id}`}>
+                    <CardTitle
+                      className="text-lg"
+                      data-testid={`zone-name-${zone.id}`}
+                    >
                       {zone.name}
                     </CardTitle>
                     <div className="flex gap-1">
-                      <ZoneQrButton 
-                        zone={zone} 
+                      <ZoneQrButton
+                        zone={zone}
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                       />
                       <Button
@@ -193,29 +221,36 @@ export default function EngordePage() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="text-sm text-muted-foreground">
-                      Estado: <span className="text-foreground font-medium">
+                      Estado:{" "}
+                      <span className="text-foreground font-medium">
                         {zone.isActive ? "Activa" : "Inactiva"}
                       </span>
                     </div>
                     {zone.temperatureTarget && (
                       <div className="text-sm text-muted-foreground">
-                        Temperatura objetivo: <span className="text-foreground font-medium">
-                          {zone.temperatureTarget.min}°C - {zone.temperatureTarget.max}°C
+                        Temperatura objetivo:{" "}
+                        <span className="text-foreground font-medium">
+                          {zone.temperatureTarget.min}°C -{" "}
+                          {zone.temperatureTarget.max}°C
                         </span>
                       </div>
                     )}
                     {zone.humidityTarget && (
                       <div className="text-sm text-muted-foreground">
-                        Humedad objetivo: <span className="text-foreground font-medium">
-                          {zone.humidityTarget.min}% - {zone.humidityTarget.max}%
+                        Humedad objetivo:{" "}
+                        <span className="text-foreground font-medium">
+                          {zone.humidityTarget.min}% - {zone.humidityTarget.max}
+                          %
                         </span>
                       </div>
                     )}
                     <div className="pt-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => window.location.href = `/zona/${zone.id}`}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          (window.location.href = `/zona/${zone.id}`)
+                        }
                         data-testid={`button-zone-details-${zone.id}`}
                       >
                         Ver Detalles

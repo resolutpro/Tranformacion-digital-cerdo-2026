@@ -104,8 +104,18 @@ export function registerRoutes(app: Express): Server {
     "/api/zones",
     requireAuth,
     asyncHandler(async (req: any, res) => {
-      const zones = await storage.getZonesByOrganization(req.organizationId);
-      res.json(zones);
+      // 1. Leemos el parámetro 'stage' de la URL
+      const stage = req.query.stage as string;
+
+      if (stage) {
+        // 2. Si existe, usamos el método de filtrado (que ya tienes en storage)
+        const zones = await storage.getZonesByStage(req.organizationId, stage);
+        res.json(zones);
+      } else {
+        // 3. Si no existe, devolvemos todas (comportamiento original)
+        const zones = await storage.getZonesByOrganization(req.organizationId);
+        res.json(zones);
+      }
     }),
   );
 
@@ -113,15 +123,72 @@ export function registerRoutes(app: Express): Server {
     "/api/zones",
     requireAuth,
     asyncHandler(async (req: any, res) => {
-      const zoneData = insertZoneSchema.parse({
-        ...req.body,
-        organizationId: req.organizationId,
-      });
-      const zone = await storage.createZone(zoneData);
-      res.status(201).json(zone);
+      try {
+        // LIMPIEZA: Eliminamos los valores por defecto (mock data).
+        // Ahora solo guardamos lo que realmente envía el usuario (nombre y stage).
+        const zoneData = insertZoneSchema.parse({
+          ...req.body,
+          organizationId: req.organizationId,
+        });
+
+        const zone = await storage.createZone(zoneData);
+        res.status(201).json(zone);
+      } catch (error: any) {
+        console.error("Error creando zona:", error);
+
+        if (error.issues) {
+          return res.status(400).json({
+            message: "Faltan datos obligatorios",
+            details: error.issues,
+          });
+        }
+
+        res
+          .status(500)
+          .json({ message: error.message || "Error interno al crear zona" });
+      }
     }),
   );
 
+  app.delete(
+    "/api/zones/:id",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const zoneId = req.params.id;
+
+      // 1. Verificar que la zona existe y es de la organización
+      const zone = await storage.getZone(zoneId, req.organizationId);
+      if (!zone) {
+        return res.status(404).json({ message: "Zona no encontrada" });
+      }
+
+      try {
+        // 2. Intentar borrar la zona
+        const deleted = await storage.deleteZone(zoneId, req.organizationId);
+
+        if (!deleted) {
+          return res.status(404).json({ message: "No se pudo borrar la zona" });
+        }
+
+        res.sendStatus(204); // Éxito (No Content)
+      } catch (error: any) {
+        console.error("Error borrando zona:", error);
+
+        // 3. Manejo de errores de Clave Foránea (Integridad Referencial)
+        // El código '23503' es el estándar de Postgres para violación de Foreign Key
+        if (error.code === "23503") {
+          return res.status(409).json({
+            message:
+              "No se puede borrar la zona porque contiene datos asociados (animales, historial, sensores o QR). Elimina o mueve esos elementos primero.",
+          });
+        }
+
+        res
+          .status(500)
+          .json({ message: "Error interno al intentar borrar la zona" });
+      }
+    }),
+  );
   // --- Sensors API ---
   app.get(
     "/api/zones/:zoneId/sensors",
@@ -422,25 +489,32 @@ export function registerRoutes(app: Express): Server {
     "/api/zones/:id/qr",
     requireAuth,
     asyncHandler(async (req: any, res) => {
-      const qr = await storage.getZoneQr(req.params.id);
+      const zoneId = req.params.id;
 
+      // 1. Buscamos el QR existente
+      let qr = await storage.getZoneQr(zoneId);
+
+      // 2. AUTO-CORRECCIÓN: Si no existe, lo creamos automáticamente aquí mismo
       if (!qr) {
-        return res.json(null);
+        console.log(`[QR] Generando QR faltante para zona ${zoneId}`);
+        qr = await storage.createZoneQr({
+          zoneId: zoneId,
+          publicToken: randomUUID(), // Usa el import de 'crypto' que ya tienes
+          isActive: true,
+          scanCount: 0,
+        });
       }
 
-      // 1. Construir la URL pública base (detectando si es http/https y el host)
+      // 3. Construir la URL pública (igual que antes)
       const protocol = req.headers["x-forwarded-proto"] || req.protocol;
       const host = req.headers["x-forwarded-host"] || req.get("host");
       const baseUrl = `${protocol}://${host}`;
 
-      // 2. Crear la URL completa de destino
       const publicUrl = `${baseUrl}/zona-movimiento/${qr.publicToken}`;
 
-      // 3. Generar la imagen del QR usando una API pública rápida (goqr.me o qrserver)
-      // Esto evita tener que instalar librerías complejas en el servidor
+      // 4. Generar imagen QR
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(publicUrl)}`;
 
-      // 4. Devolver todo junto al frontend
       res.json({
         ...qr,
         publicUrl,
@@ -572,56 +646,90 @@ export function registerRoutes(app: Express): Server {
     try {
       const token = req.params.token;
 
-      // 1. Busamos la zona por el token
+      // 1. Buscar la zona escaneada
       const zone = await storage.getZoneByQrToken(token);
-
       if (!zone) {
         return res
           .status(404)
           .json({ message: "Token inválido o zona no encontrada" });
       }
 
-      // 2. CORRECCIÓN: Usamos getLotesByOrganization pasando el ID de la organización de la zona
+      // 2. Obtener todos los lotes y todas las zonas (para mapear ubicaciones)
       const allLotes = await storage.getLotesByOrganization(
         zone.organizationId,
       );
+      const allZones = await storage.getZonesByOrganization(
+        zone.organizationId,
+      );
 
-      // Definir etapa anterior basada en la etapa actual de la zona
-      let previousStage = "";
+      // 3. Determinar en qué etapa está cada lote AHORA MISMO
+      // (Esto es necesario porque la BD guarda el historial en 'stays', no en el lote)
+      const lotesWithStage = await Promise.all(
+        allLotes.map(async (lote) => {
+          if (lote.status === "finished")
+            return { ...lote, currentStage: "finished" };
+
+          // Buscamos si tiene una estancia abierta (dónde está ahora)
+          const activeStay = await storage.getActiveStayByLote(lote.id);
+
+          if (!activeStay) {
+            return { ...lote, currentStage: "unassigned" }; // "Sin ubicación"
+          }
+
+          const currentZone = allZones.find((z) => z.id === activeStay.zoneId);
+          return {
+            ...lote,
+            currentStage: currentZone ? currentZone.stage : "unknown",
+          };
+        }),
+      );
+
+      // 4. Definir las reglas estrictas de movimiento
+      // targetStage (Zona Escaneada) -> allowedSourceStages (De dónde pueden venir)
+      let allowedSourceStages: string[] = [];
+
       switch (zone.stage) {
+        case "cria":
+          // A Cría solo entran los que no tienen ubicación (recién dados de alta)
+          allowedSourceStages = ["unassigned"];
+          break;
         case "engorde":
-          previousStage = "cria";
+          // A Engorde solo entran los que vienen de Cría
+          allowedSourceStages = ["cria"];
           break;
         case "matadero":
-          previousStage = "engorde";
+          // A Matadero solo entran los que vienen de Engorde
+          allowedSourceStages = ["engorde"];
           break;
         case "secadero":
-          previousStage = "matadero";
+          // A Secadero solo entran los que vienen de Matadero
+          allowedSourceStages = ["matadero"];
           break;
         case "distribucion":
-          previousStage = "secadero";
+          // A Distribución pueden ir los curados (Secadero) o carne fresca (Matadero)
+          // (Según tu indicación: "si escaneo distribución solo los de matadero", priorizamos eso,
+          // pero dejo 'secadero' por si acaso tienes jamones).
+          allowedSourceStages = ["secadero", "matadero"];
           break;
         default:
-          previousStage = "";
+          allowedSourceStages = [];
       }
 
-      // Filtrar lotes disponibles
-      const availableLotes = allLotes.filter((l) => {
-        // Si es zona de cría, aceptamos lotes nuevos (sin etapa) o activos en cría
-        if (zone.stage === "cria") return l.status === "active";
+      // 5. Filtrar los lotes
+      const availableLotes = lotesWithStage.filter(
+        (l) =>
+          l.status === "active" && allowedSourceStages.includes(l.currentStage),
+      );
 
-        // Para otras zonas, buscamos lotes activos en general
-        // (En un caso real, filtraríamos estrictamente por 'currentZone' o 'stage' anterior)
-        return l.status === "active";
-      });
-
+      // Info extra para el frontend
       const canSplit = zone.stage === "secadero";
       const canGenerateQr = zone.stage === "distribucion";
 
       res.json({
         zone,
         availableLotes,
-        previousStage,
+        // Enviamos la etapa "esperada" solo como referencia visual si la necesitas
+        previousStage: allowedSourceStages[0] || "",
         canSplit,
         canGenerateQr,
       });
@@ -649,11 +757,9 @@ export function registerRoutes(app: Express): Server {
       );
 
       if (!systemUser) {
-        return res
-          .status(500)
-          .json({
-            message: "Error: La organización no tiene usuarios válidos.",
-          });
+        return res.status(500).json({
+          message: "Error: La organización no tiene usuarios válidos.",
+        });
       }
 
       // Actualizar lote
@@ -685,12 +791,10 @@ export function registerRoutes(app: Express): Server {
       res.json({ success: true, message: `Movido a ${zone.name}`, qrToken });
     } catch (error: any) {
       console.error("Error moving lote by QR:", error);
-      res
-        .status(500)
-        .json({
-          message: "Error al procesar movimiento",
-          details: error.message,
-        });
+      res.status(500).json({
+        message: "Error al procesar movimiento",
+        details: error.message,
+      });
     }
   });
 

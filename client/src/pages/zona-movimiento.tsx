@@ -357,8 +357,13 @@ export default function ZoneMovementPage({ params }: ZoneMovementPageProps) {
                           key={String(lote.id)}
                           value={String(lote.id)}
                         >
-                          {lote.identification} - {lote.quantity} unidades (
-                          {lote.currentZone})
+                          {/* CORRECCIÓN AQUÍ: usar initialAnimals en vez de quantity */}
+                          {lote.identification} - {lote.initialAnimals} unidades
+                          (
+                          {lote.currentStage === "unassigned"
+                            ? "Sin ubicación"
+                            : lote.currentStage}
+                          )
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -458,13 +463,12 @@ export default function ZoneMovementPage({ params }: ZoneMovementPageProps) {
 
                         {selectedLoteId && (
                           <div className="text-sm text-muted-foreground">
-                            {/* Nota: accedemos al lote buscando de nuevo para evitar errores de renderizado */}
                             Total disponible:{" "}
                             {
                               availableLotes.find(
                                 (l: any) =>
                                   String(l.id) === String(selectedLoteId),
-                              )?.quantity
+                              )?.initialAnimals // <--- CORRECCIÓN AQUÍ
                             }{" "}
                             unidades
                           </div>
