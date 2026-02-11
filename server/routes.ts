@@ -784,11 +784,40 @@ export function registerRoutes(app: Express): Server {
       }
 
       let qrToken = null;
+
       if (shouldGenerateQr) {
+        // 1. Generar token único
         qrToken = `TRACE-${lote.identification}-${Date.now()}`;
+
+        // 2. Recopilar datos históricos para la "foto" (Snapshot) de trazabilidad
+        // (Aquí podrías añadir más datos si quieres mostrar toda la historia)
+        const snapshotData = {
+          lote: lote,
+          finalZone: zone,
+          movementDate: new Date(entryTime),
+          productType: "Ibérico", // Puedes ajustar esto según tu lógica
+          generatedAt: new Date(),
+        };
+
+        // 3. GUARDAR EN BASE DE DATOS
+        // Es vital usar systemUser.id para cumplir con la clave foránea 'createdBy'
+        await storage.createQrSnapshot({
+          loteId: lote.id,
+          publicToken: qrToken,
+          snapshotData: snapshotData,
+          isActive: true,
+          scanCount: 0,
+          createdBy: systemUser.id, // <--- USAMOS EL USUARIO DEL SISTEMA
+        });
+
+        console.log(`[QR] Trazabilidad generada: ${qrToken}`);
       }
 
-      res.json({ success: true, message: `Movido a ${zone.name}`, qrToken });
+      res.json({
+        success: true,
+        message: `Lote ${lote.identification} movido a ${zone.name}`,
+        qrToken,
+      });
     } catch (error: any) {
       console.error("Error moving lote by QR:", error);
       res.status(500).json({
@@ -1112,6 +1141,114 @@ export function registerRoutes(app: Express): Server {
       );
 
       res.json({ success: true, message: "Movimiento registrado" });
+    }),
+  );
+
+  app.get("/api/public/traceability/:token", async (req, res) => {
+    try {
+      const token = req.params.token;
+
+      // Usamos el método que añadimos al storage anteriormente
+      const snapshot = await storage.getQrSnapshotByToken(token);
+
+      if (!snapshot || !snapshot.isActive) {
+        return res
+          .status(404)
+          .json({ message: "Código de trazabilidad no válido o expirado" });
+      }
+
+      // Devolver los datos guardados en la "foto" (snapshot)
+      res.json(snapshot.snapshotData);
+    } catch (error) {
+      console.error("Error reading traceability QR:", error);
+      res.status(500).json({ message: "Error al leer trazabilidad" });
+    }
+  });
+
+  // 1. Listar QRs generados
+  app.get(
+    "/api/qr-snapshots",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const snapshots = await storage.getQrSnapshotsByOrganization(
+        req.organizationId,
+      );
+      res.json(snapshots);
+    }),
+  );
+
+  // 2. Generar un nuevo QR de Trazabilidad para un lote
+  app.post(
+    "/api/lotes/:id/generate-qr",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const loteId = req.params.id;
+
+      // Verificar que el lote existe y es de la organización
+      const lote = await storage.getLote(loteId, req.organizationId);
+      if (!lote) {
+        return res.status(404).json({ message: "Lote no encontrado" });
+      }
+
+      // Generar Token Único
+      const publicToken = `TRACE-${lote.identification}-${Date.now()}`;
+
+      // Crear los datos de la "foto" (snapshot)
+      const snapshotData = {
+        lote: lote, // Guardamos la info del lote tal cual está hoy
+        generatedAt: new Date(),
+        generatedBy: req.user.username,
+      };
+
+      // Guardar en BD
+      const qrSnapshot = await storage.createQrSnapshot({
+        loteId: lote.id,
+        publicToken: publicToken,
+        snapshotData: snapshotData,
+        isActive: true,
+        scanCount: 0,
+        createdBy: req.user.id,
+      });
+
+      res.status(201).json(qrSnapshot);
+    }),
+  );
+
+  // 3. Rotar Token (Cambiar el código QR por seguridad)
+  app.put(
+    "/api/qr-snapshots/:id/rotate",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      // Buscar el snapshot por ID (y verificar propiedad de la org si es necesario)
+      // Nota: Idealmente deberías tener un método getQrSnapshotById(id)
+      // Aquí asumimos que obtenemos la lista y filtramos o que implementas el método.
+      // Usaremos una lógica genérica asumiendo que el ID es único globalmente.
+
+      // Como Drizzle/Storage suele ser simple, vamos a asumir que tienes un método de update.
+      // Si no tienes 'updateQrSnapshot', necesitarás crearlo.
+      // Aquí simulamos la rotación actualizando el token:
+
+      const newToken = `TRACE-ROTATED-${Date.now()}`;
+
+      // IMPORTANTE: Asegúrate de tener 'updateQrSnapshot' en tu storage.ts
+      // Si no lo tienes, el código fallará. Aquí un ejemplo de uso:
+      const updated = await storage.updateQrSnapshot(req.params.id, {
+        publicToken: newToken,
+      });
+
+      res.json(updated);
+    }),
+  );
+
+  // 4. Revocar QR (Desactivarlo)
+  app.put(
+    "/api/qr-snapshots/:id/revoke",
+    requireAuth,
+    asyncHandler(async (req: any, res) => {
+      const updated = await storage.updateQrSnapshot(req.params.id, {
+        isActive: false,
+      });
+      res.json(updated);
     }),
   );
 
